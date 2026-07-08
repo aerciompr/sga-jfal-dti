@@ -1,0 +1,12 @@
+# Configurações Locais e Credenciais
+config.php
+youtube_url.txt
+
+# Banco de dados e caches
+sga.db
+__pycache__/
+
+# Arquivos de dados temporários
+*.xlsx
+*.pdf
+*.log
