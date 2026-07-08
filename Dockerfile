@@ -31,5 +31,8 @@ COPY . /var/www/html/
 # Ajustar as permissões de arquivos para o usuário do Apache
 RUN chown -R www-data:www-data /var/www/html
 
-# Expor a porta padrão do Apache
-EXPOSE 80
+# Configurar o Apache para escutar na porta interna 3020
+RUN sed -i 's/80/3020/g' /etc/apache2/ports.conf /etc/apache2/sites-available/000-default.conf
+
+# Expor a porta configurada do Apache
+EXPOSE 3020
