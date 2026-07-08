@@ -30,6 +30,35 @@ try {
         ]
     );
 
+    // Criação das tabelas fundamentais de produção caso o banco esteja vazio
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS atendimentos (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            nome VARCHAR(100) NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'agendado',
+            senha VARCHAR(20) DEFAULT '---',
+            chamado_em TIMESTAMP NULL DEFAULT NULL,
+            sala VARCHAR(50) DEFAULT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (PDOException $e) {}
+
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS usuarios (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(50) NOT NULL UNIQUE,
+            password VARCHAR(255) NOT NULL,
+            role VARCHAR(20) NOT NULL DEFAULT 'recepcao'
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        
+        // Insere o administrador padrão se a tabela de usuários estiver vazia
+        $stmt = $pdo->query("SELECT COUNT(*) FROM usuarios");
+        if ($stmt->fetchColumn() == 0) {
+            $adminPassword = password_hash('admin', PASSWORD_DEFAULT);
+            $stmtInsert = $pdo->prepare("INSERT INTO usuarios (username, password, role, nome) VALUES ('admin', ?, 'admin', 'Administrador')");
+            $stmtInsert->execute([$adminPassword]);
+        }
+    } catch (PDOException $e) {}
+
     // Migrações automáticas e seguras: adiciona as colunas caso ainda não existam no banco
     try {
         $pdo->exec("ALTER TABLE atendimentos ADD COLUMN processo VARCHAR(50) DEFAULT NULL");
