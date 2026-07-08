@@ -847,13 +847,15 @@ $permite_checkin = (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])
             <!-- 2. Presentes (Fila de espera ativa para chamada do perito) -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
                 <h2 class="text-sm font-semibold uppercase text-emerald-400 tracking-wider mb-4 flex justify-between items-center">
-                    <span>Aguardando Chamada (Fila de Espera)</span>                    <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
+                    <span>Aguardando Chamada (Fila de Espera)</span>
+                    <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
                     <div class="flex flex-col sm:flex-row gap-3 mb-4">
                         <button type="submit" name="action" value="remover_multiplos" id="btn-remover-presentes" disabled onclick="return confirm('Retornar todos os periciados selecionados para a lista de agendados?');" class="bg-amber-950/40 hover:bg-amber-900/40 border border-amber-900/60 text-amber-400 text-xs px-3 py-1.5 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex-1 sm:flex-none">
                             🔄 Voltar Selecionados para Agendados
                         </button>
                     </div>
                     <?php endif; ?>
+                </h2>
 
                     <div class="overflow-x-auto max-h-[300px] overflow-y-auto">
                         <table class="w-full text-left text-sm text-gray-300">
