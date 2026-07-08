@@ -30,6 +30,10 @@ try {
         ]
     );
 
+    // Sincroniza o fuso horário do PHP e do banco de dados (MySQL) para o fuso local de Alagoas
+    date_default_timezone_set('America/Maceio');
+    $pdo->exec("SET time_zone = '-03:00'");
+
     // Criação das tabelas fundamentais de produção caso o banco esteja vazio
     try {
         $pdo->exec("CREATE TABLE IF NOT EXISTS atendimentos (

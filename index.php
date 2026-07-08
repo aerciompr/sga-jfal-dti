@@ -100,5 +100,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </button>
         </form>
     </div>
+    <!-- Rodapé Discreto -->
+    <footer class="absolute bottom-4 left-0 right-0 text-center text-[10px] text-slate-500 tracking-wide">
+        &copy; <?= date('Y') ?> - Desenvolvido pela DTI - Justiça Federal em Alagoas
+    </footer>
 </body>
 </html>

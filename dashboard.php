@@ -158,8 +158,8 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
     </main>
 
     <!-- Footer -->
-    <footer class="bg-gray-900 border-t border-gray-800 py-4 text-center text-xs text-gray-500 font-medium">
-        <span>⚖️ Justiça Federal de Alagoas • Todos os direitos reservados</span>
+    <footer class="bg-gray-900 border-t border-gray-800 py-4 text-center text-[10px] text-gray-500 font-medium tracking-wide">
+        <span>&copy; <?= date('Y') ?> - Desenvolvido pela DTI - Justiça Federal em Alagoas</span>
     </footer>
 </body>
 </html>

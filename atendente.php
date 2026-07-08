@@ -583,5 +583,10 @@ $history = $stmt->fetchAll();
             </div>
         </div>
     </main>
+
+    <!-- Rodapé Flutuante Discreto -->
+    <div class="fixed bottom-2 right-4 text-[9px] text-gray-600 font-medium z-50 pointer-events-none">
+        &copy; <?= date('Y') ?> - Desenvolvido pela DTI - Justiça Federal em Alagoas
+    </div>
 </body>
 </html>

@@ -905,8 +905,8 @@ try {
     </form>
 
     <!-- Footer -->
-    <footer class="bg-gray-900 border-t border-gray-800 py-4 text-center text-xs text-gray-500 font-medium mt-6">
-        <span>⚖️ Justiça Federal de Alagoas • Todos os direitos reservados</span>
+    <footer class="bg-gray-900 border-t border-gray-800 py-4 text-center text-[10px] text-gray-500 font-medium tracking-wide mt-6">
+        <span>&copy; <?= date('Y') ?> - Desenvolvido pela DTI - Justiça Federal em Alagoas</span>
     </footer>
 
     <script>

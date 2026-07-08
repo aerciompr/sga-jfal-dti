@@ -1012,6 +1012,11 @@ $permite_checkin = (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])
     </div>
     </main>
 
+    <!-- Rodapé Flutuante Discreto -->
+    <div class="fixed bottom-2 right-4 text-[9px] text-gray-600 font-medium z-50 pointer-events-none">
+        &copy; <?= date('Y') ?> - Desenvolvido pela DTI - Justiça Federal em Alagoas
+    </div>
+
     <!-- Script JavaScript local para controle de seleção e filtro -->
     <script>
         const chkSelectAll = document.getElementById('chk-select-all');
