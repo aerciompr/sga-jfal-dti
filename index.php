@@ -52,29 +52,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>Login - <?= htmlspecialchars(SYS_NAME) ?></title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="tema.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at top right, rgba(29, 78, 216, 0.12), transparent 45%), 
+                        radial-gradient(circle at bottom left, rgba(30, 41, 59, 0.3), transparent 40%),
+                        #030712;
+        }
+    </style>
 </head>
-<body class="bg-gray-950 text-gray-100 flex items-center justify-center min-h-screen">
-    <div class="bg-gray-900 p-8 rounded-2xl border border-gray-800 shadow-2xl w-full max-w-sm">
-        <h1 class="text-2xl font-bold text-center text-blue-500 mb-2"><?= htmlspecialchars(SYS_NAME) ?></h1>
-        <p class="text-xs text-gray-400 text-center uppercase tracking-wider mb-6">Painel de Senhas</p>
+<body class="text-gray-100 flex items-center justify-center min-h-screen px-4">
+    <div class="bg-slate-900/60 backdrop-blur-xl p-8 rounded-3xl border border-slate-800/80 shadow-2xl w-full max-w-md transition-all duration-300 hover:border-blue-500/30">
+        <!-- Logo Oficial da JFAL -->
+        <div class="flex flex-col items-center mb-8">
+            <div class="bg-white/95 p-3.5 rounded-2xl shadow-lg border border-slate-200 mb-4 transition-transform duration-300 hover:scale-105">
+                <img src="assets/logo-jfal.png" alt="Justiça Federal em Alagoas" class="h-14 object-contain">
+            </div>
+            <h1 class="text-xl font-bold text-center bg-gradient-to-r from-blue-400 via-indigo-200 to-blue-400 bg-clip-text text-transparent mb-1">
+                <?= htmlspecialchars(SYS_NAME) ?>
+            </h1>
+            <p class="text-[10px] text-blue-400 uppercase tracking-widest font-semibold">Sistema de Gestão de Atendimentos</p>
+        </div>
 
         <?php if ($error): ?>
-            <div class="bg-red-900/50 border border-red-500 text-red-200 p-3 rounded-lg mb-4 text-center text-xs">
+            <div class="bg-red-500/10 border border-red-500/30 text-red-200 p-3.5 rounded-xl mb-6 text-center text-xs backdrop-blur-sm animate-pulse">
                 <?= htmlspecialchars($error) ?>
             </div>
         <?php endif; ?>
 
-        <form method="POST" class="space-y-4">
+        <form method="POST" class="space-y-5">
             <div>
-                <label class="block text-xs uppercase font-semibold text-gray-400 mb-1">Usuário</label>
-                <input type="text" name="username" required autofocus class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-white">
+                <label class="block text-[11px] uppercase font-semibold text-slate-400 mb-1.5 tracking-wider">Usuário</label>
+                <input type="text" name="username" required autofocus 
+                       class="w-full bg-slate-950/40 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 text-white placeholder-slate-600 transition-all duration-200"
+                       placeholder="Digite seu usuário">
             </div>
             <div>
-                <label class="block text-xs uppercase font-semibold text-gray-400 mb-1">Senha</label>
-                <input type="password" name="password" required class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-white">
+                <label class="block text-[11px] uppercase font-semibold text-slate-400 mb-1.5 tracking-wider">Senha</label>
+                <input type="password" name="password" required 
+                       class="w-full bg-slate-950/40 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 text-white placeholder-slate-600 transition-all duration-200"
+                       placeholder="••••••••">
             </div>
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg text-sm transition duration-200">
-                Entrar
+            <button type="submit" 
+                    class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-3 rounded-xl text-sm transition-all duration-300 transform active:scale-[0.98] shadow-lg shadow-blue-900/20 hover:shadow-blue-500/20 mt-2">
+                Acessar Painel
             </button>
         </form>
     </div>
