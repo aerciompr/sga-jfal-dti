@@ -5,7 +5,7 @@ services:
     build: .
     container_name: sga-web
     ports:
-      - "8080:80"
+      - "8085:80"
     environment:
       - DB_HOST=db
       - DB_USER=root
