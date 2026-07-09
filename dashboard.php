@@ -67,6 +67,7 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
             <!-- Recepção Card -->
             <a href="recepcao.php" class="bg-gray-900 border border-gray-800 hover:border-emerald-500/50 p-6 rounded-3xl shadow-xl hover:shadow-emerald-500/5 transition transform hover:-translate-y-1 group">
                 <div class="w-12 h-12 bg-emerald-950/50 border border-emerald-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
@@ -78,7 +79,9 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
                     Acessar Fila <span>→</span>
                 </div>
             </a>
+            <?php endif; ?>
 
+            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
             <!-- Atendente (Perito) Card -->
             <a href="atendente.php" class="bg-gray-900 border border-gray-800 hover:border-blue-500/50 p-6 rounded-3xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
                 <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
@@ -90,6 +93,7 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
                     Chamar Paciente <span>→</span>
                 </div>
             </a>
+            <?php endif; ?>
 
             <!-- TV Panel Card -->
             <a href="painel.php" target="_blank" class="bg-gray-900 border border-gray-800 hover:border-amber-500/50 p-6 rounded-3xl shadow-xl hover:shadow-amber-500/5 transition transform hover:-translate-y-1 group">
@@ -103,7 +107,7 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
                 </div>
             </a>
 
-            <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
+            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
             <!-- Auditoria Card -->
             <a href="auditoria.php" class="bg-gray-900 border border-gray-800 hover:border-teal-500/50 p-6 rounded-3xl shadow-xl hover:shadow-teal-500/5 transition transform hover:-translate-y-1 group">
                 <div class="w-12 h-12 bg-teal-950/50 border border-teal-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
@@ -115,7 +119,9 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
                     Ver Auditoria <span>→</span>
                 </div>
             </a>
+            <?php endif; ?>
 
+            <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
             <!-- Perfis e Senhas Card -->
             <a href="usuarios.php" class="bg-gray-900 border border-gray-800 hover:border-indigo-500/50 p-6 rounded-3xl shadow-xl hover:shadow-indigo-500/5 transition transform hover:-translate-y-1 group">
                 <div class="w-12 h-12 bg-indigo-950/50 border border-indigo-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
@@ -127,7 +133,9 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
                     Gerenciar Contas <span>→</span>
                 </div>
             </a>
+            <?php endif; ?>
 
+            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
             <!-- Salas de Atendimento Card -->
             <a href="salas.php" class="bg-gray-900 border border-gray-800 hover:border-pink-500/50 p-6 rounded-3xl shadow-xl hover:shadow-pink-500/5 transition transform hover:-translate-y-1 group">
                 <div class="w-12 h-12 bg-pink-950/50 border border-pink-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">

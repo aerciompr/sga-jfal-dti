@@ -14,9 +14,9 @@
 session_start();
 require_once __DIR__ . '/banco.php';
 
-// Exige autenticação para acessar o painel do perito
-if (!isset($_SESSION['usuario_id'])) {
-    header("Location: index.php");
+// Proteção de Acesso: Apenas peritos e administradores podem acessar o painel do perito
+if (!isset($_SESSION['usuario_id']) || !in_array($_SESSION['usuario_role'], ['admin', 'perito'])) {
+    header("Location: dashboard.php");
     exit;
 }
 
@@ -342,16 +342,35 @@ $history = $stmt->fetchAll();
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
     <!-- Header -->
-    <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md">
+    <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md shrink-0">
         <div class="flex items-center space-x-3">
             <a href="dashboard.php" class="text-blue-500 font-bold text-lg hover:underline">⚖️ JFAL - Alagoas</a>
-            <span class="bg-gray-800 text-gray-400 text-xs px-2.5 py-1 rounded-full uppercase font-semibold">Painel do Perito</span>
+            <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
+                <?= htmlspecialchars(ucfirst($_SESSION['usuario_role'])) ?>
+            </span>
         </div>
-        <div class="flex items-center space-x-4">
-            <?php if ($user_role !== 'perito'): ?>
-                <a href="dashboard.php" class="text-xs text-blue-400 hover:text-blue-300 border border-blue-900/60 bg-blue-950/30 px-3 py-1.5 rounded-lg transition">Dashboard</a>
+        <div class="flex items-center space-x-3">
+            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/30 px-3 py-1.5 rounded-lg transition">Painel Principal</a>
+            
+            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
+                <a href="recepcao.php" class="text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-900/60 bg-emerald-950/30 px-3 py-1.5 rounded-lg transition">Recepção</a>
             <?php endif; ?>
-            <span class="text-sm text-gray-300">Olá, <strong class="text-white"><?= htmlspecialchars($user_name) ?></strong></span>
+
+            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
+                <a href="atendente.php" class="text-xs text-blue-400 hover:text-blue-300 border border-blue-900/60 bg-blue-950/30 px-3 py-1.5 rounded-lg transition">Atendimento</a>
+            <?php endif; ?>
+
+            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
+                <a href="gerenciar_pauta.php" class="text-xs text-sky-400 hover:text-sky-300 border border-sky-900/60 bg-sky-950/30 px-3 py-1.5 rounded-lg transition">Pautas</a>
+                <a href="salas.php" class="text-xs text-pink-400 hover:text-pink-300 border border-pink-900/60 bg-pink-950/30 px-3 py-1.5 rounded-lg transition">Salas</a>
+                <a href="auditoria.php" class="text-xs text-teal-400 hover:text-teal-300 border border-teal-900/60 bg-teal-950/30 px-3 py-1.5 rounded-lg transition">Auditoria</a>
+            <?php endif; ?>
+
+            <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
+                <a href="usuarios.php" class="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-900/60 bg-indigo-950/30 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
+            <?php endif; ?>
+
+            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= htmlspecialchars($_SESSION['usuario_name']) ?></strong></span>
             <a href="logout.php" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</a>
         </div>
     </header>
