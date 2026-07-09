@@ -608,24 +608,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $yt_file = __DIR__ . '/youtube_url.txt';
 $yt_url = file_exists($yt_file) ? trim(file_get_contents($yt_file)) : 'https://www.youtube.com/watch?v=5qap5aO4i9A';
 
-$stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'agendado' AND data_pauta = ? ORDER BY id ASC");
-$stmt->execute([$dataFiltro]);
-$agendados = $stmt->fetchAll();
-
-$stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'presente' AND data_pauta = ? ORDER BY chegada_em ASC");
-$stmt->execute([$dataFiltro]);
-$presentes = $stmt->fetchAll();
-
-$stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'chamada' AND data_pauta = ? ORDER BY chamado_em DESC");
-$stmt->execute([$dataFiltro]);
-$chamados = $stmt->fetchAll();
-
-$stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'concluido' AND data_pauta = ? ORDER BY chamado_em DESC");
-$stmt->execute([$dataFiltro]);
-$concluidos = $stmt->fetchAll();
-
 $pauta_liberada = isPautaLiberada($pdo, $dataFiltro);
 $permite_checkin = (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['usuario_role'] === 'recepcao' && $dataFiltro === date('Y-m-d') && $pauta_liberada));
+
+// Recepção comum não visualiza dados de pautas que não foram homologadas/liberadas pelo supervisor
+$agendados = [];
+$presentes = [];
+$chamados = [];
+$concluidos = [];
+
+if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['usuario_role'] === 'recepcao' && $pauta_liberada)) {
+    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'agendado' AND data_pauta = ? ORDER BY id ASC");
+    $stmt->execute([$dataFiltro]);
+    $agendados = $stmt->fetchAll();
+
+    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'presente' AND data_pauta = ? ORDER BY chegada_em ASC");
+    $stmt->execute([$dataFiltro]);
+    $presentes = $stmt->fetchAll();
+
+    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'chamada' AND data_pauta = ? ORDER BY chamado_em DESC");
+    $stmt->execute([$dataFiltro]);
+    $chamados = $stmt->fetchAll();
+
+    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'concluido' AND data_pauta = ? ORDER BY chamado_em DESC");
+    $stmt->execute([$dataFiltro]);
+    $concluidos = $stmt->fetchAll();
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
