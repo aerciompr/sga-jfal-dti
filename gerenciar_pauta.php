@@ -835,7 +835,7 @@ try {
 
                 <form method="POST" id="form-tabela-pauta" class="flex-1 flex flex-col justify-between">
                     <!-- Tabela de agendados -->
-                    <div class="overflow-x-auto max-h-[500px] overflow-y-auto pr-1">
+                    <div class="overflow-x-auto max-h-[720px] overflow-y-auto pr-1">
                         <table class="w-full text-left text-sm text-gray-300">
                             <thead>
                                 <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">
