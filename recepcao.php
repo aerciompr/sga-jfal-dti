@@ -660,6 +660,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=device-width, initial-scale=1.0">
     <title>Recepção - <?= htmlspecialchars($sys_name) ?></title>
+    <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
     <script src="tema.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -667,7 +668,10 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md shrink-0">
         <div class="flex items-center space-x-3">
-            <a href="dashboard.php" class="text-blue-500 font-bold text-lg hover:underline">⚖️ JFAL - Alagoas</a>
+            <a href="dashboard.php" class="flex items-center space-x-2">
+                <img src="assets/catavento-jfal.png" alt="JFAL" class="h-6 w-auto object-contain">
+                <span class="text-blue-500 font-bold text-base hover:underline hidden sm:inline-block">JFAL - Alagoas</span>
+            </a>
             <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
                 <?= htmlspecialchars(ucfirst($_SESSION['usuario_role'])) ?>
             </span>

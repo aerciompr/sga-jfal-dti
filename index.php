@@ -50,6 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - <?= htmlspecialchars(SYS_NAME) ?></title>
+    <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="tema.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -66,8 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="bg-slate-900/60 backdrop-blur-xl p-8 rounded-3xl border border-slate-800/80 shadow-2xl w-full max-w-md transition-all duration-300 hover:border-blue-500/30">
         <!-- Logo Oficial da JFAL -->
         <div class="flex flex-col items-center mb-8">
-            <div class="bg-white/95 p-3.5 rounded-2xl shadow-lg border border-slate-200 mb-4 transition-transform duration-300 hover:scale-105">
-                <img src="assets/logo-jfal.png" alt="Justiça Federal em Alagoas" class="h-14 object-contain">
+            <div class="bg-white/95 p-3 rounded-2xl shadow-lg border border-slate-200 mb-4 transition-transform duration-300 hover:scale-105 max-w-full flex items-center justify-center">
+                <img src="assets/logo-jfal-completo.png" alt="Justiça Federal em Alagoas" class="h-12 object-contain">
             </div>
             <h1 class="text-xl font-bold text-center bg-gradient-to-r from-blue-400 via-indigo-200 to-blue-400 bg-clip-text text-transparent mb-1">
                 <?= htmlspecialchars(SYS_NAME) ?>

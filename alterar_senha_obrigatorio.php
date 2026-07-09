@@ -78,6 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Troca de Senha Obrigatória - <?= htmlspecialchars($sys_name) ?></title>
+    <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
     <script src="tema.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -85,9 +86,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="max-w-md w-full bg-gray-900 rounded-2xl border border-gray-800 p-8 shadow-2xl relative overflow-hidden">
         
         <!-- Header da Caixa de Login -->
-        <div class="text-center mb-6">
-            <span class="text-4xl">🔐</span>
-            <h1 class="text-lg font-black text-blue-500 uppercase leading-none mt-3">Segurança da Informação</h1>
+        <div class="text-center mb-6 flex flex-col items-center">
+            <div class="bg-white/95 p-2 rounded-xl shadow-md border border-slate-200 mb-4 transition-transform duration-300 hover:scale-105 inline-block">
+                <img src="assets/logo-jfal-completo.png" alt="Justiça Federal" class="h-10 object-contain">
+            </div>
+            <h1 class="text-lg font-black text-blue-500 uppercase leading-none">Segurança da Informação</h1>
             <p class="text-[9px] text-gray-400 uppercase tracking-widest font-semibold mt-1">Alteração de Senha Obrigatória</p>
         </div>
 

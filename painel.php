@@ -34,6 +34,7 @@ if (preg_match('%(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)|.*[?&]v=)|youtu\.
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=device-width, initial-scale=1.0">
     <title>Painel de Chamadas - JFAL</title>
+    <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
     <!-- Tailwind CSS para estilização moderna -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="tema.js"></script>
@@ -62,7 +63,7 @@ if (preg_match('%(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)|.*[?&]v=)|youtu\.
     <!-- Cabeçalho Principal (Logo, data e relógio) -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex justify-between items-center shadow-md z-10">
         <div class="flex items-center space-x-4">
-            <div class="text-2xl">⚖️</div>
+            <img src="assets/catavento-jfal.png" alt="JFAL" class="h-8 w-auto object-contain">
             <div>
                 <h1 class="text-base font-black tracking-wide text-blue-500 uppercase leading-none">Justiça Federal em Alagoas</h1>
                 <p class="text-[10px] text-gray-400 font-semibold tracking-widest uppercase mt-0.5">Seção Judiciária de Alagoas</p>
@@ -91,7 +92,10 @@ if (preg_match('%(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)|.*[?&]v=)|youtu\.
         <div id="chamada-overlay" class="absolute inset-0 bg-black/85 flex items-center justify-center hidden z-50">
             <div class="bg-gray-900 border border-blue-500/30 rounded-3xl p-12 max-w-2xl w-full mx-4 shadow-2xl text-center animate-slide-in relative">
                 <div class="absolute inset-x-0 top-0 h-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-t-3xl"></div>
-                <div class="text-blue-500 font-extrabold text-sm uppercase tracking-widest mb-8">🔔 Atenção! Chamando...</div>
+                <div class="flex flex-col items-center mb-6">
+                    <img src="assets/catavento-jfal.png" alt="JFAL" class="h-12 w-auto object-contain mb-3">
+                    <div class="text-blue-500 font-extrabold text-sm uppercase tracking-widest">🔔 Atenção! Chamando...</div>
+                </div>
                 
                 <!-- Nome do Paciente Chamado -->
                 <h2 id="overlay-nome" class="text-5xl md:text-6xl font-black text-white mb-10 leading-tight">--</h2>
