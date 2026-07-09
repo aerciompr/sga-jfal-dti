@@ -708,7 +708,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 </div>
             <?php endif; ?>
 
-            <?php if ($userRole === 'admin'): ?>
+            <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
             <!-- Formulário de Importação de Arquivo -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
                 <h2 class="text-sm font-semibold uppercase text-blue-500 tracking-wider mb-4 flex items-center gap-2">
