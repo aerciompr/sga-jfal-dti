@@ -48,11 +48,9 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md">
         <div class="flex items-center space-x-3">
-            <img src="assets/catavento-jfal.png" alt="JFAL" class="h-7 w-auto object-contain">
-            <div>
-                <h1 class="text-base font-black text-blue-500 uppercase leading-none">JFAL - Alagoas</h1>
-                <p class="text-[9px] text-gray-400 uppercase tracking-widest font-semibold mt-0.5">Sistemas de Atendimento</p>
-            </div>
+            <a href="dashboard.php" class="transition hover:opacity-90 flex items-center">
+                <img src="assets/logo-jfal-completo.png" id="logo-menu" alt="Justiça Federal em Alagoas" class="h-10 object-contain">
+            </a>
         </div>
         <div class="flex items-center space-x-4">
             <span class="text-sm text-gray-300">Olá, <strong class="text-white"><?= htmlspecialchars($_SESSION['usuario_name']) ?></strong></span>
@@ -63,8 +61,8 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
     <!-- Main Central Hub -->
     <main class="flex-1 max-w-5xl w-full mx-auto p-8 flex flex-col justify-center">
         <div class="text-center mb-10 flex flex-col items-center">
-            <div class="bg-white/95 p-3 rounded-2xl shadow-md border border-slate-200 mb-6 transition-transform duration-300 hover:scale-105 inline-block">
-                <img src="assets/logo-jfal-completo.png" alt="Justiça Federal em Alagoas" class="h-12 object-contain">
+            <div class="mb-4 transition-transform duration-300 hover:scale-105 inline-block">
+                <img src="assets/catavento-jfal.png" alt="JFAL" class="h-16 w-auto object-contain">
             </div>
             <h2 class="text-3xl font-black text-white leading-tight">Painel Principal</h2>
             <p class="text-sm text-gray-400 mt-2">Selecione o subsistema que deseja acessar abaixo</p>

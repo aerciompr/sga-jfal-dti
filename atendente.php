@@ -345,9 +345,8 @@ $history = $stmt->fetchAll();
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md shrink-0">
         <div class="flex items-center space-x-3">
-            <a href="dashboard.php" class="flex items-center space-x-2">
-                <img src="assets/catavento-jfal.png" alt="JFAL" class="h-6 w-auto object-contain">
-                <span class="text-blue-500 font-bold text-base hover:underline hidden sm:inline-block">JFAL - Alagoas</span>
+            <a href="dashboard.php" class="transition hover:opacity-90 flex items-center">
+                <img src="assets/logo-jfal-completo.png" id="logo-menu" alt="Justiça Federal em Alagoas" class="h-8 object-contain">
             </a>
             <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
                 <?= htmlspecialchars(ucfirst($_SESSION['usuario_role'])) ?>

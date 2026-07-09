@@ -239,6 +239,13 @@ const themeStyles = `
     body.theme-jf .text-teal-500 {
         color: var(--color-jf-gray) !important;
     }
+    
+    #logo-menu {
+        filter: brightness(0) invert(1) !important;
+    }
+    body.theme-jf #logo-menu {
+        filter: none !important;
+    }
 `;
 
 // Helper para ler cookies
