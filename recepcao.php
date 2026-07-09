@@ -842,7 +842,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                     </tr>
                                 <?php else: ?>
                                     <?php foreach ($agendados as $item): ?>
-                                        <tr class="row-agendado">
+                                        <tr onclick="if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'BUTTON' && !event.target.closest('button') && !event.target.closest('a')) mostrarModalDetalhes({ nome: '<?= htmlspecialchars($item['nome'], ENT_QUOTES) ?>', cpf: '<?= htmlspecialchars($item['cpf'] ?? '---', ENT_QUOTES) ?>', processo: '<?= htmlspecialchars($item['processo'], ENT_QUOTES) ?>', perito: '<?= htmlspecialchars($item['perito'], ENT_QUOTES) ?>', data_pauta: '<?= date('d/m/Y', strtotime($item['data_pauta'])) ?>', status: '<?= $item['status'] ?>', chegada_em: '<?= $item['chegada_em'] ? date('H:i:s', strtotime($item['chegada_em'])) : '---' ?>' })" class="row-agendado cursor-pointer hover:bg-gray-850/40 transition">
                                             <?php if ($permite_checkin): ?>
                                                 <td class="py-3">
                                                     <input type="checkbox" name="selecionados[]" value="<?= $item['id'] ?>" class="chk-item rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0 focus:ring-offset-0">
@@ -933,7 +933,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                     </tr>
                                 <?php else: ?>
                                     <?php foreach ($presentes as $item): ?>
-                                        <tr>
+                                        <tr onclick="if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'BUTTON' && !event.target.closest('button') && !event.target.closest('a')) mostrarModalDetalhes({ nome: '<?= htmlspecialchars($item['nome'], ENT_QUOTES) ?>', cpf: '<?= htmlspecialchars($item['cpf'] ?? '---', ENT_QUOTES) ?>', processo: '<?= htmlspecialchars($item['processo'], ENT_QUOTES) ?>', perito: '<?= htmlspecialchars($item['perito'], ENT_QUOTES) ?>', data_pauta: '<?= date('d/m/Y', strtotime($item['data_pauta'])) ?>', status: '<?= $item['status'] ?>', chegada_em: '<?= $item['chegada_em'] ? date('H:i:s', strtotime($item['chegada_em'])) : '---' ?>' })" class="cursor-pointer hover:bg-gray-850/40 transition">
                                             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
                                                 <td class="py-3">
                                                     <input type="checkbox" name="selecionados[]" value="<?= $item['id'] ?>" class="chk-presente-item rounded bg-gray-800 border-gray-700 text-emerald-500 focus:ring-0 focus:ring-offset-0">
@@ -1228,6 +1228,98 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 `;
             });
         }
+
+        // Modal de Detalhes do Periciado
+        function mostrarModalDetalhes(dados) {
+            document.getElementById('modal-nome').textContent = dados.nome || '---';
+            document.getElementById('modal-cpf').textContent = dados.cpf || '---';
+            document.getElementById('modal-processo').textContent = dados.processo || '---';
+            document.getElementById('modal-perito').textContent = dados.perito || '---';
+            document.getElementById('modal-data').textContent = dados.data_pauta || '---';
+            document.getElementById('modal-chegada').textContent = dados.chegada_em || '---';
+            
+            const statusEl = document.getElementById('modal-status');
+            statusEl.innerHTML = '';
+            const st = dados.status;
+            let badge = '';
+            if (st === 'concluido') {
+                badge = '<span class="bg-gray-850 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full border border-gray-700 uppercase font-bold">Concluído</span>';
+            } else if (st === 'atendimento') {
+                badge = '<span class="bg-blue-950 text-blue-400 text-[10px] px-2.5 py-0.5 rounded-full border border-blue-900/50 uppercase font-bold">Em Exame</span>';
+            } else if (st === 'chamada') {
+                badge = '<span class="bg-amber-950/40 text-amber-400 text-[10px] px-2.5 py-0.5 rounded-full border border-amber-900/40 uppercase font-bold">Chamado</span>';
+            } else if (st === 'presente' || st === 'fila') {
+                badge = '<span class="bg-emerald-950 text-emerald-400 text-[10px] px-2.5 py-0.5 rounded-full border border-emerald-900/50 uppercase font-bold">Aguardando</span>';
+            } else {
+                badge = '<span class="bg-gray-900 text-gray-500 text-[10px] px-2.5 py-0.5 rounded-full border border-gray-800 uppercase font-bold">Agendado</span>';
+            }
+            statusEl.innerHTML = badge;
+
+            const modal = document.getElementById('modal-detalhes');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.firstElementChild.classList.remove('scale-95');
+                modal.firstElementChild.classList.add('scale-100');
+            }, 10);
+        }
+
+        function fecharModalDetalhes() {
+            const modal = document.getElementById('modal-detalhes');
+            modal.firstElementChild.classList.remove('scale-100');
+            modal.firstElementChild.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 150);
+        }
     </script>
+
+    <!-- Modal de Detalhes do Periciado -->
+    <div id="modal-detalhes" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-sm transition-opacity duration-300">
+        <div class="bg-gray-900 border border-gray-800 rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden transform scale-95 transition-transform duration-300">
+            <div class="p-6 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
+                <h3 class="text-sm font-bold uppercase tracking-wider text-blue-500 flex items-center gap-2">
+                    🔎 Detalhes do Agendamento
+                </h3>
+                <button type="button" onclick="fecharModalDetalhes()" class="text-gray-400 hover:text-white transition text-lg">&times;</button>
+            </div>
+            <div class="p-6 space-y-4 text-sm text-gray-300">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <span class="block text-[10px] uppercase font-bold text-gray-500 tracking-wider">Nome do Periciado</span>
+                        <strong id="modal-nome" class="text-base text-white font-black block mt-0.5">---</strong>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] uppercase font-bold text-gray-500 tracking-wider">CPF</span>
+                        <span id="modal-cpf" class="font-mono text-white block mt-0.5">---</span>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] uppercase font-bold text-gray-500 tracking-wider">Número do Processo</span>
+                        <span id="modal-processo" class="font-mono text-white block mt-0.5">---</span>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] uppercase font-bold text-gray-500 tracking-wider">Médico Perito</span>
+                        <span id="modal-perito" class="text-white font-medium block mt-0.5">---</span>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] uppercase font-bold text-gray-500 tracking-wider">Data da Pauta</span>
+                        <span id="modal-data" class="text-white block mt-0.5">---</span>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] uppercase font-bold text-gray-500 tracking-wider">Status Atual</span>
+                        <span id="modal-status" class="block mt-0.5">---</span>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] uppercase font-bold text-gray-500 tracking-wider">Horário de Chegada</span>
+                        <span id="modal-chegada" class="font-mono text-white block mt-0.5">---</span>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-800 bg-gray-950/40 flex justify-end">
+                <button type="button" onclick="fecharModalDetalhes()" class="bg-gray-850 hover:bg-gray-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition border border-gray-750">
+                    Fechar Detalhes
+                </button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
