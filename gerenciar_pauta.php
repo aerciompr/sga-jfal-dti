@@ -824,8 +824,11 @@ try {
                     </div>
 
                     <div class="flex items-center gap-2 w-full sm:w-auto">
-                        <div id="busca-dia-container" class="<?= $filtro_tipo === 'dia' ? '' : 'hidden' ?> w-full sm:w-auto">
-                            <input type="date" name="data_busca" value="<?= htmlspecialchars($data_busca) ?>" onchange="this.form.submit()" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none w-full">
+                        <div id="busca-dia-container" class="<?= $filtro_tipo === 'dia' ? 'flex items-center gap-2' : 'hidden' ?> w-full sm:w-auto">
+                            <input type="date" name="data_busca" id="data-busca-input" value="<?= htmlspecialchars($data_busca) ?>" onchange="this.form.submit()" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none w-full">
+                            <button type="button" onclick="irParaHoje()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition shrink-0">
+                                Hoje
+                            </button>
                         </div>
                         <div id="busca-mes-container" class="<?= $filtro_tipo === 'mes' ? '' : 'hidden' ?> w-full sm:w-auto">
                             <input type="month" name="mes_busca" value="<?= htmlspecialchars($mes_busca) ?>" onchange="this.form.submit()" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none w-full">
@@ -953,6 +956,15 @@ try {
     </footer>
 
     <script>
+        // Vai direto para o dia de hoje
+        function irParaHoje() {
+            const input = document.getElementById('data-busca-input');
+            if (input) {
+                input.value = '<?= date('Y-m-d') ?>';
+                input.form.submit();
+            }
+        }
+
         // Funções para Ações Individuais rápidas
         function confirmarChegadaIndividual(id) {
             document.getElementById('ind-action').value = 'confirmar_chegada_lote';

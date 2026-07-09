@@ -790,7 +790,10 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                     <span class="text-xs font-semibold uppercase text-gray-400 tracking-wider">Visualizando Pauta de:</span>
                 </div>
                 <form method="GET" action="recepcao.php" class="flex items-center gap-2 w-full sm:w-auto">
-                    <input type="date" name="data_filtro" value="<?= htmlspecialchars($dataFiltro) ?>" onchange="this.form.submit()" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 w-full sm:w-auto">
+                    <input type="date" name="data_filtro" id="data-filtro-input" value="<?= htmlspecialchars($dataFiltro) ?>" onchange="this.form.submit()" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 w-full sm:w-auto">
+                    <button type="button" onclick="irParaHoje()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition shrink-0">
+                        Hoje
+                    </button>
                     <noscript>
                         <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">Filtrar</button>
                     </noscript>
@@ -1344,6 +1347,15 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
             setTimeout(() => {
                 modal.classList.add('hidden');
             }, 150);
+        }
+
+        // Vai direto para o dia de hoje
+        function irParaHoje() {
+            const input = document.getElementById('data-filtro-input');
+            if (input) {
+                input.value = '<?= date('Y-m-d') ?>';
+                input.form.submit();
+            }
         }
     </script>
 
