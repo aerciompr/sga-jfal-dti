@@ -545,11 +545,11 @@ $mes_busca = $_GET['mes_busca'] ?? date('Y-m');
 $atendimentos = [];
 try {
     if ($filtro_tipo === 'dia') {
-        $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE data_pauta = ? ORDER BY id ASC");
+        $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE data_pauta = ? ORDER BY perito ASC, nome ASC, id ASC");
         $stmt->execute([$data_busca]);
         $atendimentos = $stmt->fetchAll();
     } else {
-        $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE DATE_FORMAT(data_pauta, '%Y-%m') = ? ORDER BY data_pauta ASC, id ASC");
+        $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE DATE_FORMAT(data_pauta, '%Y-%m') = ? ORDER BY data_pauta ASC, perito ASC, nome ASC, id ASC");
         $stmt->execute([$mes_busca]);
         $atendimentos = $stmt->fetchAll();
     }
@@ -835,7 +835,7 @@ try {
 
                 <form method="POST" id="form-tabela-pauta" class="flex-1 flex flex-col justify-between">
                     <!-- Tabela de agendados -->
-                    <div class="overflow-x-auto min-h-[400px]">
+                    <div class="overflow-x-auto max-h-[500px] overflow-y-auto pr-1">
                         <table class="w-full text-left text-sm text-gray-300">
                             <thead>
                                 <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">

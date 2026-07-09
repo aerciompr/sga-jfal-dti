@@ -618,7 +618,7 @@ $chamados = [];
 $concluidos = [];
 
 if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['usuario_role'] === 'recepcao' && $pauta_liberada)) {
-    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'agendado' AND data_pauta = ? ORDER BY id ASC");
+    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'agendado' AND data_pauta = ? ORDER BY perito ASC, nome ASC, id ASC");
     $stmt->execute([$dataFiltro]);
     $agendados = $stmt->fetchAll();
 
