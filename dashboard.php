@@ -48,8 +48,12 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md">
         <div class="flex items-center space-x-3">
-            <a href="dashboard.php" class="transition hover:opacity-90 flex items-center">
-                <img src="assets/logo-jfal-completo.png" id="logo-menu" alt="Justiça Federal em Alagoas" class="h-10 object-contain">
+            <a href="dashboard.php" class="flex items-center space-x-3 group hover:opacity-95 transition">
+                <img src="assets/catavento-jfal.png" alt="JFAL" class="h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-105">
+                <div class="hidden sm:block">
+                    <h1 class="text-xs font-black tracking-wide text-blue-500 uppercase leading-none group-hover:text-blue-400 transition-colors">Justiça Federal em Alagoas</h1>
+                    <p class="text-[8px] text-gray-400 font-semibold tracking-widest uppercase mt-0.5">Seção Judiciária de Alagoas</p>
+                </div>
             </a>
         </div>
         <div class="flex items-center space-x-4">
