@@ -263,12 +263,17 @@ $usuarios = $stmt->fetchAll();
         <!-- Grade de Usuários Cadastrados -->
         <div class="md:col-span-2 space-y-6">
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
-                <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider mb-4 flex justify-between items-center">
-                    <span>Usuários Cadastrados</span>
-                    <span class="bg-gray-800 text-gray-400 text-xs px-2.5 py-0.5 rounded-full font-bold"><?= count($usuarios) ?></span>
-                </h2>
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                    <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider flex items-center gap-2">
+                        <span>Usuários Cadastrados</span>
+                        <span class="bg-gray-800 text-gray-400 text-xs px-2.5 py-0.5 rounded-full font-bold"><?= count($usuarios) ?></span>
+                    </h2>
+                    <div class="w-full sm:w-64">
+                        <input type="text" id="busca-usuarios" onkeyup="filtrarUsuarios()" placeholder="🔍 Filtrar por nome ou login..." class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition">
+                    </div>
+                </div>
 
-                <div class="overflow-x-auto">
+                <div class="overflow-x-auto max-h-[460px] overflow-y-auto pr-1">
                     <table class="w-full text-left text-sm text-gray-300">
                         <thead>
                             <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">
@@ -365,6 +370,27 @@ $usuarios = $stmt->fetchAll();
             
             document.getElementById('submit-btn').textContent = "Cadastrar Usuário";
             document.getElementById('cancel-btn').classList.add('hidden');
+        }
+
+        // Filtro em tempo real no cliente para evitar rolagem excessiva
+        function filtrarUsuarios() {
+            const input = document.getElementById('busca-usuarios');
+            const filter = input.value.toLowerCase();
+            const rows = document.querySelectorAll('tbody tr');
+            
+            rows.forEach(row => {
+                const usernameCell = row.cells[1];
+                const nomeCell = row.cells[2];
+                if (usernameCell && nomeCell) {
+                    const username = usernameCell.textContent.toLowerCase();
+                    const nome = nomeCell.textContent.toLowerCase();
+                    if (username.includes(filter) || nome.includes(filter)) {
+                        row.style.display = "";
+                    } else {
+                        row.style.display = "none";
+                    }
+                }
+            });
         }
     </script>
 </body>
