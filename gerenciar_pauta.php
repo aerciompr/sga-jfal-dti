@@ -402,10 +402,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                             $existingAppointments = [];
                             try {
-                                $prStmt = $pdo->query("SELECT processo, data_pauta FROM atendimentos WHERE processo IS NOT NULL AND processo != '' AND data_pauta IS NOT NULL");
+                                $prStmt = $pdo->query("SELECT id, processo, data_pauta, nome, perito, cpf FROM atendimentos WHERE processo IS NOT NULL AND processo != '' AND data_pauta IS NOT NULL");
                                 while ($row = $prStmt->fetch()) {
                                     $key = simplifyName($row['processo']) . '_' . $row['data_pauta'];
-                                    $existingAppointments[$key] = true;
+                                    $existingAppointments[$key] = [
+                                        'id' => $row['id'],
+                                        'nome' => $row['nome'],
+                                        'perito' => $row['perito'],
+                                        'cpf' => $row['cpf']
+                                    ];
                                 }
                             } catch (PDOException $e) {}
 
@@ -420,6 +425,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                             $pdo->beginTransaction();
                             $stmt = $pdo->prepare("INSERT INTO atendimentos (senha, nome, processo, perito, status, data_pauta, cpf) VALUES ('---', ?, ?, ?, 'agendado', ?, ?)");
+                            $stmtUpdate = $pdo->prepare("UPDATE atendimentos SET nome = ?, perito = ?, cpf = ? WHERE id = ?");
                             $stmtUser = $pdo->prepare("INSERT INTO usuarios (username, password, role, nome, cpf) VALUES (?, ?, 'perito', ?, ?)");
                             
                             $count = 0;
@@ -433,8 +439,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                     $dataPauta = $dParts[0];
                                 }
 
-                                $appKey = $procClean . '_' . $dataPauta;
-                                if ($procClean && isset($existingAppointments[$appKey])) {
+                                // REGRA: Importar apenas do dia atual para frente
+                                if ($dataPauta < $today) {
                                     continue;
                                 }
 
@@ -467,6 +473,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 }
 
                                 $cpf = $r['cpf'] ?? null;
+                                $appKey = $procClean . '_' . $dataPauta;
+
+                                // REGRA: Se o processo já existir para a data, atualiza os dados se diferirem
+                                if ($procClean && isset($existingAppointments[$appKey])) {
+                                    $existing = $existingAppointments[$appKey];
+                                    $changed = ($existing['nome'] !== $periciadoNome) || 
+                                               ($existing['perito'] !== $pName) || 
+                                               ($existing['cpf'] !== $cpf);
+                                    if ($changed) {
+                                        $stmtUpdate->execute([$periciadoNome, $pName ?: null, $cpf ?: null, $existing['id']]);
+                                        $count++;
+                                    }
+                                    continue;
+                                }
 
                                 $stmt->execute([
                                     $periciadoNome,
@@ -478,7 +498,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 $count++;
                                 
                                 if ($procClean) {
-                                    $existingAppointments[$appKey] = true;
+                                    $existingAppointments[$appKey] = [
+                                        'id' => null,
+                                        'nome' => $periciadoNome,
+                                        'perito' => $pName,
+                                        'cpf' => $cpf
+                                    ];
                                 }
                             }
                             unset($GLOBALS['sga_import_lote']);
