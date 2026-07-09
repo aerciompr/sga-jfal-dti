@@ -141,7 +141,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $stmt->execute([$nome, $processo ?: null, $perito ?: null, $dataFiltro, $cpf ?: null]);
                         $newId = $pdo->lastInsertId();
                         registrarLog($pdo, 'Cadastrar Agendamento', "Paciente: $nome, Processo: $processo, Perito: $perito, Data da Pauta: $dataFiltro", $newId);
-                        $message = "Periciado $nome agendado!";
+                        
+                        // Verifica se este paciente (CPF ou Nome) possui agendamento em outra data
+                        $avisoOutraData = '';
+                        if (!empty($cpf)) {
+                            $chkOutra = $pdo->prepare("SELECT data_pauta FROM atendimentos WHERE id != ? AND (cpf = ? OR REPLACE(REPLACE(cpf, '.', ''), '-', '') = ?) AND data_pauta != ? LIMIT 1");
+                            $chkOutra->execute([$newId, $cpf, preg_replace('/\D/', '', $cpf), $dataFiltro]);
+                            $outraData = $chkOutra->fetchColumn();
+                            if ($outraData) {
+                                $avisoOutraData = " (Atenção: Este paciente já possui um agendamento para o dia " . date('d/m/Y', strtotime($outraData)) . "!)";
+                            }
+                        } else {
+                            $chkOutra = $pdo->prepare("SELECT data_pauta FROM atendimentos WHERE id != ? AND nome = ? AND data_pauta != ? LIMIT 1");
+                            $chkOutra->execute([$newId, $nome, $dataFiltro]);
+                            $outraData = $chkOutra->fetchColumn();
+                            if ($outraData) {
+                                $avisoOutraData = " (Atenção: Este paciente já possui um agendamento para o dia " . date('d/m/Y', strtotime($outraData)) . "!)";
+                            }
+                        }
+                        
+                        $message = "Periciado $nome agendado!" . $avisoOutraData;
                         $message_type = "success";
                     }
                 } else {
@@ -153,8 +172,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Ação 2: Importação de Pauta em Excel
         elseif ($action === 'importar_pdf') {
-            if (!in_array($userRole, ['admin', 'supervisor'])) {
-                $message = "Acesso Negado: Apenas administradores ou supervisores podem importar pautas.";
+            if ($userRole !== 'admin') {
+                $message = "Acesso Negado: Apenas administradores podem importar pautas.";
                 $message_type = "error";
             } else {
                 if (isset($_FILES['arquivo_pdf']) && $_FILES['arquivo_pdf']['error'] === UPLOAD_ERR_OK) {
@@ -689,6 +708,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 </div>
             <?php endif; ?>
 
+            <?php if ($userRole === 'admin'): ?>
             <!-- Formulário de Importação de Arquivo -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
                 <h2 class="text-sm font-semibold uppercase text-blue-500 tracking-wider mb-4 flex items-center gap-2">
@@ -705,6 +725,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                     </button>
                 </form>
             </div>
+            <?php endif; ?>
 
             <!-- Cadastro Manual de Periciados -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
@@ -817,6 +838,16 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                     <!-- Input para busca textual instantânea -->
                     <div class="mb-4">
                         <input type="text" id="filtro-busca" placeholder="🔍 Buscar por nome, processo ou perito..." class="w-full bg-gray-950 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
+                    </div>
+
+                    <!-- Alerta de agendamentos em outras datas -->
+                    <div id="alerta-outras-datas" class="hidden mb-4 p-4 rounded-xl border bg-blue-950/40 border-blue-900/60 text-blue-300 text-xs space-y-2 animate-fade-in">
+                        <div class="font-bold flex items-center gap-1.5 uppercase text-blue-400">
+                            <span>📅</span> Agendamento Encontrado em Outra Data!
+                        </div>
+                        <div id="lista-outras-datas" class="space-y-1.5 font-medium">
+                            <!-- Injetado via JS -->
+                        </div>
                     </div>
 
                     <div class="overflow-x-auto max-h-[300px] overflow-y-auto">
@@ -1126,7 +1157,8 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
             }
         }
 
-        // Filtro em tempo real digitado pelo usuário
+        // Filtro em tempo real digitado pelo usuário e busca de outras datas
+        let timeoutBuscaOutroDia = null;
         if (filtroBusca) {
             filtroBusca.addEventListener('input', function() {
                 const query = this.value.toLowerCase().trim();
@@ -1147,6 +1179,48 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 });
                 
                 toggleBulkDeleteButton();
+
+                // Busca em outras datas via AJAX
+                clearTimeout(timeoutBuscaOutroDia);
+                const alertaEl = document.getElementById('alerta-outras-datas');
+                const listaEl = document.getElementById('lista-outras-datas');
+                
+                if (query.length >= 3) {
+                    timeoutBuscaOutroDia = setTimeout(() => {
+                        fetch(`api_verificar_outro_dia.php?busca=${encodeURIComponent(query)}&hoje=<?= $dataFiltro ?>`)
+                            .then(res => res.json())
+                            .then(data => {
+                                if (data && data.length > 0) {
+                                    listaEl.innerHTML = '';
+                                    data.forEach(item => {
+                                        const div = document.createElement('div');
+                                        div.className = 'bg-blue-900/30 border border-blue-800/40 p-2.5 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1.5';
+                                        div.innerHTML = `
+                                            <div>
+                                                <strong class="text-white font-bold">${item.nome}</strong>
+                                                <span class="text-blue-400 font-medium ml-1.5">| Perito: ${item.perito || 'Não associado'}</span>
+                                            </div>
+                                            <div class="flex items-center gap-2 text-[10px]">
+                                                <span class="bg-blue-950 text-blue-400 px-2 py-0.5 rounded font-bold uppercase">${item.status_formatado}</span>
+                                                <span class="bg-gray-800 text-gray-300 px-2 py-0.5 rounded font-mono font-bold">${item.data_pauta_formatada}</span>
+                                            </div>
+                                        `;
+                                        listaEl.appendChild(div);
+                                    });
+                                    alertaEl.classList.remove('hidden');
+                                } else {
+                                    alertaEl.classList.add('hidden');
+                                    listaEl.innerHTML = '';
+                                }
+                            })
+                            .catch(() => {
+                                alertaEl.classList.add('hidden');
+                            });
+                    }, 350); // Debounce de 350ms
+                } else {
+                    alertaEl.classList.add('hidden');
+                    listaEl.innerHTML = '';
+                }
             });
         }
 
