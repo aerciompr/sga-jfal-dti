@@ -19,9 +19,12 @@ try {
     $stmt = $pdo->query("SELECT id, senha, nome, sala, perito, chamado_em FROM atendimentos WHERE status = 'chamada' AND DATE(chamado_em) = CURRENT_DATE() ORDER BY chamado_em DESC LIMIT 1");
     $ultima = $stmt->fetch();
     
-    // Recupera a URL de vídeo configurada
-    $yt_file = __DIR__ . '/youtube_url.txt';
-    $yt_url = file_exists($yt_file) ? trim(file_get_contents($yt_file)) : 'https://www.youtube.com/watch?v=5qap5aO4i9A';
+    // Recupera a URL de vídeo configurada (prioriza banco de dados com fallback para arquivo)
+    $yt_url = get_config($pdo, 'youtube_url');
+    if (empty($yt_url)) {
+        $yt_file = __DIR__ . '/youtube_url.txt';
+        $yt_url = file_exists($yt_file) ? trim(file_get_contents($yt_file)) : 'https://www.youtube.com/watch?v=5qap5aO4i9A';
+    }
 
     // Extrai o ID de 11 caracteres da URL do YouTube
     $video_id = '5qap5aO4i9A';

@@ -128,15 +128,20 @@ if (isset($_POST['set_sala'])) {
     }
 }
 
-// Configurações do vídeo do YouTube para a TV principal
-$yt_file = __DIR__ . '/youtube_url.txt';
+// Configurações do vídeo do YouTube para a TV principal (prioriza banco de dados)
 if (isset($_POST['set_yt_url'])) {
     $yt_url = trim($_POST['yt_url'] ?? '');
     if ($yt_url) {
-        file_put_contents($yt_file, $yt_url);
+        set_config($pdo, 'youtube_url', $yt_url);
+        $yt_file = __DIR__ . '/youtube_url.txt';
+        @file_put_contents($yt_file, $yt_url);
     }
 }
-$yt_url = file_exists($yt_file) ? file_get_contents($yt_file) : 'https://www.youtube.com/watch?v=5qap5aO4i9A';
+$yt_url = get_config($pdo, 'youtube_url');
+if (empty($yt_url)) {
+    $yt_file = __DIR__ . '/youtube_url.txt';
+    $yt_url = file_exists($yt_file) ? trim(file_get_contents($yt_file)) : 'https://www.youtube.com/watch?v=5qap5aO4i9A';
+}
 
 $message = '';
 $message_type = '';

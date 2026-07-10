@@ -167,6 +167,15 @@ try {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     } catch (PDOException $e) {}
 
+    // Criação da tabela de configurações gerais
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS configuracoes (
+            chave VARCHAR(100) PRIMARY KEY,
+            valor TEXT,
+            atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (PDOException $e) {}
+
     // Adiciona coluna atendimento_id na tabela logs_auditoria se não existir
     try {
         $pdo->exec("ALTER TABLE logs_auditoria ADD COLUMN atendimento_id INT NULL DEFAULT NULL");
@@ -824,6 +833,32 @@ function bloquearPauta($pdo, $data) {
         $stmt = $pdo->prepare("DELETE FROM pautas_liberadas WHERE data_pauta = ?");
         return $stmt->execute([$data]);
     } catch (PDOException $e) {
+        return false;
+    }
+}
+
+/**
+ * Recupera um valor de configuração global do banco
+ */
+function get_config($pdo, $chave, $padrao = '') {
+    try {
+        $stmt = $pdo->prepare("SELECT valor FROM configuracoes WHERE chave = ?");
+        $stmt->execute([$chave]);
+        $val = $stmt->fetchColumn();
+        return $val !== false ? $val : $padrao;
+    } catch (Exception $e) {
+        return $padrao;
+    }
+}
+
+/**
+ * Define ou atualiza um valor de configuração global no banco
+ */
+function set_config($pdo, $chave, $valor) {
+    try {
+        $stmt = $pdo->prepare("INSERT INTO configuracoes (chave, valor) VALUES (?, ?) ON DUPLICATE KEY UPDATE valor = ?");
+        return $stmt->execute([$chave, $valor, $valor]);
+    } catch (Exception $e) {
         return false;
     }
 }

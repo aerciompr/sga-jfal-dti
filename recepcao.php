@@ -623,8 +623,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message_type = "error";
             } else {
                 $yt_url = trim($_POST['yt_url'] ?? '');
+                set_config($pdo, 'youtube_url', $yt_url);
                 $yt_file = __DIR__ . '/youtube_url.txt';
-                file_put_contents($yt_file, $yt_url);
+                @file_put_contents($yt_file, $yt_url);
                 $message = "Vídeo de fundo da TV atualizado!";
                 $message_type = "success";
             }
@@ -634,9 +635,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Carrega listas para exibição limitadas à data selecionada (já definida no topo)
 
-// Carrega URL atual da TV
-$yt_file = __DIR__ . '/youtube_url.txt';
-$yt_url = file_exists($yt_file) ? trim(file_get_contents($yt_file)) : 'https://www.youtube.com/watch?v=5qap5aO4i9A';
+// Carrega URL atual da TV (prioriza banco de dados com fallback para arquivo)
+$yt_url = get_config($pdo, 'youtube_url');
+if (empty($yt_url)) {
+    $yt_file = __DIR__ . '/youtube_url.txt';
+    $yt_url = file_exists($yt_file) ? trim(file_get_contents($yt_file)) : 'https://www.youtube.com/watch?v=5qap5aO4i9A';
+}
 
 $pauta_liberada = isPautaLiberada($pdo, $dataFiltro);
 $permite_checkin = (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['usuario_role'] === 'recepcao' && $dataFiltro === date('Y-m-d') && $pauta_liberada));
