@@ -189,7 +189,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $message = "Erro: O arquivo enviado excede o limite de tamanho permitido de 5MB.";
                         $message_type = "error";
                     } else {
-                        $cmd = "python " . escapeshellarg(__DIR__ . '/import_excel.py') . " " . escapeshellarg($file_tmp) . " 2>&1";
+                        // Detecção inteligente do executável Python (compatível com Windows local e Linux/Docker de produção)
+                        $python_cmd = 'python3';
+                        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                            $python_cmd = 'python';
+                        } else {
+                            $check_py3 = shell_exec('which python3 2>/dev/null');
+                            if (empty(trim($check_py3))) {
+                                $python_cmd = 'python';
+                            }
+                        }
+                        
+                        $cmd = $python_cmd . " " . escapeshellarg(__DIR__ . '/import_excel.py') . " " . escapeshellarg($file_tmp) . " 2>&1";
                         
                         $output = [];
                         $return_var = 0;
