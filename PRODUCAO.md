@@ -1,5 +1,15 @@
 # Implantação oficial — SGA/JFAL
 
+## Stack existente no Portainer (ajuste posterior)
+
+A configuração Compose foi adaptada à instalação existente informada pelo responsável: MySQL **8.0.46**, volume externo **sga-dti_db_data**, acesso HTTP na intranet pela porta 8085. Não há atualização do mecanismo para 8.4 neste Compose. A seção abaixo sobre MySQL 8.4 descreve a preparação anterior e não deve ser aplicada ao volume existente.
+
+No Portainer, informar DB_NAME, DB_USER, DB_PASS e MYSQL_ROOT_PASSWORD com os valores atuais. Para o ambiente HTTP informado, SESSION_SECURE=0; com HTTPS, usar 1. DB_VOLUME_NAME permite selecionar outro volume existente, sem criar nem copiar dados automaticamente. Não usar o caminho interno `_data` como bind mount.
+
+O serviço migrate executa antes de web, que só inicia após sucesso da migração. RUNTIME_DB_USER fica vazio por padrão para preservar as permissões do usuário legado root; nunca definir RUNTIME_DB_USER=root. Uma conta restrita deverá ser criada e validada separadamente antes de migrar a aplicação para ela. O Compose não cria usuário de runtime automaticamente em volumes existentes.
+
+Fazer backup e ensaiar em cópia isolada antes do redeploy. O Compose usa build local; o Portainer precisa construir a imagem a partir do repositório, como na stack anterior. Nenhuma imagem sga-jfal:local é exigida de um registry.
+
 ## Situação da entrega
 
 As correções estão no código local. Não foram publicadas nem aplicadas ao banco oficial. A previsão informada é segunda-feira, **26/10/2026**.
