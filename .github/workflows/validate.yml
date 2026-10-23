@@ -1,0 +1,51 @@
+name: Validar SGA
+on: [push, pull_request]
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: sga-ci-local-only
+          MYSQL_DATABASE: sga_test
+          MYSQL_USER: sga_runtime
+          MYSQL_PASSWORD: sga-ci-runtime-only
+        ports: ["33306:3306"]
+        options: --health-cmd="mysqladmin ping --silent" --health-interval=5s --health-retries=30
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 33306
+      DB_USER: root
+      DB_PASS: sga-ci-local-only
+      DB_NAME: sga_test
+      SGA_TEST: "1"
+      BOOTSTRAP_ADMIN_PASSWORD: Sga-CI-Bootstrap-2026!
+      SESSION_SECURE: "0"
+      RUNTIME_DB_USER: sga_runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "22", cache: npm}
+      - run: npm ci && npm audit --audit-level=moderate && npm run build:css && node --test tests/tv.test.cjs tests/toques.test.cjs
+      - run: docker build -t sga-validation .
+      - name: PHP syntax and migration
+        run: |
+          docker run --rm --network host --env-file <(env | grep -E '^(DB_|RUNTIME_DB_USER|SGA_TEST|BOOTSTRAP_ADMIN_PASSWORD|TV_TOKEN|SESSION_SECURE)') sga-validation php /var/www/html/scripts/migrate.php
+          docker run --rm --network host --env-file <(env | grep -E '^(DB_|RUNTIME_DB_USER|SGA_TEST|BOOTSTRAP_ADMIN_PASSWORD|TV_TOKEN|SESSION_SECURE)') sga-validation php /var/www/html/scripts/migrate.php
+          docker run --rm -v "$PWD:/src:ro" sga-validation sh -c 'find /src -path /src/node_modules -prune -o -name "*.php" -print0 | xargs -0 -n1 php -l'
+      - name: Database integration and race
+        run: |
+          docker run --rm --network host --env-file <(env | grep -E '^(DB_|SGA_TEST|TV_TOKEN|SESSION_SECURE)') -v "$PWD/tests:/var/www/html/tests:ro" sga-validation php /var/www/html/tests/integration.php
+          docker run --rm --network host --env-file <(env | grep -E '^(DB_|SGA_TEST|TV_TOKEN|SESSION_SECURE)') -v "$PWD/tests:/var/www/html/tests:ro" sga-validation php /var/www/html/tests/concurrency.php
+          docker run --rm --network host --env-file <(env | grep -E '^(DB_|SGA_TEST|TV_TOKEN|SESSION_SECURE)') -e DB_USER=sga_runtime -e DB_PASS=sga-ci-runtime-only -v "$PWD/tests:/var/www/html/tests:ro" sga-validation php /var/www/html/tests/runtime_privileges.php
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -r requirements.txt
+      - name: HTTP and import tests
+        run: |
+          docker run -d --name sga-http --network host --env-file <(env | grep -E '^(DB_|SGA_TEST|TV_TOKEN|SESSION_SECURE)') -e DB_USER=sga_runtime -e DB_PASS=sga-ci-runtime-only sga-validation
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3020/health.php && break || sleep 1; done
+          SGA_APACHE=1 SGA_TEST_URL=http://127.0.0.1:3020 python -m unittest discover -s tests -p 'test_*.py' -v
+      - if: always()
+        run: docker logs sga-http || true

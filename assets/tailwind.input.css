@@ -1,0 +1,6 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+@layer base {
+  :focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
+  button, input, select { font-size: max(0.875rem, 1em); }
+}

@@ -1,125 +1,70 @@
-# Documentação Técnica do Sistema de Gerenciamento de Atendimentos (SGA)
-### Justiça Federal de Alagoas (JFAL)
+# SGA — Justiça Federal em Alagoas
 
-Este documento contém a especificação técnica, arquitetura de software, estrutura de banco de dados, matriz de permissões e detalhes operacionais do SGA.
+Sistema de gerenciamento de pautas, presença, filas e atendimentos de perícias. Esta documentação corresponde à revisão de segurança de outubro de 2026 e substitui a descrição anterior.
 
----
+## Arquitetura
 
-## 1. Visão Geral e Arquitetura do Sistema
+PHP 8.4 com PDO/MySQL, Apache, MySQL 8.4 e importação Excel em Python. CSS Tailwind compilado localmente, JavaScript para TV e temas. A implantação é feita por Docker Compose. Consulte [PRODUCAO.md](PRODUCAO.md) para migração, variáveis, backup, retorno e homologação.
 
-O **SGA** é um sistema desenvolvido sob a arquitetura **PHP Puro (estruturado)** com banco de dados **MySQL/MariaDB**, concebido para gerenciar a fila de atendimentos e perícias médicas presenciais no âmbito da Justiça Federal.
+- `banco.php`: conexão de runtime e utilitários; não executa migrações automáticas.
+- `seguranca.php`: sessões, revogação, expiração, CSRF, cabeçalhos, datas e autorização de TV.
+- `atendimento_service.php`: transições atômicas, bloqueios de profissional/sala e eventos de chamada.
+- `pauta_service.php`: agendamento, edição, homologação, remanejamento e cancelamento com auditoria.
+- `usuarios_service.php`: gestão de usuários, proteção do último administrador e revogação de sessões.
+- `importacao_service.php` e `import_excel.py`: validação de planilha, prévia, confirmação e gravação transacional.
+- `scripts/migrate.php`: criação/atualização aditiva do schema exclusivamente por CLI.
+- `scripts/preflight.php`: diagnóstico sem alteração de dados.
+- `scripts/backup.sh`: dump lógico com compactação e checksum.
 
-### Stack Tecnológica:
-* **Backend**: PHP 8.x (utilizando PDO para persistência de dados segura e blindagem contra SQL Injection).
-* **Banco de Dados**: MySQL / MariaDB (gerenciado tipicamente via XAMPP local).
-* **Frontend**: HTML5, JavaScript Puro (ES6) para AJAX/Long Polling e **Tailwind CSS** (carregado via CDN em tempo de execução).
-* **Temas**: CSS Dinâmico (Light Mode da Justiça Federal alternável com o Tema Escuro Moderno via Cookie).
-* **APIs**: Integração do backend com a API pública de Nomes do IBGE para auxílio ortográfico em tempo real.
+## Perfis
 
----
+| Perfil | Acesso |
+|---|---|
+| Administrador | Gestão completa de usuários, pautas, salas, vídeo, atendimento e auditoria |
+| Supervisor | Pautas, importação, homologação, salas, recepção e auditoria |
+| Recepção | Consulta e check-in da pauta homologada do próprio dia |
+| Perito | Fila e ações dos atendimentos vinculados ao próprio ID |
+| TV autorizada | Eventos de chamada e histórico visual, sem alterações de atendimento |
 
-## 2. Estrutura de Arquivos do Projeto
+Alterações de credencial ou cadastro revogam sessões anteriores. Administradores atribuem credenciais temporárias individuais; a importação não usa senha derivada do CPF. Não há administrador com senha fixa criado automaticamente.
 
-O sistema é modularizado de forma simples por arquivos de script na raiz do diretório `C:\\sga`:
+## Estados de atendimento
 
-| Arquivo | Função / Responsabilidade |
-| :--- | :--- |
-| **`config.php`** | Armazena variáveis de ambiente globais e dados de conexão ao banco de dados (HOST, USER, PASS, DBNAME). |
-| **`banco.php`** | Centraliza a conexão PDO e executa migrações automáticas de tabelas, além de conter a inteligência de processamento de nomes. |
-| **`index.php`** | Controla o fluxo de Login e Autenticação de sessões (`session_start`). |
-| **`logout.php`** | Destrói a sessão do usuário e redireciona para a tela de login. |
-| **`dashboard.php`** | Painel Central (Main Hub). Renderiza os cards de atalhos e menus com base na permissão do usuário logado. |
-| **`recepcao.php`** | Módulo de Recepção. Gerencia upload de pauta (Excel), cadastro manual de periciados, confirmação de chegada na pauta do dia e limpeza de dados. |
-| **`atendente.php`** | Módulo do Perito. Painel onde o perito escolhe sua sala física, visualiza os pacientes presentes e realiza/chama os atendimentos. |
-| **`salas.php`** | Módulo de Salas. Cadastro e remoção das salas físicas de perícia. |
-| **`usuarios.php`** | Módulo de Perfis. Criação, edição e exclusão das contas de usuário e atribuição de cargos (`admin`, `recepcao`, `perito`). |
-| **`auditoria.php`** | Histórico e Auditoria. Permite rastrear chamadas anteriores, exportar relatórios em CSV e filtrar tempos de espera e atendimento. |
-| **`painel.php`** | Painel da TV de Chamadas. Fica na recepção chamando senhas com alertas sonoros e vídeo do YouTube em segundo plano. |
-| **`api_senhas.php`** | Endpoint consumido via AJAX pelo painel de chamadas para verificar senhas ativas chamadas na TV em tempo real. |
-| **`api_senhas_recentes.php`**| Endpoint para recuperar o histórico recente de senhas chamadas para a TV. |
-| **`tema.js`** | Script de injeção e persistência do tema (Light Mode da Justiça Federal vs. Tema Original Escuro). |
-| **`gerenciar_pauta.php`**| Módulo de Gerenciamento de Pauta (Exclusivo Admin). Centraliza a importação da pauta (Excel), o remanejamento/transferência de datas e peritos em lote, e a conferência/confirmação rápida de presenças individuais ou em massa. |
+`agendado → presente → chamada → atendimento → concluido`
 
----
+- `chamada → presente`: ausência antes do início, mantendo eventos e retornando ao fim da fila.
+- `presente → agendado`: desfazer check-in administrativo somente se não houve chamada.
+- `agendado → cancelado`: cancelamento administrativo, preservando registro e histórico.
+- Check-in repetido não altera senha/horários.
+- Atendimentos iniciados/concluídos são preservados por remanejamentos e cancelamentos comuns.
+- Sala e profissional só podem ter um ativo por vez.
 
-## 3. Arquitetura de Dados (Banco de Dados)
+## Dados
 
-O sistema opera com 5 tabelas no banco de dados MySQL (`justica_senhas`):
+Tabelas operacionais: `atendimentos`, `usuarios`, `salas`, `salas_peritos`, `pautas_liberadas`, `sequencia_diaria_senhas`, `configuracoes`. Apoio e controles: `eventos_chamada`, `logs_auditoria`, `locks_peritos`, `login_tentativas`, `schema_migrations`, `nomes_validados` (legado, sem correção automática de identidades).
 
-### Diagrama de Relacionamento de Tabelas
-* **`atendimentos`**: Tabela principal.
-  * Armazena os agendamentos e o status de cada atendimento (`agendado`, `fila`, `chamado`, `atendimento`, `finalizado`, `cancelado`).
-  * `senha`: Senha sequencial de chamada gerada automaticamente no dia (ex: `A001`).
-  * `data_pauta`: Permite isolar os agendamentos de cada dia, protegendo a integridade histórica.
-  * Colunas: `id`, `processo`, `chegada_em`, `perito`, `data_pauta`, `cpf`, `nome`, `chamado_em`, `sala`, `status`, etc.
-* **`usuarios`**: Contas de acesso do sistema.
-  * `password`: Criptografada via `password_hash()` no padrão nativo do PHP.
-  * `role`: Cargo do usuário (`admin` = Administrador / Validador, `recepcao` = Operador da Recepção, `perito` = Perito Médico).
-  * `cpf`: CPF do usuário cadastrado, utilizado para login único e auto-cadastro.
-  * **Auto-cadastro de Peritos**: Durante a importação de planilhas Excel na recepção, o sistema extrai a coluna `CPF Perito` e pré-cadastra automaticamente os médicos peritos inéditos na base com o cargo `perito`. O CPF (apenas dígitos) é definido como username e os 6 primeiros dígitos como senha padrão inicial.
-* **`salas`**: Lista de salas físicas (ex: "Sala 1", "Sala de Perícia A").
-* **`salas_peritos`**: Armazena em cache a última sala vinculada a um perito, evitando que ele precise selecionar a sala toda vez que logar.
-* **`nomes_validados`**: Tabela de cache de palavras e nomes checados na API do IBGE, acelerando a importação do Excel.
+`atendimentos.perito_id` vincula a pauta ao profissional. `primeira_chamada_em` preserva o marco para cálculo de espera; `chamado_em` mantém a última chamada. `chegada_em` preserva a chegada original; `fila_em` organiza a posição atual, inclusive depois de retorno por ausência. Eventos possuem ID monotônico independente do timestamp e do estado posterior do atendimento.
 
----
+A TV consome eventos após seu cursor, anuncia um por vez e persiste o cursor ao terminar a exibição. Consulta a cada dois segundos após processar o lote. Conexão interrompida é sinalizada na tela. A atualização não depende de comparar timestamps.
 
-## 4. Matriz de Permissões e Segurança de Níveis de Acesso
+## Importação
 
-O sistema possui duas camadas de validação (Restrita na interface e Bloqueada no backend) para separar os perfis de **Administrador / Validador** e **Operador da Recepção (Restrito)**:
+Usa apenas `.xlsx`, até 5 MB, 10.000 linhas, 100 colunas e 50 MB descompactados. Exige cabeçalhos identificáveis de processo, documento da parte, nome do perito e data da perícia. Nome da parte e CPF do perito são opcionais. Fórmulas, datas impossíveis e CPFs inválidos são rejeitados com indicação da linha. CPF numérico que perdeu zero à esquerda precisa ser corrigido na origem.
 
-### 1. Perfil Validador (`admin`):
-* Acesso completo à visualização de pautas futuras e passadas.
-* Permissão total de importação de arquivos Excel (.xlsx) e cadastros manuais.
-* Edição e remoção de registros e limpeza geral da pauta.
+Agrupamento considera processo, data e profissional, permitindo juntar linhas complementares da mesma perícia. Dados conflitantes interrompem a importação. A prévia expira em 30 minutos; confirmação é necessária antes de gravar. Registros em andamento/concluídos são preservados. A importação não transforma nomes por aproximação nem envia nomes a serviços externos.
 
-### 2. Perfil Recepção (`recepcao`):
-* **Filtro de Data**: Consegue consultar agendamentos futuros/passados, porém **só pode realizar ações (Confirmar Chegada) na pauta do dia corrente**.
-* **Travas de UI (Frontend)**:
-  * Painel de upload do Excel, formulário de cadastro manual e controle do vídeo do YouTube são ocultados e a tabela de pauta se expande a 100% da tela.
-  * Botões de Exclusão individual, exclusão em lote e limpeza de pauta são removidos da interface.
-* **Travas de Segurança (Backend em `recepcao.php`)**:
-  * Qualquer requisição direta (POST) tentando cadastrar periciados, importar pautas, apagar ou alterar registros por um usuário com a role `recepcao` é abortada imediatamente no PHP com resposta de status `Acesso Negado (403)`.
-  * A confirmação de presença (em lote ou única) valida se a data do agendamento é idêntica à data de hoje no servidor.
+## Auditoria e interface
 
----
+Mutação crítica e log são gravados na mesma transação. Logs incluem ator, ação, referência de requisição, IP e dados de contexto; senhas e CSRF não devem ser registrados. Relatórios têm paginação de 100 registros e exportam o filtro inteiro em streaming com proteção contra fórmulas CSV. Indicadores consideram o filtro completo, usando primeira chamada para espera.
 
-## 5. Corretor Ortográfico Inteligente de Nomes (IBGE + Heurística)
+Tema claro/escuro muda sem recarregar ou repetir POST. CSS é local; YouTube depende de rede externa. Há melhorias de labels, foco, teclado e modais, que ainda precisam de homologação visual e assistiva no ambiente real.
 
-Devido às quebras de linha encontradas nas pautas oficiais de perícia, os nomes de periciados e peritos frequentemente sofrem quebras de sílabas e inserção de espaços indevidos (ex: `EDUARD O` em vez de `EDUARDO` ou `SEVERI NA` em vez de `SEVERINA`). 
+## Desenvolvimento e testes
 
-O SGA implementa um algoritmo automático de tratamento contido em `banco.php` (`smartCorrectName` e `checkNomeIBGE`):
+`npm ci && npm run build:css` compila os estilos. `node --test tests/tv.test.cjs` valida a fila de anúncios. Os testes Python estão em `tests/`. Integração PHP e concorrência exigem exclusivamente `DB_NAME=sga_test` e `SGA_TEST=1`, pois limpam a base descartável.
 
-1. **API do IBGE**: O sistema consulta a API de Nomes do Censo do IBGE (`https://servicodados.ibge.gov.br`) para verificar a probabilidade de uma palavra unificada ser um nome próprio de fato.
-2. **Banco de Cache Local (`nomes_validados`)**: Para evitar latência de rede no upload de planilhas com centenas de linhas, as consultas do IBGE são gravadas em cache local. O sistema só consulta a API externa se a palavra for inédita.
-3. **Algoritmo Heurístico de Apoio**: Caso a API esteja fora do ar ou o resultado seja inconclusivo, o sistema mescla as palavras com base em heurísticas de comprimento (ex: mescla fragmentos de 1 ou 2 letras nas pontas das palavras caso não pertençam a preposições consagradas como "DE", "DOS", etc.).
+O workflow em `.github/workflows/validate.yml` constrói a imagem e valida MySQL, Apache, migrações, controles HTTP e os testes. O código legado `import_pdf.py` e `test_layout.py` não faz parte do fluxo suportado de importação nem da imagem de produção.
 
----
+## Usabilidade e navegador
 
-## 6. Sistema de Temas Alternáveis (Original vs. Justiça Federal)
-
-O tema do sistema é mutável em tempo real sem qualquer delay de carregamento através do arquivo [C:\\sga\\tema.js](file:///C:/sga/tema.js):
-
-### Temas Disponíveis:
-* **Tema Original (Moderno Escuro)**: Interface com tons escuros (cinza profundo `#090f1d`), azul vibrante e verde esmeralda.
-* **Tema Justiça Federal (Light Mode)**: 
-  * Fundo claro institucional (`#f3f4f6`), cards e cabeçalhos em branco puro (`#ffffff`), com textos e dados em cinza escuro/preto de alto contraste.
-  * Sobrescrita total das cores padrão do Tailwind para o **Azul Oficial da Justiça Federal** (`#002F6C`) em botões e bordas de preenchimento, e **Verde Oficial da JF** (`#007A33`) em botões de sucesso e confirmação.
-  * Remoção completa de cores amarelas ou laranjas por tons sóbrios corporativos (Cinza e Azul JF Suave).
-
-### Mecanismo Técnico:
-1. O JS síncrono injeta uma tag `<style>` no `<head>` com os overrides de classes de layout (`body.theme-jf .bg-gray-900 { background-color: #ffffff !important; }`, etc.) quando a classe `theme-jf` é ativada no `<body>`.
-2. A preferência do tema é salva localmente e enviada ao servidor através do cookie `tema_sga`, persistindo mesmo quando a página é atualizada ou recarregada.
-3. Um botão reativo (**🎨 Cores JF** ou **🎨 Tema Original**) é injetado dinamicamente no canto superior direito de todas as telas contendo a classe `.flex.items-center.space-x-4`.
-
----
-
-## 7. Instruções de Instalação e Execução
-
-1. **Requisitos**:
-   * Servidor PHP 8.x + MySQL (recomenda-se XAMPP no Windows).
-   * Banco de dados MySQL criado com o nome `justica_senhas`.
-2. **Instalação**:
-   * Copie a pasta do projeto para a raiz do servidor web (`C:\\xampp\\htdocs\\sga`).
-   * Configure os dados de acesso ao banco de dados no arquivo `config.php`.
-   * Acesse `http://localhost/sga/` no navegador.
-   * O arquivo `banco.php` rodará as migrações automáticas de tabelas na primeira execução de qualquer página.
+Consulte [NAVEGADOR.md](NAVEGADOR.md). A revisão de 23/10 foi executada pelo MCP Playwright: login, busca, teclado/modais, navegação, telas móveis, fluxo recepção/perito e preparação da TV. A equipe usa somente Chrome/Edge atualizado, sem instalar Playwright. A interface fornece ajuda, mostrar senha, confirmação com senha gerada, saída em um clique e teste de áudio/tela cheia.

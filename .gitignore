@@ -9,3 +9,10 @@ __pycache__/
 *.xlsx
 *.pdf
 *.log
+
+.env
+.env.*
+!.env.example
+node_modules/
+.playwright-mcp/
+backups/

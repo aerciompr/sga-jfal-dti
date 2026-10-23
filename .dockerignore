@@ -8,3 +8,11 @@ __pycache__
 scratch
 *.tmp
 *.log
+node_modules
+.playwright-mcp
+.env
+.env.*
+backups
+tests
+.github
+ANALISE_*.md

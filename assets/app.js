@@ -27,13 +27,23 @@ window.onYouTubeIframeAPIReady = function() {
             'iv_load_policy': 3
         },
         events: {
-            'onReady': onPlayerReady
+            'onReady': onPlayerReady,
+            'onError': videoIndisponivel
         }
     });
 };
 
+function videoIndisponivel() {
+    const player = document.getElementById('player');
+    if (player) player.hidden = true;
+    const info = document.getElementById('video-info');
+    if (info) info.textContent = 'Vídeo indisponível. As chamadas continuam normalmente.';
+}
+
 // Evento disparado quando o player de vídeo do YouTube está pronto
 function onPlayerReady(event) {
+    const player = document.getElementById('player');
+    if (player) player.hidden = false;
     event.target.playVideo();
     if (audioAtivado) {
         event.target.unMute();
@@ -43,6 +53,11 @@ function onPlayerReady(event) {
 
 // Ativa o áudio do painel (acionado no botão de consentimento do usuário na interface)
 function ativarAudio() {
+    if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+        const aviso = document.getElementById('audio-status');
+        if (aviso) aviso.textContent = 'Voz indisponível neste navegador. Use Chrome ou Edge atualizado. As chamadas continuam na tela.';
+        return;
+    }
     audioAtivado = true;
     const btn = document.getElementById('btn-audio');
     if (btn) {
@@ -66,13 +81,45 @@ function ativarAudio() {
     
     // Toca o gongo de chamada
     playChime();
+    const aviso = document.getElementById('audio-status');
+    if (aviso) aviso.textContent = 'Voz ativada. Clique em “Testar som” para conferir os alto-falantes.';
 }
+
+async function testarSom() {
+    ativarAudio();
+    if (!audioAtivado) return;
+    const falou = await falarSenha('Teste de som do SGA', 'recepção');
+    const aviso = document.getElementById('audio-status');
+    if (aviso) aviso.textContent = falou ? 'Teste concluído. Se ouviu a frase, conclua a preparação.' : 'Não foi possível reproduzir a voz. Confira o volume, a voz em português e as permissões do site.';
+    const concluir = document.getElementById('fechar-preparo-tv');
+    if (concluir) concluir.hidden = !falou;
+}
+
+async function alternarTelaCheia() {
+    try {
+        if (document.fullscreenElement) await document.exitFullscreen();
+        else await document.documentElement.requestFullscreen();
+    } catch (_) {
+        const aviso = document.getElementById('audio-status');
+        if (aviso) aviso.textContent = 'Use F11 no teclado para ativar a tela cheia.';
+    }
+}
+document.addEventListener('fullscreenchange', () => {
+    const botao = document.getElementById('btn-tela-cheia');
+    if (botao) botao.textContent = document.fullscreenElement ? 'Sair da tela cheia' : 'Tela cheia';
+});
 
 // Sintetiza um som de gongo (chime) profissional usando a Web Audio API nativa
 function playChime() {
     try {
+        const toques=window.sgaToques;
+        const volumeToque=toques?.volume() ?? 1;
+        if (volumeToque===0) return false;
+        if (toques && toques.selecionado()!=='original') { return toques.tocar(); }
         const AudioContext = window.AudioContext || window.webkitAudioContext;
-        const ctx = new AudioContext();
+        audioContext ??= new AudioContext();
+        const ctx = audioContext;
+        if (ctx.state === 'suspended') ctx.resume();
         const osc1 = ctx.createOscillator();
         const osc2 = ctx.createOscillator();
         const gainNode = ctx.createGain();
@@ -86,8 +133,8 @@ function playChime() {
         osc2.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.15); // C6
         
         gainNode.gain.setValueAtTime(0, ctx.currentTime);
-        gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+        gainNode.gain.linearRampToValueAtTime(0.3 * volumeToque, ctx.currentTime + 0.05);
+        gainNode.gain.exponentialRampToValueAtTime(0.001 * volumeToque, ctx.currentTime + 0.8);
         
         osc1.connect(gainNode);
         osc2.connect(gainNode);
@@ -97,175 +144,92 @@ function playChime() {
         osc2.start(ctx.currentTime);
         osc1.stop(ctx.currentTime + 0.8);
         osc2.stop(ctx.currentTime + 0.8);
+        return true;
     } catch (e) {
         console.error("Erro chime:", e);
+        return false;
     }
 }
 
-// Realiza a chamada falada do paciente e sala
+// Entrega em ordem por evento persistido, sem comparar relógios ou estados mutáveis.
+let audioContext = null;
+const cursorKey = `sga-tv-cursor-${window.eventDay}`;
+let cursor = Number(window.initialCursor ?? 0);
+try { cursor = Number(sessionStorage.getItem(cursorKey) ?? cursor); } catch (_) { /* Cursor em memória caso o navegador bloqueie armazenamento. */ }
+if (!Number.isSafeInteger(cursor) || cursor < 0) cursor = Number(window.initialCursor ?? 0);
+let processando = false;
+const esperar = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 function falarSenha(nome, sala) {
-    // Reduz o volume do vídeo do YouTube temporariamente para 10%
-    if (ytPlayer && typeof ytPlayer.setVolume === 'function') {
-        ytPlayer.setVolume(10);
-    }
-
-    // Toca sinal sonoro chamando atenção
-    playChime();
-
-    // Inicia a fala em português do Brasil
-    setTimeout(() => {
-        let msg = nome ? `Atenção: ${nome}. Dirija-se à ${sala}` : `Atenção. Dirija-se à ${sala}`;
-        
-        const utterance = new SpeechSynthesisUtterance(msg);
-        utterance.lang = 'pt-BR';
-        utterance.rate = 0.95; // Fala ligeiramente mais pausada
-        
-        // Define voz brasileira se houver no dispositivo
-        const voices = window.speechSynthesis.getVoices();
-        const ptVoice = voices.find(v => v.lang.startsWith('pt-'));
-        if (ptVoice) {
-            utterance.voice = ptVoice;
-        }
-
-        // Restaura volume ao finalizar
-        const originalOnEnd = function() {
-            setTimeout(() => {
-                if (ytPlayer && typeof ytPlayer.setVolume === 'function') {
-                    ytPlayer.setVolume(50);
-                }
-                const overlay = document.getElementById('chamada-overlay');
-                if (overlay) overlay.classList.add('hidden');
-            }, 1000);
-        };
-
-        // Timeout de segurança se a voz falhar ou demorar para responder
-        let safetyTimeout = setTimeout(() => {
-            if (ytPlayer && typeof ytPlayer.setVolume === 'function') {
-                ytPlayer.setVolume(50);
-            }
-            const overlay = document.getElementById('chamada-overlay');
-            if (overlay) overlay.classList.add('hidden');
-        }, 12000);
-
-        utterance.onend = function() {
-            clearTimeout(safetyTimeout);
-            originalOnEnd();
-        };
-        
-        window.speechSynthesis.speak(utterance);
-    }, 400);
+    return new Promise(resolve => {
+        if (!audioAtivado || !window.speechSynthesis) { esperar(6000).then(() => resolve(false)); return; }
+        if (ytPlayer?.setVolume) ytPlayer.setVolume(10);
+        playChime();
+        setTimeout(() => {
+            const fala = new SpeechSynthesisUtterance(`Atenção: ${nome || 'Atendimento'}. Dirija-se à ${sala}`);
+            fala.lang = 'pt-BR'; fala.rate = 0.95;
+            const voz = speechSynthesis.getVoices().find(v => v.lang.startsWith('pt-'));
+            if (voz) fala.voice = voz;
+            let concluido = false;
+            const fim = (sucesso) => {
+                if (concluido) return;
+                concluido = true; clearTimeout(timeout);
+                if (ytPlayer?.setVolume) ytPlayer.setVolume(50);
+                resolve(sucesso);
+            };
+            const timeout = setTimeout(() => { speechSynthesis.cancel(); fim(false); }, 20000);
+            fala.onend = () => fim(true); fala.onerror = () => fim(false);
+            speechSynthesis.speak(fala);
+        }, window.sgaToques?.espera() ?? 400);
+    });
 }
 
-// Faz requisições HTTP em tempo real (Polling) para buscar novas chamadas
-async function verificarNovaSenha() {
-    try {
-        const response = await fetch('api_senhas.php');
-        const data = await response.json();
-        
-        if (data.success) {
-            const novoNome = data.nome;
-            const novaSala = data.sala;
-            const novoVideoId = data.video_id;
-            const novoChamadoEm = data.chamado_em;
-
-            // Recarrega o vídeo se a URL cadastrada na recepção tiver mudado
-            if (novoVideoId !== currentVideoId) {
-                currentVideoId = novoVideoId;
-                if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
-                    ytPlayer.loadVideoById({
-                        videoId: currentVideoId,
-                        playlist: currentVideoId
-                    });
-                }
-            }
-
-            // Identifica se há uma nova chamada real comparando o timestamp
-            let isNewCall = false;
-            if (novoChamadoEm) {
-                if (window.currentChamadoEm !== novoChamadoEm) {
-                    isNewCall = true;
-                }
-            } else {
-                // Caso as pautas tenham sido resetadas ou apagadas do banco
-                if (window.currentChamadoEm) {
-                    window.currentNome = "";
-                    window.currentSala = "";
-                    window.currentChamadoEm = "";
-
-                    const overlay = document.getElementById('chamada-overlay');
-                    if (overlay) overlay.classList.add('hidden');
-
-                    atualizarRodape();
-                }
-            }
-
-            if (isNewCall) {
-                window.currentNome = novoNome;
-                window.currentSala = novaSala;
-                window.currentChamadoEm = novoChamadoEm;
-
-                // Mostra o Modal de Chamada (Overlay) por cima do vídeo
-                const overlay = document.getElementById('chamada-overlay');
-                const overlayNome = document.getElementById('overlay-nome');
-                const overlaySala = document.getElementById('overlay-sala');
-
-                if (overlay && overlayNome && overlaySala) {
-                    overlayNome.textContent = novoNome || "Atendimento";
-                    overlaySala.textContent = novaSala;
-                    
-                    overlay.classList.remove('hidden');
-
-                    if (audioAtivado) {
-                        falarSenha(novoNome, novaSala);
-                    } else {
-                        // Fecha automaticamente depois de 6 segundos caso o som não esteja ativado
-                        setTimeout(() => {
-                            overlay.classList.add('hidden');
-                        }, 6000);
-                    }
-                }
-
-                // Atualiza o histórico de chamadas no rodapé
-                atualizarRodape();
-            }
-        }
-    } catch (e) {
-        console.error("Erro polling:", e);
-    }
-}
-
-// Atualiza o fragmento HTML do histórico do rodapé de forma assíncrona
 async function atualizarRodape() {
+    const resposta = await fetch('api_senhas_recentes.php', { cache: 'no-store' });
+    if (!resposta.ok) throw new Error('Histórico indisponível');
+    document.getElementById('rodape-senhas').innerHTML = await resposta.text();
+}
+
+async function verificarNovaSenha() {
+    if (processando) return;
+    processando = true;
+    const indicador = document.getElementById('conexao-tv');
     try {
-        const response = await fetch('api_senhas_recentes.php');
-        if (response.ok) {
-            const html = await response.text();
-            const el = document.getElementById('rodape-senhas');
-            if (el) el.innerHTML = html;
+        const resposta = await fetch(`api_senhas.php?apos=${cursor}`, { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+        if (!resposta.ok) throw new Error('Painel sem autorização ou conexão');
+        const dados = await resposta.json();
+        if (!dados.success) throw new Error('Resposta inválida');
+        indicador.textContent = `Conectado • ${new Date().toLocaleTimeString('pt-BR')}`;
+        if (dados.video_id !== currentVideoId) {
+            currentVideoId = dados.video_id;
+            const player = document.getElementById('player');
+            if (player) player.hidden = false;
+            if (ytPlayer?.loadVideoById) ytPlayer.loadVideoById(currentVideoId);
         }
-    } catch(e) {
-        console.error("Erro rodape:", e);
+        for (const evento of dados.eventos) {
+            if (Number(evento.id) <= cursor) continue;
+            const overlay = document.getElementById('chamada-overlay');
+            document.getElementById('overlay-nome').textContent = evento.nome || 'Atendimento';
+            document.getElementById('overlay-sala').textContent = evento.sala;
+            overlay.classList.remove('hidden');
+            const falou = await falarSenha(evento.nome, evento.sala);
+            if (!falou && audioAtivado) await esperar(5000);
+            await esperar(1000); overlay.classList.add('hidden');
+            cursor = Number(evento.id);
+            try { sessionStorage.setItem(cursorKey, String(cursor)); } catch (_) { /* Mantém a fila funcionando sem storage. */ }
+        }
+        await atualizarRodape();
+    } catch (erro) {
+        indicador.textContent = 'Sem atualização — verifique conexão/autorização';
+        console.error(erro);
+    } finally {
+        processando = false; setTimeout(verificarNovaSenha, 2000);
     }
 }
-
 window.ativarAudio = ativarAudio;
-// Verifica novas chamadas a cada 3 segundos para otimizar consumo de CPU e conexões de rede
-setInterval(verificarNovaSenha, 3000);
-
-if (typeof speechSynthesis !== 'undefined' && speechSynthesis.onvoiceschanged !== undefined) {
-    speechSynthesis.onvoiceschanged = () => {};
-}
-
-// Carrega a API do IFrame do YouTube dinamicamente de forma segura
+verificarNovaSenha();
 (function() {
     if (!window.YT) {
-        const tag = document.createElement('script');
-        tag.src = "https://www.youtube.com/iframe_api";
-        const firstScriptTag = document.getElementsByTagName('script')[0];
-        if (firstScriptTag) {
-            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-        } else {
-            document.head.appendChild(tag);
-        }
+        const tag = document.createElement('script'); tag.src = 'https://www.youtube.com/iframe_api'; tag.onerror = videoIndisponivel; document.head.appendChild(tag);
     }
 })();

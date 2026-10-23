@@ -284,7 +284,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.classList.remove('theme-jf');
     }
 
-    const headerRight = document.querySelector('.flex.items-center.space-x-4');
+    const headerRight = document.body.classList.contains('sga-tv') ? null : document.querySelector('header > div:last-child');
     if (headerRight) {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -304,9 +304,14 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', () => {
             const nextTheme = currentTheme === 'modern' ? 'jf' : 'modern';
             setCookie('tema_sga', nextTheme);
-            window.location.reload();
+            currentTheme = nextTheme;
+            document.body.classList.toggle('theme-jf', nextTheme === 'jf');
+            btn.textContent = nextTheme === 'jf' ? '🎨 Tema Original' : '🎨 Cores JF';
         });
         
+        if (!headerRight.querySelector('a[href="ajuda.php"]') && location.pathname.split('/').pop() !== 'ajuda.php') {
+            const ajuda = document.createElement('a'); ajuda.href = 'ajuda.php'; ajuda.textContent = 'Ajuda'; ajuda.className = 'sga-neutral'; headerRight.appendChild(ajuda);
+        }
         // Insere o botão de alternar tema como primeiro item do cabeçalho direito
         headerRight.insertBefore(btn, headerRight.firstChild);
     }

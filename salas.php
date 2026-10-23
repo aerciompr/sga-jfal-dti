@@ -9,7 +9,7 @@
  * - Exclusão de salas.
  */
 
-session_start();
+
 require_once __DIR__ . '/banco.php';
 
 // Proteção de Acesso: Apenas administradores e supervisores podem acessar este módulo
@@ -18,79 +18,30 @@ if (!isset($_SESSION['usuario_id']) || !in_array($_SESSION['usuario_role'], ['ad
     exit;
 }
 
-// Forçar troca de senha de primeiro acesso
-if (isset($_SESSION['usuario_id'])) {
-    $checkStmt = $pdo->prepare("SELECT cpf, password, role FROM usuarios WHERE id = ?");
-    $checkStmt->execute([$_SESSION['usuario_id']]);
-    $uData = $checkStmt->fetch();
-    if ($uData) {
-        $pwdPadrao = '';
-        if ($uData['role'] === 'perito' && !empty($uData['cpf'])) {
-            $cpfLimpo = preg_replace('/\D/', '', $uData['cpf']);
-            if (strlen($cpfLimpo) === 11) {
-                $pwdPadrao = substr($cpfLimpo, 0, 6);
-            }
-        }
-        if ($pwdPadrao && password_verify($pwdPadrao, $uData['password'])) {
-            header("Location: alterar_senha_obrigatorio.php");
-            exit;
-        }
-    }
-}
-
 $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
 $message = '';
 $message_type = '';
 
-// Processamento de Ações do Formulário (POST)
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action'])) {
-        $action = $_POST['action'];
-        
-        // Ação 1: Cadastrar Nova Sala
-        if ($action === 'cadastrar') {
-            $nome = trim($_POST['nome'] ?? '');
-            
-            if ($nome) {
-                try {
-                    // Impede duplicar o nome de sala no banco de dados
-                    $stmt = $pdo->prepare("SELECT COUNT(*) FROM salas WHERE nome = ?");
-                    $stmt->execute([$nome]);
-                    if ($stmt->fetchColumn() > 0) {
-                        $message = "A sala '$nome' já está cadastrada.";
-                        $message_type = "error";
-                    } else {
-                        $stmt = $pdo->prepare("INSERT INTO salas (nome) VALUES (?)");
-                        $stmt->execute([$nome]);
-                        $message = "Sala '$nome' cadastrada com sucesso!";
-                        $message_type = "success";
-                    }
-                } catch (Exception $e) {
-                    $message = "Erro ao cadastrar: " . $e->getMessage();
-                    $message_type = "error";
-                }
-            } else {
-                $message = "Preencha o nome da sala.";
-                $message_type = "error";
-            }
-        }
-        
-        // Ação 2: Deletar Sala
-        elseif ($action === 'deletar') {
-            $id = (int)($_POST['id'] ?? 0);
-            if ($id) {
-                try {
-                    $stmt = $pdo->prepare("DELETE FROM salas WHERE id = ?");
-                    $stmt->execute([$id]);
-                    $message = "Sala removida com sucesso.";
-                    $message_type = "info";
-                } catch (Exception $e) {
-                    $message = "Erro ao excluir: " . $e->getMessage();
-                    $message_type = "error";
-                }
-            }
-        }
-    }
+[$message,$message_type]=$_SESSION['flash_salas']??['','']; unset($_SESSION['flash_salas']);
+if ($_SERVER['REQUEST_METHOD']==='POST') {
+    $pdo->beginTransaction();
+    try {
+        if (($_POST['action']??'')==='cadastrar') {
+            $nome=trim((string)($_POST['nome']??''));
+            if ($nome==='' || mb_strlen($nome)>50) throw new DomainException('Informe nome de até 50 caracteres.');
+            $s=$pdo->prepare('INSERT INTO salas (nome) VALUES (?)'); $s->execute([$nome]); registrarLog($pdo,'Cadastrar Sala',"Sala: $nome");
+        } elseif (($_POST['action']??'')==='deletar') {
+            $s=$pdo->prepare('SELECT nome FROM salas WHERE id=? FOR UPDATE'); $s->execute([(int)($_POST['id']??0)]); $nome=$s->fetchColumn();
+            if (!$nome) throw new DomainException('Sala não encontrada.');
+            $s=$pdo->prepare("SELECT id FROM atendimentos WHERE sala=? AND data_pauta=CURRENT_DATE() AND status IN ('chamada','atendimento') LIMIT 1 FOR UPDATE");$s->execute([$nome]);
+            if ($s->fetchColumn()) throw new DomainException('Não é possível excluir uma sala em uso.');
+            $s=$pdo->prepare('DELETE FROM salas_peritos WHERE sala=?');$s->execute([$nome]);
+            $s=$pdo->prepare('DELETE FROM salas WHERE nome=?');$s->execute([$nome]); registrarLog($pdo,'Excluir Sala',"Sala: $nome; histórico preservado.");
+        } else throw new DomainException('Ação inválida.');
+        $pdo->commit(); $message='Salas atualizadas.'; $message_type='success';
+    } catch (DomainException $e) { $pdo->rollBack(); $message=$e->getMessage(); $message_type='error'; }
+    catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); $message=erroPublico($e); $message_type='error'; }
+    $_SESSION['flash_salas']=[$message,$message_type]; header('Location: salas.php',true,303);exit;
 }
 
 // Busca todas as salas ordenadas por nome para a listagem
@@ -102,9 +53,10 @@ $salas = $stmt->fetchAll();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gerenciamento de Salas - <?= htmlspecialchars($sys_name) ?></title>
+    <title>Gerenciamento de Salas - <?= escapar($sys_name) ?></title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="assets/tailwind.css">
+    <link rel="stylesheet" href="assets/usabilidade.css">
     <script src="tema.js"></script>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
@@ -119,7 +71,7 @@ $salas = $stmt->fetchAll();
                 </div>
             </a>
             <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
-                <?= htmlspecialchars(ucfirst($_SESSION['usuario_role'])) ?>
+                <?= escapar(ucfirst($_SESSION['usuario_role'])) ?>
             </span>
         </div>
         <div class="flex items-center space-x-3">
@@ -143,8 +95,8 @@ $salas = $stmt->fetchAll();
                 <a href="usuarios.php" class="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-900/60 bg-indigo-950/30 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
             <?php endif; ?>
 
-            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= htmlspecialchars($_SESSION['usuario_name']) ?></strong></span>
-            <a href="logout.php" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</a>
+            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
+            <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
 
@@ -152,8 +104,8 @@ $salas = $stmt->fetchAll();
         <!-- Formulário Lateral para Cadastro -->
         <div class="md:col-span-1 space-y-6">
             <?php if ($message): ?>
-                <div class="p-3 rounded-lg border text-xs text-center font-medium <?= $message_type === 'success' ? 'bg-green-950/40 border-green-900/80 text-green-300' : ($message_type === 'info' ? 'bg-blue-950/40 border-blue-900/80 text-blue-300' : 'bg-red-950/40 border-red-900/80 text-red-300') ?>">
-                    <?= htmlspecialchars($message) ?>
+                <div role="status" aria-live="polite" class="sga-feedback p-3 rounded-lg border text-xs text-center font-medium <?= $message_type === 'success' ? 'bg-green-950/40 border-green-900/80 text-green-300' : ($message_type === 'info' ? 'bg-blue-950/40 border-blue-900/80 text-blue-300' : 'bg-red-950/40 border-red-900/80 text-red-300') ?>">
+                    <?= escapar($message) ?>
                 </div>
             <?php endif; ?>
 
@@ -163,7 +115,7 @@ $salas = $stmt->fetchAll();
                     🆕 Cadastrar Nova Sala
                 </h2>
                 
-                <form method="POST" class="space-y-4">
+                <form method="POST" class="space-y-4"><?= csrfCampo() ?>
                     <input type="hidden" name="action" value="cadastrar">
                     
                     <div>
@@ -204,9 +156,9 @@ $salas = $stmt->fetchAll();
                                 <?php foreach ($salas as $s): ?>
                                     <tr>
                                         <td class="py-3 font-mono text-xs text-gray-500"><?= $s['id'] ?></td>
-                                        <td class="py-3 font-bold text-white"><?= htmlspecialchars($s['nome']) ?></td>
+                                        <td class="py-3 font-bold text-white"><?= escapar($s['nome']) ?></td>
                                         <td class="py-3 text-right">
-                                            <form method="POST" class="inline" onsubmit="return confirm('Deseja excluir esta sala?');">
+                                            <form method="POST" class="inline" onsubmit="return confirm('Deseja excluir esta sala?');"><?= csrfCampo() ?>
                                                 <input type="hidden" name="action" value="deletar">
                                                 <input type="hidden" name="id" value="<?= $s['id'] ?>">
                                                 <button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-2.5 py-1 rounded transition">
@@ -228,5 +180,7 @@ $salas = $stmt->fetchAll();
     <footer class="bg-gray-900 border-t border-gray-800 py-4 text-center text-[10px] text-gray-500 font-medium tracking-wide">
         <span>&copy; <?= date('Y') ?> - Desenvolvido pela DTI - Justiça Federal em Alagoas</span>
     </footer>
+<script src="assets/acessibilidade.js" defer></script>
+<script src="assets/usabilidade.js" defer></script>
 </body>
 </html>

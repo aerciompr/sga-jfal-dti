@@ -1,30 +1,10 @@
 <?php
-session_start();
+
 require_once __DIR__ . '/banco.php';
 
 if (!isset($_SESSION['usuario_id'])) {
     header("Location: index.php");
     exit;
-}
-
-// Forçar troca de senha de primeiro acesso
-if (isset($_SESSION['usuario_id'])) {
-    $checkStmt = $pdo->prepare("SELECT cpf, password, role FROM usuarios WHERE id = ?");
-    $checkStmt->execute([$_SESSION['usuario_id']]);
-    $uData = $checkStmt->fetch();
-    if ($uData) {
-        $pwdPadrao = '';
-        if ($uData['role'] === 'perito' && !empty($uData['cpf'])) {
-            $cpfLimpo = preg_replace('/\D/', '', $uData['cpf']);
-            if (strlen($cpfLimpo) === 11) {
-                $pwdPadrao = substr($cpfLimpo, 0, 6);
-            }
-        }
-        if ($pwdPadrao && password_verify($pwdPadrao, $uData['password'])) {
-            header("Location: alterar_senha_obrigatorio.php");
-            exit;
-        }
-    }
 }
 
 if ($_SESSION['usuario_role'] === 'perito') {
@@ -39,9 +19,10 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=device-width, initial-scale=1.0">
-    <title>Painel do Administrador - <?= htmlspecialchars($sys_name) ?></title>
+    <title>Painel do Administrador - <?= escapar($sys_name) ?></title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="assets/tailwind.css">
+    <link rel="stylesheet" href="assets/usabilidade.css">
     <script src="tema.js"></script>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
@@ -57,8 +38,9 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
             </a>
         </div>
         <div class="flex items-center space-x-4">
-            <span class="text-sm text-gray-300">Olá, <strong class="text-white"><?= htmlspecialchars($_SESSION['usuario_name']) ?></strong></span>
-            <a href="logout.php" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</a>
+            <span class="text-sm text-gray-300">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
+            <a href="alterar_senha_obrigatorio.php" class="text-sm underline">Minha senha</a>
+            <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
 
@@ -175,5 +157,7 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
     <footer class="bg-gray-900 border-t border-gray-800 py-4 text-center text-[10px] text-gray-500 font-medium tracking-wide">
         <span>&copy; <?= date('Y') ?> - Desenvolvido pela DTI - Justiça Federal em Alagoas</span>
     </footer>
+<script src="assets/acessibilidade.js" defer></script>
+<script src="assets/usabilidade.js" defer></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 <?php
 require_once 'banco.php';
-session_start();
+
 
 // Proteção da página: apenas administradores e supervisores
 if (!isset($_SESSION['usuario_id']) || !in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])) {
@@ -8,544 +8,41 @@ if (!isset($_SESSION['usuario_id']) || !in_array($_SESSION['usuario_role'], ['ad
     exit;
 }
 
-// Forçar troca de senha de primeiro acesso
-if (isset($_SESSION['usuario_id'])) {
-    $checkStmt = $pdo->prepare("SELECT cpf, password, role FROM usuarios WHERE id = ?");
-    $checkStmt->execute([$_SESSION['usuario_id']]);
-    $uData = $checkStmt->fetch();
-    if ($uData) {
-        $pwdPadrao = '';
-        if ($uData['role'] === 'perito' && !empty($uData['cpf'])) {
-            $cpfLimpo = preg_replace('/\D/', '', $uData['cpf']);
-            if (strlen($cpfLimpo) === 11) {
-                $pwdPadrao = substr($cpfLimpo, 0, 6);
-            }
-        }
-        if ($pwdPadrao && password_verify($pwdPadrao, $uData['password'])) {
-            header("Location: alterar_senha_obrigatorio.php");
-            exit;
-        }
-    }
-}
-
 $sys_name = SYS_NAME;
 
 // Função auxiliar de senha PE-xxx
-function getNextSenha($pdo) {
-    $today = date('Y-m-d');
-    $hasActiveTransaction = $pdo->inTransaction();
-    if (!$hasActiveTransaction) {
-        $pdo->beginTransaction();
-    }
-    try {
-        $stmt = $pdo->prepare("INSERT IGNORE INTO sequencia_diaria_senhas (data_pauta, ultimo_numero) VALUES (?, 0)");
-        $stmt->execute([$today]);
-        
-        $stmt = $pdo->prepare("UPDATE sequencia_diaria_senhas SET ultimo_numero = LAST_INSERT_ID(ultimo_numero + 1) WHERE data_pauta = ?");
-        $stmt->execute([$today]);
-        
-        $num = (int)$pdo->lastInsertId();
-        
-        if (!$hasActiveTransaction) {
-            $pdo->commit();
-        }
-    } catch (Exception $e) {
-        if (!$hasActiveTransaction) {
-            $pdo->rollBack();
-        }
-        $stmt = $pdo->prepare("SELECT senha FROM atendimentos WHERE senha LIKE 'PE-%' AND (DATE(chegada_em) = ? OR DATE(chamado_em) = ?) ORDER BY id DESC LIMIT 1");
-        $stmt->execute([$today, $today]);
-        $last = $stmt->fetch();
-        $num = $last ? ((int)substr($last['senha'], 3) + 1) : 1;
-    }
-    return 'PE-' . sprintf('%03d', $num);
-}
 
 // Lógica de Processamento de Ações POST
 $message = '';
 $message_type = '';
 
+require_once __DIR__ . '/pauta_service.php';
+[$message, $message_type] = $_SESSION['flash_pauta'] ?? ['', ''];
+unset($_SESSION['flash_pauta']);
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    $action = $_POST['action'];
-    
-    // 1. Excluir Selecionados
-    if ($action === 'excluir_selecionados') {
-        $ids = [];
-        if (isset($_POST['selecionados']) && is_array($_POST['selecionados'])) {
-            $ids = array_map('intval', $_POST['selecionados']);
-        }
-        
-        if (!empty($ids)) {
-            $in_query = implode(',', $ids);
-            try {
-                $pst = $pdo->query("SELECT id, nome FROM atendimentos WHERE id IN ($in_query)");
-                while ($row = $pst->fetch()) {
-                    registrarLog($pdo, 'Excluir Agendamento', "Paciente: {$row['nome']} (Em Lote)", $row['id']);
-                }
-                $pdo->exec("DELETE FROM atendimentos WHERE id IN ($in_query)");
-                $message = "Sucesso! " . count($ids) . " registros foram excluídos permanentemente.";
-                $message_type = 'success';
-            } catch (PDOException $e) {
-                $message = "Erro ao excluir registros: " . $e->getMessage();
-                $message_type = 'error';
-            }
+    $action = (string)$_POST['action'];
+    try {
+        if ($action === 'importar_pdf' || $action === 'importar_excel') {
+            if (!in_array($_SESSION['usuario_role'], ['admin','supervisor'], true)) throw new DomainException('Acesso negado.');
+            require_once __DIR__ . '/importacao_service.php';
+            $file = $_FILES['arquivo_excel'] ?? $_FILES['arquivo_pdf'] ?? [];
+            $_SESSION['importacao_previa'] = ['criada'=>time(), 'registros'=>prepararImportacao($file)];
+            header('Location: preview_importacao.php', true, 303); exit;
+        } elseif (in_array($action, ['confirmar_chegada','confirmar_multiplos','confirmar_chegada_lote'], true)) {
+            $ids = isset($_POST['id']) ? [(int)$_POST['id']] : (array)($_POST['selecionados'] ?? []);
+            $count = confirmarPresencas($pdo,$ids,$_SESSION['usuario_role']);
+            $message = "Presença confirmada para $count novos registros.";
         } else {
-            $message = "Erro: Nenhum atendimento foi selecionado para exclusão.";
-            $message_type = 'error';
+            $message = operarPauta($pdo,$action,$_POST,date('Y-m-d'));
         }
-    }
-    
-    // 2. Excluir por Período (Dia ou Mês)
-    elseif ($action === 'excluir_periodo') {
-        $tipo = $_POST['periodo_tipo'] ?? ''; // 'dia' ou 'mes'
-        $data_alvo = $_POST['data_alvo'] ?? '';
-        $mes_alvo = $_POST['mes_alvo'] ?? ''; // YYYY-MM
-        
-        if ($tipo === 'dia' && !empty($data_alvo)) {
-            try {
-                $stmt = $pdo->prepare("DELETE FROM atendimentos WHERE data_pauta = ?");
-                $stmt->execute([$data_alvo]);
-                $count = $stmt->rowCount();
-                registrarLog($pdo, 'Excluir Pauta Dia', "Data: $data_alvo, Registros apagados: $count");
-                $message = "Sucesso! " . $count . " perícias do dia " . date('d/m/Y', strtotime($data_alvo)) . " foram excluídas.";
-                $message_type = 'success';
-            } catch (PDOException $e) {
-                $message = "Erro ao excluir pauta do dia: " . $e->getMessage();
-                $message_type = 'error';
-            }
-        } elseif ($tipo === 'mes' && !empty($mes_alvo)) {
-            try {
-                $stmt = $pdo->prepare("DELETE FROM atendimentos WHERE DATE_FORMAT(data_pauta, '%Y-%m') = ?");
-                $stmt->execute([$mes_alvo]);
-                $count = $stmt->rowCount();
-                registrarLog($pdo, 'Excluir Pauta Mes', "Mês: $mes_alvo, Registros apagados: $count");
-                $message = "Sucesso! " . $count . " perícias do mês " . date('m/Y', strtotime($mes_alvo . "-01")) . " foram excluídas.";
-                $message_type = 'success';
-            } catch (PDOException $e) {
-                $message = "Erro ao excluir pauta do mês: " . $e->getMessage();
-                $message_type = 'error';
-            }
-        } else {
-            $message = "Erro: Especifique a data ou o mês alvo para exclusão.";
-            $message_type = 'error';
-        }
-    }
-    
-    // 3. Mover Data em Lote
-    elseif ($action === 'mover_pauta') {
-        $tipo = $_POST['mover_tipo'] ?? ''; // 'dia', 'mes' ou 'selecionados'
-        $nova_data = $_POST['nova_data'] ?? '';
-        
-        if (!empty($nova_data)) {
-            if ($tipo === 'selecionados' && isset($_POST['selecionados']) && is_array($_POST['selecionados'])) {
-                $ids = array_map('intval', $_POST['selecionados']);
-                if (!empty($ids)) {
-                    $in_query = implode(',', $ids);
-                    try {
-                        $pst = $pdo->query("SELECT id, nome FROM atendimentos WHERE id IN ($in_query)");
-                        while ($row = $pst->fetch()) {
-                            registrarLog($pdo, 'Mover Pauta', "Mover pauta do paciente: {$row['nome']} para $nova_data", $row['id']);
-                        }
-                        $pdo->exec("UPDATE atendimentos SET data_pauta = '$nova_data' WHERE id IN ($in_query)");
-                        $message = "Sucesso! " . count($ids) . " atendimentos foram movidos para " . date('d/m/Y', strtotime($nova_data)) . ".";
-                        $message_type = 'success';
-                    } catch (PDOException $e) {
-                        $message = "Erro ao mover atendimentos: " . $e->getMessage();
-                        $message_type = 'error';
-                    }
-                } else {
-                    $message = "Erro: Selecione ao menos um atendimento para mover.";
-                    $message_type = 'error';
-                }
-            } elseif ($tipo === 'dia') {
-                $data_origem = $_POST['mover_data_origem'] ?? '';
-                if (!empty($data_origem)) {
-                    try {
-                        $stmt = $pdo->prepare("UPDATE atendimentos SET data_pauta = ? WHERE data_pauta = ?");
-                        $stmt->execute([$nova_data, $data_origem]);
-                        $count = $stmt->rowCount();
-                        registrarLog($pdo, 'Mover Pauta Dia', "Data de origem $data_origem movida para $nova_data. Registros afetados: $count");
-                        $message = "Sucesso! $count atendimentos foram transferidos do dia " . date('d/m/Y', strtotime($data_origem)) . " para " . date('d/m/Y', strtotime($nova_data)) . ".";
-                        $message_type = 'success';
-                    } catch (PDOException $e) {
-                        $message = "Erro ao transferir pauta do dia: " . $e->getMessage();
-                        $message_type = 'error';
-                    }
-                } else {
-                    $message = "Erro: Especifique a data de origem.";
-                    $message_type = 'error';
-                }
-            } elseif ($tipo === 'mes') {
-                $mes_origem = $_POST['mover_mes_origem'] ?? '';
-                if (!empty($mes_origem)) {
-                    try {
-                        $stmt = $pdo->prepare("UPDATE atendimentos SET data_pauta = CONCAT(?, '-', DATE_FORMAT(data_pauta, '%d')) WHERE DATE_FORMAT(data_pauta, '%Y-%m') = ?");
-                        $novo_ano_mes = date('Y-m', strtotime($nova_data));
-                        $stmt->execute([$novo_ano_mes, $mes_origem]);
-                        $count = $stmt->rowCount();
-                        registrarLog($pdo, 'Mover Pauta Mes', "Mês de origem $mes_origem movido para $nova_data. Registros afetados: $count");
-                        $message = "Sucesso! $count atendimentos foram transferidos do mês " . date('m/Y', strtotime($mes_origem . "-01")) . " para " . date('m/Y', strtotime($nova_data)) . ".";
-                        $message_type = 'success';
-                    } catch (PDOException $e) {
-                        $message = "Erro ao transferir pauta do mês: " . $e->getMessage();
-                        $message_type = 'error';
-                    }
-                } else {
-                    $message = "Erro: Especifique o mês de origem.";
-                    $message_type = 'error';
-                }
-            }
-        } else {
-            $message = "Erro: Especifique a nova data de destino.";
-            $message_type = 'error';
-        }
-    }
-    
-    // 4. Alterar Perito em Lote
-    elseif ($action === 'alterar_perito_lote') {
-        $novo_perito = trim($_POST['novo_perito'] ?? '');
-        $tipo = $_POST['perito_tipo'] ?? ''; // 'selecionados' ou 'dia'
-        
-        if (!empty($novo_perito)) {
-            if ($tipo === 'selecionados' && isset($_POST['selecionados']) && is_array($_POST['selecionados'])) {
-                $ids = array_map('intval', $_POST['selecionados']);
-                if (!empty($ids)) {
-                    $in_query = implode(',', $ids);
-                    try {
-                        $pst = $pdo->query("SELECT id, nome FROM atendimentos WHERE id IN ($in_query)");
-                        while ($row = $pst->fetch()) {
-                            registrarLog($pdo, 'Alterar Perito Lote', "Perito alterado para '$novo_perito' no paciente: {$row['nome']}", $row['id']);
-                        }
-                        $stmt = $pdo->prepare("UPDATE atendimentos SET perito = ? WHERE id IN ($in_query)");
-                        $stmt->execute([$novo_perito]);
-                        $message = "Sucesso! O perito de " . count($ids) . " atendimentos foi alterado para '$novo_perito'.";
-                        $message_type = 'success';
-                    } catch (PDOException $e) {
-                        $message = "Erro ao alterar perito: " . $e->getMessage();
-                        $message_type = 'error';
-                    }
-                } else {
-                    $message = "Erro: Selecione ao menos um atendimento para alterar o perito.";
-                    $message_type = 'error';
-                }
-            } elseif ($tipo === 'dia') {
-                $data_origem = $_POST['perito_data_origem'] ?? '';
-                if (!empty($data_origem)) {
-                    try {
-                        $stmt = $pdo->prepare("UPDATE atendimentos SET perito = ? WHERE data_pauta = ?");
-                        $stmt->execute([$novo_perito, $data_origem]);
-                        $count = $stmt->rowCount();
-                        registrarLog($pdo, 'Alterar Perito Lote Dia', "Perito alterado para '$novo_perito' no dia $data_origem. Registros afetados: $count");
-                        $message = "Sucesso! O perito de $count atendimentos do dia " . date('d/m/Y', strtotime($data_origem)) . " foi alterado para '$novo_perito'.";
-                        $message_type = 'success';
-                    } catch (PDOException $e) {
-                        $message = "Erro ao alterar perito da pauta do dia: " . $e->getMessage();
-                        $message_type = 'error';
-                    }
-                } else {
-                    $message = "Erro: Especifique a data alvo.";
-                    $message_type = 'error';
-                }
-            }
-        } else {
-            $message = "Erro: Informe o nome do novo perito.";
-            $message_type = 'error';
-        }
-    }
-
-    // 5. Confirmar Chegada (Individual ou Lote)
-    elseif ($action === 'confirmar_chegada_lote') {
-        $ids = [];
-        if (isset($_POST['id'])) {
-            $ids[] = (int)$_POST['id'];
-        } elseif (isset($_POST['selecionados']) && is_array($_POST['selecionados'])) {
-            $ids = array_map('intval', $_POST['selecionados']);
-        }
-        
-        if (!empty($ids)) {
-            $pdo->beginTransaction();
-            $success_count = 0;
-            try {
-                $stmtCheck = $pdo->prepare("SELECT status, nome FROM atendimentos WHERE id = ?");
-                $stmtUpdate = $pdo->prepare("UPDATE atendimentos SET status = 'presente', senha = ?, chegada_em = CURRENT_TIMESTAMP WHERE id = ?");
-                
-                foreach ($ids as $id) {
-                    $stmtCheck->execute([$id]);
-                    $row = $stmtCheck->fetch();
-                    
-                    if ($row && $row['status'] === 'agendado') {
-                        $senha = getNextSenha($pdo);
-                        $stmtUpdate->execute([$senha, $id]);
-                        registrarLog($pdo, 'Confirmar Presença', "Paciente: {$row['nome']}, Senha: $senha (Lote Admin)", $id);
-                        $success_count++;
-                    }
-                }
-                $pdo->commit();
-                $message = "Sucesso! Presença confirmada para $success_count registros.";
-                $message_type = 'success';
-            } catch (Exception $e) {
-                $pdo->rollBack();
-                $message = "Erro ao confirmar presença: " . $e->getMessage();
-                $message_type = 'error';
-            }
-        } else {
-            $message = "Erro: Nenhum agendamento selecionado.";
-            $message_type = 'error';
-        }
-    }
-
-    // 6. Voltar para Agendado (Individual ou Lote)
-    elseif ($action === 'remover_chegada_lote') {
-        $ids = [];
-        if (isset($_POST['id'])) {
-            $ids[] = (int)$_POST['id'];
-        } elseif (isset($_POST['selecionados']) && is_array($_POST['selecionados'])) {
-            $ids = array_map('intval', $_POST['selecionados']);
-        }
-        
-        if (!empty($ids)) {
-            $in_query = implode(',', $ids);
-            try {
-                $pst = $pdo->query("SELECT id, nome FROM atendimentos WHERE id IN ($in_query) AND status != 'agendado'");
-                while ($row = $pst->fetch()) {
-                    registrarLog($pdo, 'Retornar Agendamento', "Paciente: {$row['nome']} (Desfazer presença em Lote)", $row['id']);
-                }
-                $pdo->exec("UPDATE atendimentos SET status = 'agendado', senha = NULL, chegada_em = NULL, chamado_em = NULL, sala = NULL WHERE id IN ($in_query) AND status != 'agendado'");
-                $message = "Sucesso! Registros voltaram para a lista de Agendados.";
-                $message_type = 'success';
-            } catch (PDOException $e) {
-                $message = "Erro ao desfazer chegada: " . $e->getMessage();
-                $message_type = 'error';
-            }
-        } else {
-            $message = "Erro: Nenhum registro selecionado.";
-            $message_type = 'error';
-        }
-    }
-    
-    // 7. Liberar Pauta para Recepção
-    elseif ($action === 'liberar_pauta') {
-        $data_alvo = $_POST['data_alvo'] ?? '';
-        if (!empty($data_alvo)) {
-            if (liberarPauta($pdo, $data_alvo, $_SESSION['usuario_id'])) {
-                registrarLog($pdo, 'Liberar Pauta', "Pauta da data $data_alvo homologada e liberada para a recepção.");
-                $message = "Sucesso! A pauta de " . date('d/m/Y', strtotime($data_alvo)) . " foi homologada e liberada para check-in na recepção.";
-                $message_type = 'success';
-            } else {
-                $message = "Erro ao liberar pauta.";
-                $message_type = 'error';
-            }
-        } else {
-            $message = "Erro: Data alvo inválida.";
-            $message_type = 'error';
-        }
-    }
-    
-    // 8. Bloquear Pauta (Revogar)
-    elseif ($action === 'bloquear_pauta') {
-        $data_alvo = $_POST['data_alvo'] ?? '';
-        if (!empty($data_alvo)) {
-            if (bloquearPauta($pdo, $data_alvo)) {
-                registrarLog($pdo, 'Bloquear Pauta', "Pauta da data $data_alvo bloqueada/revogada para a recepção.");
-                $message = "Sucesso! A liberação da pauta de " . date('d/m/Y', strtotime($data_alvo)) . " foi revogada.";
-                $message_type = 'success';
-            } else {
-                $message = "Erro ao revogar liberação.";
-                $message_type = 'error';
-            }
-        } else {
-            $message = "Erro: Data alvo inválida.";
-            $message_type = 'error';
-        }
-    }
-
-    // 9. Importar Planilha Excel (.xlsx)
-    elseif ($action === 'importar_excel') {
-        if (isset($_FILES['arquivo_excel']) && $_FILES['arquivo_excel']['error'] === UPLOAD_ERR_OK) {
-            $file_tmp = $_FILES['arquivo_excel']['tmp_name'];
-            $filename = htmlspecialchars($_FILES['arquivo_excel']['name'], ENT_QUOTES, 'UTF-8');
-            $file_size = $_FILES['arquivo_excel']['size'];
-            $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-            
-            if ($ext !== 'xlsx') {
-                $message = "Erro: Selecione um arquivo Excel (.xlsx) válido.";
-                $message_type = "error";
-            } elseif ($file_size > 5 * 1024 * 1024) { // 5MB
-                $message = "Erro: O arquivo enviado excede o limite de tamanho permitido de 5MB.";
-                $message_type = "error";
-            } else {
-                // Detecção inteligente do executável Python (compatível com Windows local e Linux/Docker de produção)
-                $python_cmd = 'python3';
-                if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-                    $python_cmd = 'python';
-                } else {
-                    $check_py3 = shell_exec('which python3 2>/dev/null');
-                    if (empty(trim($check_py3))) {
-                        $python_cmd = 'python';
-                    }
-                }
-                
-                $cmd = $python_cmd . " " . escapeshellarg(__DIR__ . '/import_excel.py') . " " . escapeshellarg($file_tmp) . " 2>&1";
-                
-                $output = [];
-                $return_var = 0;
-                exec($cmd, $output, $return_var);
-                
-                if ($return_var === 0) {
-                    $json_str = implode("\n", $output);
-                    $records = json_decode($json_str, true);
-                    
-                    if (is_array($records) && !empty($records)) {
-                        if (isset($records[0]['error'])) {
-                            $message = "Erro no processamento: " . htmlspecialchars($records[0]['error']);
-                            $message_type = "error";
-                        } else {
-                            $today = date('Y-m-d');
-                            
-                            $existingPeritos = [];
-                            try {
-                                $pst = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE perito IS NOT NULL AND perito != ''");
-                                while ($row = $pst->fetch()) {
-                                    $p = $row['perito'];
-                                    $existingPeritos[simplifyName($p)] = $p;
-                                }
-                            } catch (PDOException $e) {}
-
-                            $existingAppointments = [];
-                            try {
-                                $prStmt = $pdo->query("SELECT id, processo, data_pauta, nome, perito, cpf FROM atendimentos WHERE processo IS NOT NULL AND processo != '' AND data_pauta IS NOT NULL");
-                                while ($row = $prStmt->fetch()) {
-                                    $key = simplifyName($row['processo']) . '_' . $row['data_pauta'];
-                                    $existingAppointments[$key] = [
-                                        'id' => $row['id'],
-                                        'nome' => $row['nome'],
-                                        'perito' => $row['perito'],
-                                        'cpf' => $row['cpf']
-                                    ];
-                                }
-                            } catch (PDOException $e) {}
-
-                            $existingUsers = [];
-                            try {
-                                $uStmt = $pdo->query("SELECT cpf, username FROM usuarios");
-                                while ($row = $uStmt->fetch()) {
-                                    if ($row['cpf']) $existingUsers[$row['cpf']] = true;
-                                    if ($row['username']) $existingUsers[$row['username']] = true;
-                                }
-                            } catch (PDOException $e) {}
-
-                            $pdo->beginTransaction();
-                            $stmt = $pdo->prepare("INSERT INTO atendimentos (senha, nome, processo, perito, status, data_pauta, cpf) VALUES ('---', ?, ?, ?, 'agendado', ?, ?)");
-                            $stmtUpdate = $pdo->prepare("UPDATE atendimentos SET nome = ?, perito = ?, cpf = ? WHERE id = ?");
-                            $stmtUser = $pdo->prepare("INSERT INTO usuarios (username, password, role, nome, cpf) VALUES (?, ?, 'perito', ?, ?)");
-                            
-                            $count = 0;
-                            $GLOBALS['sga_import_lote'] = true;
-                            
-                            foreach ($records as $r) {
-                                $procClean = simplifyName($r['processo']);
-                                $dataPauta = $today;
-                                if (isset($r['data_pericia']) && $r['data_pericia']) {
-                                    $dParts = explode(" ", $r['data_pericia']);
-                                    $dataPauta = $dParts[0];
-                                }
-
-                                // REGRA: Importar apenas do dia atual para frente
-                                if ($dataPauta < $today) {
-                                    continue;
-                                }
-
-                                $pName = corrigirNomeInteligente($r['perito']);
-                                $pName = associarPeritoCadastrado($pName);
-                                $pClean = simplifyName($pName);
-                                if (isset($existingPeritos[$pClean])) {
-                                    $pName = $existingPeritos[$pClean];
-                                } elseif ($pClean) {
-                                    $existingPeritos[$pClean] = $pName;
-                                }
-
-                                // Auto-cadastro do perito médico
-                                $pCpf = isset($r['cpf_perito']) ? trim($r['cpf_perito']) : '';
-                                if ($pName && $pCpf && strlen(preg_replace('/\D/', '', $pCpf)) === 11) {
-                                    $uName = preg_replace('/\D/', '', $pCpf);
-                                    if (!isset($existingUsers[$pCpf]) && !isset($existingUsers[$uName])) {
-                                        $tempPwd = password_hash(substr($uName, 0, 6), PASSWORD_DEFAULT);
-                                        try {
-                                            $stmtUser->execute([$uName, $tempPwd, $pName, $pCpf]);
-                                            $existingUsers[$pCpf] = true;
-                                            $existingUsers[$uName] = true;
-                                        } catch (PDOException $e) {}
-                                    }
-                                }
-
-                                $periciadoNome = isset($r['periciado']) ? corrigirNomeInteligente($r['periciado']) : '';
-                                if (!$periciadoNome) {
-                                    $periciadoNome = (isset($r['cpf']) && $r['cpf']) ? "(Sem Nome) - CPF " . $r['cpf'] : "(Sem Nome)";
-                                }
-
-                                $cpf = $r['cpf'] ?? null;
-                                $appKey = $procClean . '_' . $dataPauta;
-
-                                // REGRA: Se o processo já existir para a data, atualiza os dados se diferirem
-                                if ($procClean && isset($existingAppointments[$appKey])) {
-                                    $existing = $existingAppointments[$appKey];
-                                    $changed = ($existing['nome'] !== $periciadoNome) || 
-                                               ($existing['perito'] !== $pName) || 
-                                               ($existing['cpf'] !== $cpf);
-                                    if ($changed) {
-                                        $stmtUpdate->execute([$periciadoNome, $pName ?: null, $cpf ?: null, $existing['id']]);
-                                        $count++;
-                                    }
-                                    continue;
-                                }
-
-                                $stmt->execute([
-                                    $periciadoNome,
-                                    $r['processo'] ?: null,
-                                    $pName ?: null,
-                                    $dataPauta,
-                                    $cpf ?: null
-                                ]);
-                                $count++;
-                                
-                                if ($procClean) {
-                                    $existingAppointments[$appKey] = [
-                                        'id' => null,
-                                        'nome' => $periciadoNome,
-                                        'perito' => $pName,
-                                        'cpf' => $cpf
-                                    ];
-                                }
-                            }
-                            unset($GLOBALS['sga_import_lote']);
-                            $pdo->commit();
-                            registrarLog($pdo, 'Importação de Pauta', "Arquivo: $filename, Registros importados: $count");
-                            
-                            unset($records);
-                            unset($existingAppointments);
-                            unset($existingPeritos);
-                            unset($existingUsers);
-                            gc_collect_cycles();
-                            
-                            $message = "Sucesso! $count novos registros importados da pauta.";
-                            $message_type = "success";
-                        }
-                    } else {
-                        $message = "Nenhum registro extraído.";
-                        $message_type = "error";
-                    }
-                } else {
-                    $err_msg = !empty($output) ? implode("<br>", array_map('htmlspecialchars', $output)) : "Erro no script Python.";
-                    $message = "Erro de processamento:<br>" . $err_msg;
-                    $message_type = "error";
-                }
-            }
-        } else {
-            $message = "Selecione um arquivo de pauta Excel válido.";
-            $message_type = "error";
-        }
-    }
+        $message_type = 'success';
+    } catch (DomainException $e) { $message = $e->getMessage(); $message_type = 'error'; }
+    catch (Throwable $e) { $message = erroPublico($e); $message_type = 'error'; }
+    $_SESSION['flash_pauta'] = [$message,$message_type];
+    header('Location: gerenciar_pauta.php' . '', true, 303); exit;
 }
+
+
 
 // Filtros de Visualização
 $filtro_tipo = $_GET['filtro_tipo'] ?? 'dia'; // 'dia' ou 'mes'
@@ -565,7 +62,7 @@ try {
         $atendimentos = $stmt->fetchAll();
     }
 } catch (PDOException $e) {
-    $message = "Erro ao buscar pauta: " . $e->getMessage();
+    $message = "Erro ao buscar pauta: " . erroPublico($e);
     $message_type = 'error';
 }
 
@@ -577,8 +74,8 @@ $finalizados = 0;
 $cancelados = 0;
 foreach ($atendimentos as $item) {
     if ($item['status'] === 'agendado') $agendados++;
-    elseif ($item['status'] === 'presente' || $item['status'] === 'fila' || $item['status'] === 'chamado' || $item['status'] === 'atendimento') $fila++;
-    elseif ($item['status'] === 'finalizado') $finalizados++;
+    elseif ($item['status'] === 'presente' || $item['status'] === 'fila' || $item['status'] === 'chamada' || $item['status'] === 'atendimento') $fila++;
+    elseif ($item['status'] === 'concluido') $finalizados++;
     elseif ($item['status'] === 'cancelado') $cancelados++;
 }
 
@@ -594,10 +91,11 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gerenciar Pautas - <?= htmlspecialchars($sys_name) ?></title>
+    <title>Gerenciar Pautas - <?= escapar($sys_name) ?></title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
     <script src="tema.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="assets/tailwind.css">
+    <link rel="stylesheet" href="assets/usabilidade.css">
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
     <!-- Header -->
@@ -611,7 +109,7 @@ try {
                 </div>
             </a>
             <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
-                <?= htmlspecialchars(ucfirst($_SESSION['usuario_role'])) ?>
+                <?= escapar(ucfirst($_SESSION['usuario_role'])) ?>
             </span>
         </div>
         <div class="flex items-center space-x-3">
@@ -635,8 +133,8 @@ try {
                 <a href="usuarios.php" class="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-900/60 bg-indigo-950/30 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
             <?php endif; ?>
 
-            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= htmlspecialchars($_SESSION['usuario_name']) ?></strong></span>
-            <a href="logout.php" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</a>
+            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
+            <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
 
@@ -646,7 +144,7 @@ try {
             <!-- Importar Planilha Card -->
             <div class="bg-gray-900 p-5 rounded-2xl border border-gray-800 shadow-xl">
                 <h2 class="text-xs font-semibold uppercase text-blue-400 tracking-wider mb-3">Importar Planilha (Excel)</h2>
-                <form method="POST" enctype="multipart/form-data" class="space-y-4">
+                <form method="POST" enctype="multipart/form-data" class="space-y-4"><?= csrfCampo() ?>
                     <input type="hidden" name="action" value="importar_excel">
                     
                     <div>
@@ -686,7 +184,7 @@ try {
             <!-- Transferir Pauta (Mover Data) -->
             <div class="bg-gray-900 p-5 rounded-2xl border border-gray-800 shadow-xl">
                 <h2 class="text-xs font-semibold uppercase text-gray-400 tracking-wider mb-3">Transferir / Mover Pauta</h2>
-                <form method="POST" class="space-y-4" onsubmit="return confirm('Confirmar o remanejamento da pauta de dados conforme os parâmetros informados?');">
+                <form method="POST" class="space-y-4" onsubmit="return confirm('Confirmar o remanejamento da pauta de dados conforme os parâmetros informados?');"><?= csrfCampo() ?>
                     <input type="hidden" name="action" value="mover_pauta">
                     
                     <div>
@@ -724,7 +222,7 @@ try {
             <!-- Alterar Perito em Lote -->
             <div class="bg-gray-900 p-5 rounded-2xl border border-gray-800 shadow-xl">
                 <h2 class="text-xs font-semibold uppercase text-gray-400 tracking-wider mb-3">Substituir Perito</h2>
-                <form method="POST" class="space-y-4" onsubmit="return confirm('Substituir o perito associado aos registros selecionados?');">
+                <form method="POST" class="space-y-4" onsubmit="return confirm('Substituir o perito associado aos registros selecionados?');"><?= csrfCampo() ?>
                     <input type="hidden" name="action" value="alterar_perito_lote">
                     
                     <div>
@@ -745,7 +243,7 @@ try {
                         <input type="text" name="novo_perito" list="lista-peritos" required placeholder="Nome do Médico/Perito" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none">
                         <datalist id="lista-peritos">
                             <?php foreach ($peritos_cadastrados as $pName): ?>
-                                <option value="<?= htmlspecialchars($pName) ?>">
+                                <option value="<?= escapar($pName) ?>">
                             <?php endforeach; ?>
                         </datalist>
                     </div>
@@ -760,12 +258,12 @@ try {
 
             <!-- Excluir Pauta em Lote -->
             <div class="bg-gray-900 p-5 rounded-2xl border border-gray-800 shadow-xl border-red-950/30">
-                <h2 class="text-xs font-semibold uppercase text-red-400 tracking-wider mb-3">Excluir Pauta</h2>
-                <form method="POST" class="space-y-4" onsubmit="return confirm('ATENÇÃO: Isso removerá TODOS os agendamentos do dia ou mês de forma PERMANENTE. Continuar?');">
+                <h2 class="text-xs font-semibold uppercase text-red-400 tracking-wider mb-3">Cancelar Pauta</h2>
+                <form method="POST" class="space-y-4" onsubmit="return confirm('ATENÇÃO: Isso cancelará os agendamentos ainda não confirmados do dia ou mês preservando o histórico. Continuar?');"><?= csrfCampo() ?>
                     <input type="hidden" name="action" value="excluir_periodo">
                     
                     <div>
-                        <label class="block text-xs text-gray-400 mb-1">Excluir o quê?</label>
+                        <label class="block text-xs text-gray-400 mb-1">Cancelar em qual período?</label>
                         <select name="periodo_tipo" id="excluir-tipo" onchange="toggleExcluirInputs()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none">
                             <option value="dia">Todo um Dia Específico</option>
                             <option value="mes">Todo um Mês Inteiro</option>
@@ -783,7 +281,7 @@ try {
                     </div>
 
                     <button type="submit" class="w-full bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs font-semibold py-2 rounded-lg transition">
-                        Excluir Pauta Permanentemente
+                        Cancelar agendamentos pendentes
                     </button>
                 </form>
             </div>
@@ -814,8 +312,8 @@ try {
                                 </p>
                             </div>
                         </div>
-                        <form method="POST" action="gerenciar_pauta.php?filtro_tipo=dia&data_busca=<?= $data_busca ?>" class="w-full sm:w-auto">
-                            <input type="hidden" name="data_alvo" value="<?= htmlspecialchars($data_busca) ?>">
+                        <form method="POST" action="gerenciar_pauta.php?filtro_tipo=dia&data_busca=<?= $data_busca ?>" class="w-full sm:w-auto"><?= csrfCampo() ?>
+                            <input type="hidden" name="data_alvo" value="<?= escapar($data_busca) ?>">
                             <?php if ($pauta_liberada): ?>
                                 <input type="hidden" name="action" value="bloquear_pauta">
                                 <button type="submit" class="w-full sm:w-auto bg-amber-950/60 hover:bg-amber-900 border border-amber-900/50 text-amber-300 text-xs font-bold py-2 px-4 rounded-lg transition">
@@ -843,18 +341,18 @@ try {
 
                     <div class="flex items-center gap-2 w-full sm:w-auto">
                         <div id="busca-dia-container" class="<?= $filtro_tipo === 'dia' ? 'flex items-center gap-2' : 'hidden' ?> w-full sm:w-auto">
-                            <input type="date" name="data_busca" id="data-busca-input" value="<?= htmlspecialchars($data_busca) ?>" onchange="this.form.submit()" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none w-full">
+                            <input type="date" name="data_busca" id="data-busca-input" value="<?= escapar($data_busca) ?>" onchange="this.form.submit()" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none w-full">
                             <button type="button" onclick="irParaHoje()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition shrink-0">
                                 Hoje
                             </button>
                         </div>
                         <div id="busca-mes-container" class="<?= $filtro_tipo === 'mes' ? '' : 'hidden' ?> w-full sm:w-auto">
-                            <input type="month" name="mes_busca" value="<?= htmlspecialchars($mes_busca) ?>" onchange="this.form.submit()" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none w-full">
+                            <input type="month" name="mes_busca" value="<?= escapar($mes_busca) ?>" onchange="this.form.submit()" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none w-full">
                         </div>
                     </div>
                 </form>
 
-                <form method="POST" id="form-tabela-pauta" class="flex-1 flex flex-col justify-between">
+                <form method="POST" id="form-tabela-pauta" class="flex-1 flex flex-col justify-between"><?= csrfCampo() ?>
                     <!-- Tabela de agendados -->
                     <div class="overflow-x-auto max-h-[720px] overflow-y-auto pr-1">
                         <table class="w-full text-left text-sm text-gray-300">
@@ -879,7 +377,7 @@ try {
                                     </tr>
                                 <?php else: ?>
                                     <?php foreach ($atendimentos as $item): ?>
-                                        <tr onclick="if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'BUTTON' && !event.target.closest('button') && !event.target.closest('a')) mostrarModalDetalhes({ nome: '<?= htmlspecialchars($item['nome'], ENT_QUOTES) ?>', cpf: '<?= htmlspecialchars($item['cpf'] ?? '---', ENT_QUOTES) ?>', processo: '<?= htmlspecialchars($item['processo'], ENT_QUOTES) ?>', perito: '<?= htmlspecialchars($item['perito'], ENT_QUOTES) ?>', data_pauta: '<?= date('d/m/Y', strtotime($item['data_pauta'])) ?>', status: '<?= $item['status'] ?>', chegada_em: '<?= $item['chegada_em'] ? date('H:i:s', strtotime($item['chegada_em'])) : '---' ?>' })" class="hover:bg-gray-900/30 cursor-pointer transition">
+                                        <tr onclick="if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'BUTTON' && !event.target.closest('button') && !event.target.closest('a')) mostrarModalDetalhes({ nome: <?= jsValor($item['nome']) ?>, cpf: <?= jsValor($item['cpf'] ?? '---') ?>, processo: <?= jsValor($item['processo']) ?>, perito: <?= jsValor($item['perito']) ?>, data_pauta: '<?= date('d/m/Y', strtotime($item['data_pauta'])) ?>', status: <?= jsValor($item['status']) ?>, chegada_em: '<?= $item['chegada_em'] ? date('H:i:s', strtotime($item['chegada_em'])) : '---' ?>' })" class="hover:bg-gray-900/30 cursor-pointer transition">
                                             <td class="py-3">
                                                 <input type="checkbox" name="selecionados[]" value="<?= $item['id'] ?>" class="chk-item rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0 focus:ring-offset-0">
                                             </td>
@@ -887,16 +385,16 @@ try {
                                                 <?= date('d/m/Y', strtotime($item['data_pauta'])) ?>
                                             </td>
                                             <td class="py-3">
-                                                <div class="font-semibold text-white truncate max-w-[220px]"><?= htmlspecialchars($item['nome']) ?></div>
+                                                <div class="font-semibold text-white truncate max-w-[220px]"><?= escapar($item['nome']) ?></div>
                                                 <div class="text-[10px] text-gray-500 font-mono">
-                                                    <?= htmlspecialchars($item['processo'] ?: 'Sem processo') ?>
+                                                    <?= escapar($item['processo'] ?: 'Sem processo') ?>
                                                     <?php if (!empty($item['cpf'])): ?>
-                                                        <span class="text-blue-400 ml-1.5">| CPF: <?= htmlspecialchars($item['cpf']) ?></span>
+                                                        <span class="text-blue-400 ml-1.5">| CPF: <?= escapar($item['cpf']) ?></span>
                                                     <?php endif; ?>
                                                 </div>
                                             </td>
                                             <td class="py-3 text-xs text-gray-300 truncate max-w-[150px]">
-                                                <?= htmlspecialchars($item['perito'] ?: 'Não associado') ?>
+                                                <?= escapar($item['perito'] ?: 'Não associado') ?>
                                             </td>
                                             <td class="py-3 text-center text-xs font-semibold">
                                                 <?php
@@ -906,11 +404,11 @@ try {
                                                     echo '<span class="text-blue-400 bg-blue-950/30 border border-blue-900/60 px-2 py-0.5 rounded-full text-[10px]">Agendado</span>';
                                                 } elseif ($status === 'presente' || $status === 'fila') {
                                                     echo '<span class="text-emerald-400 bg-emerald-950/40 border border-emerald-900/60 px-2 py-0.5 rounded-full text-[10px]">Na Fila' . $senha_badge . '</span>';
-                                                } elseif ($status === 'chamado') {
+                                                } elseif ($status === 'chamada') {
                                                     echo '<span class="text-amber-400 bg-amber-950/40 border border-amber-900/60 px-2 py-0.5 rounded-full text-[10px]">Chamado' . $senha_badge . '</span>';
                                                 } elseif ($status === 'atendimento') {
                                                     echo '<span class="text-purple-400 bg-purple-950/40 border border-purple-900/60 px-2 py-0.5 rounded-full text-[10px]">Consulta' . $senha_badge . '</span>';
-                                                } elseif ($status === 'finalizado') {
+                                                } elseif ($status === 'concluido') {
                                                     echo '<span class="text-gray-400 bg-gray-800 border border-gray-700 px-2 py-0.5 rounded-full text-[10px]">Finalizado</span>';
                                                 } else {
                                                     echo '<span class="text-red-400 bg-red-950/40 border border-red-900/60 px-2 py-0.5 rounded-full text-[10px]">Cancelado</span>';
@@ -929,7 +427,7 @@ try {
                                                         </button>
                                                     <?php endif; ?>
                                                     
-                                                    <button type="button" onclick="excluirIndividual(<?= $item['id'] ?>)" title="Excluir Registro" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-[10px] px-2 py-1 rounded transition">
+                                                    <button type="button" onclick="excluirIndividual(<?= $item['id'] ?>)" title="Cancelar agendamento" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-[10px] px-2 py-1 rounded transition">
                                                         🗑️
                                                     </button>
                                                 </div>
@@ -951,8 +449,8 @@ try {
                             <button type="submit" name="action" value="remover_chegada_lote" id="btn-cancelar-lote" disabled class="bg-amber-950/40 hover:bg-amber-900/40 border border-amber-900/60 text-amber-400 text-xs px-3 py-1.5 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed font-medium">
                                 ↩️ Voltar para Agendado
                             </button>
-                            <button type="submit" name="action" value="excluir_selecionados" id="btn-excluir-lote" disabled onclick="return confirm('Deseja excluir permanentemente todos os agendamentos selecionados na tabela?');" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed font-medium">
-                                🗑️ Excluir
+                            <button type="submit" name="action" value="excluir_selecionados" id="btn-excluir-lote" disabled onclick="return confirm('Deseja excluir os agendamentos ainda não confirmados selecionados na tabela?');" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed font-medium">
+                                🗑️ Cancelar
                             </button>
                         </div>
                     </div>
@@ -962,7 +460,7 @@ try {
     </main>
 
     <!-- Formulários Ocultos Auxiliares para Ações Individuais (evita conflito de checkboxes) -->
-    <form id="form-action-individual" method="POST" class="hidden">
+    <form id="form-action-individual" method="POST" class="hidden"><?= csrfCampo() ?>
         <input type="hidden" name="action" id="ind-action">
         <input type="hidden" name="id" id="ind-id">
         <input type="hidden" name="selecionados[]" id="ind-selecionados">
@@ -997,7 +495,7 @@ try {
         }
 
         function excluirIndividual(id) {
-            if (confirm('Excluir este agendamento permanentemente?')) {
+            if (confirm('Cancelar este agendamento, preservando o histórico?')) {
                 document.getElementById('ind-action').value = 'excluir_selecionados';
                 document.getElementById('ind-selecionados').value = id;
                 document.getElementById('form-action-individual').submit();
@@ -1218,5 +716,7 @@ try {
             </div>
         </div>
     </div>
+<script src="assets/acessibilidade.js" defer></script>
+<script src="assets/usabilidade.js" defer></script>
 </body>
 </html>

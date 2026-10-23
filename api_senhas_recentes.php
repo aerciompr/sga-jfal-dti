@@ -1,16 +1,14 @@
 <?php
 require_once __DIR__ . '/banco.php';
 
-$today = date('Y-m-d');
-$stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status IN ('chamada', 'concluido') AND DATE(chamado_em) = ? ORDER BY chamado_em DESC LIMIT 5");
-$stmt->execute([$today]);
+$stmt = $pdo->query('SELECT nome, sala FROM eventos_chamada WHERE data_pauta = CURRENT_DATE() ORDER BY id DESC LIMIT 4');
 $recentes = $stmt->fetchAll();
 
 for ($i = 0; $i < 4; $i++) {
     $item = $recentes[$i] ?? null;
     if ($item) {
-        $nome = htmlspecialchars($item['nome'] ?: 'Sem Nome');
-        $sala = htmlspecialchars($item['sala']);
+        $nome = escapar($item['nome'] ?: 'Sem Nome');
+        $sala = escapar($item['sala']);
         $active_class = $i === 0 ? 'border-blue-500/30 bg-blue-950/20 animate-pulse' : '';
         echo "<div class='bg-gray-950/60 border border-gray-800/50 rounded-xl py-2.5 px-4 flex justify-between items-center $active_class'>";
         echo "  <div class='text-left truncate flex-1'>";

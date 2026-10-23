@@ -1,5 +1,5 @@
 <?php
-session_start();
+
 require_once __DIR__ . '/banco.php';
 
 // Apenas usuários logados podem consultar
@@ -8,6 +8,8 @@ if (!isset($_SESSION['usuario_id'])) {
     echo json_encode([]);
     exit;
 }
+
+if (!in_array($_SESSION['usuario_role'], ['admin','supervisor','recepcao'], true)) abortar(403, 'Acesso negado.');
 
 $busca = trim($_GET['busca'] ?? '');
 $hoje = $_GET['hoje'] ?? date('Y-m-d');
@@ -33,6 +35,7 @@ try {
     }
     
     $resultados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if ($_SESSION['usuario_role'] === 'recepcao') $resultados = array_values(array_filter($resultados, static fn($r) => isPautaLiberada($pdo, $r['data_pauta'])));
     
     // Formata a data para d/m/Y e traduz status para exibição amigável
     foreach ($resultados as &$res) {

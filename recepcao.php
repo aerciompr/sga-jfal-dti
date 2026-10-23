@@ -12,33 +12,13 @@
  * - Prevenção ativa de duplicidade de peritos e processos.
  */
 
-session_start();
+
 require_once __DIR__ . '/banco.php';
 
 // Proteção da sessão: exige que o usuário esteja autenticado e possua perfil administrativo, supervisão ou recepção
 if (!isset($_SESSION['usuario_id']) || !in_array($_SESSION['usuario_role'], ['admin', 'recepcao', 'supervisor'])) {
     header("Location: index.php");
     exit;
-}
-
-// Forçar troca de senha de primeiro acesso
-if (isset($_SESSION['usuario_id'])) {
-    $checkStmt = $pdo->prepare("SELECT cpf, password, role FROM usuarios WHERE id = ?");
-    $checkStmt->execute([$_SESSION['usuario_id']]);
-    $uData = $checkStmt->fetch();
-    if ($uData) {
-        $pwdPadrao = '';
-        if ($uData['role'] === 'perito' && !empty($uData['cpf'])) {
-            $cpfLimpo = preg_replace('/\D/', '', $uData['cpf']);
-            if (strlen($cpfLimpo) === 11) {
-                $pwdPadrao = substr($cpfLimpo, 0, 6);
-            }
-        }
-        if ($pwdPadrao && password_verify($pwdPadrao, $uData['password'])) {
-            header("Location: alterar_senha_obrigatorio.php");
-            exit;
-        }
-    }
 }
 
 $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
@@ -55,582 +35,35 @@ $dataFiltro = $_GET['data_filtro'] ?? date('Y-m-d');
  * @param PDO $pdo Instância da conexão com o banco.
  * @return string Próxima senha gerada.
  */
-function getNextSenha($pdo) {
-    $today = date('Y-m-d');
-    $hasActiveTransaction = $pdo->inTransaction();
-    if (!$hasActiveTransaction) {
-        $pdo->beginTransaction();
-    }
+
+require_once __DIR__ . '/pauta_service.php';
+[$message, $message_type] = $_SESSION['flash_recepcao'] ?? ['', ''];
+unset($_SESSION['flash_recepcao']);
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    $action = (string)$_POST['action'];
     try {
-        $stmt = $pdo->prepare("INSERT IGNORE INTO sequencia_diaria_senhas (data_pauta, ultimo_numero) VALUES (?, 0)");
-        $stmt->execute([$today]);
-        
-        $stmt = $pdo->prepare("UPDATE sequencia_diaria_senhas SET ultimo_numero = LAST_INSERT_ID(ultimo_numero + 1) WHERE data_pauta = ?");
-        $stmt->execute([$today]);
-        
-        $num = (int)$pdo->lastInsertId();
-        
-        if (!$hasActiveTransaction) {
-            $pdo->commit();
-        }
-    } catch (Exception $e) {
-        if (!$hasActiveTransaction) {
-            $pdo->rollBack();
-        }
-        $stmt = $pdo->prepare("SELECT senha FROM atendimentos WHERE senha LIKE 'PE-%' AND (DATE(chegada_em) = ? OR DATE(chamado_em) = ?) ORDER BY id DESC LIMIT 1");
-        $stmt->execute([$today, $today]);
-        $last = $stmt->fetch();
-        $num = $last ? ((int)substr($last['senha'], 3) + 1) : 1;
-    }
-    return 'PE-' . sprintf('%03d', $num);
-}
-
-// Processa as requisições POST do formulário
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action'])) {
-        $action = $_POST['action'];
-        $userRole = $_SESSION['usuario_role'];
-        
-        // Ação 1: Agendamento Único Manual
-        if ($action === 'agendar_unico') {
-            if (!in_array($userRole, ['admin', 'supervisor'])) {
-                $message = "Acesso Negado: Apenas administradores ou supervisores podem cadastrar periciados manualmente.";
-                $message_type = "error";
-            } else {
-                $nome = trim($_POST['nome'] ?? '');
-                $processo = trim($_POST['processo'] ?? '');
-                $perito = trim($_POST['perito'] ?? '');
-                $cpf = trim($_POST['cpf'] ?? '');
-                
-                if ($nome) {
-                    $nome = corrigirNomeInteligente($nome);
-                    $perito = corrigirNomeInteligente($perito);
-                    $perito = associarPeritoCadastrado($perito);
-                    
-                    // Deduplicação de perito: busca se já existe o perito com grafia aproximada no banco
-                    $peritoClean = simplifyName($perito);
-                    if ($peritoClean) {
-                        $pst = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE perito IS NOT NULL AND perito != ''");
-                        while ($row = $pst->fetch()) {
-                            if (simplifyName($row['perito']) === $peritoClean) {
-                                $perito = $row['perito']; // Adota a grafia do banco
-                                break;
-                            }
-                        }
-                    }
-
-                    // Evita duplicar processo na data agendada
-                    $procClean = simplifyName($processo);
-                    $isDuplicate = false;
-                    if ($procClean) {
-                        $pst = $pdo->prepare("SELECT processo FROM atendimentos WHERE data_pauta = ?");
-                        $pst->execute([$dataFiltro]);
-                        while ($row = $pst->fetch()) {
-                            if (simplifyName($row['processo']) === $procClean) {
-                                $isDuplicate = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if ($isDuplicate) {
-                        $message = "Processo $processo já agendado para esta data!";
-                        $message_type = "error";
-                    } else {
-                        $stmt = $pdo->prepare("INSERT INTO atendimentos (senha, nome, processo, perito, status, data_pauta, cpf) VALUES ('---', ?, ?, ?, 'agendado', ?, ?)");
-                        $stmt->execute([$nome, $processo ?: null, $perito ?: null, $dataFiltro, $cpf ?: null]);
-                        $newId = $pdo->lastInsertId();
-                        registrarLog($pdo, 'Cadastrar Agendamento', "Paciente: $nome, Processo: $processo, Perito: $perito, Data da Pauta: $dataFiltro", $newId);
-                        
-                        // Verifica se este paciente (CPF ou Nome) possui agendamento em outra data
-                        $avisoOutraData = '';
-                        if (!empty($cpf)) {
-                            $chkOutra = $pdo->prepare("SELECT data_pauta FROM atendimentos WHERE id != ? AND (cpf = ? OR REPLACE(REPLACE(cpf, '.', ''), '-', '') = ?) AND data_pauta != ? LIMIT 1");
-                            $chkOutra->execute([$newId, $cpf, preg_replace('/\D/', '', $cpf), $dataFiltro]);
-                            $outraData = $chkOutra->fetchColumn();
-                            if ($outraData) {
-                                $avisoOutraData = " (Atenção: Este paciente já possui um agendamento para o dia " . date('d/m/Y', strtotime($outraData)) . "!)";
-                            }
-                        } else {
-                            $chkOutra = $pdo->prepare("SELECT data_pauta FROM atendimentos WHERE id != ? AND nome = ? AND data_pauta != ? LIMIT 1");
-                            $chkOutra->execute([$newId, $nome, $dataFiltro]);
-                            $outraData = $chkOutra->fetchColumn();
-                            if ($outraData) {
-                                $avisoOutraData = " (Atenção: Este paciente já possui um agendamento para o dia " . date('d/m/Y', strtotime($outraData)) . "!)";
-                            }
-                        }
-                        
-                        $message = "Periciado $nome agendado!" . $avisoOutraData;
-                        $message_type = "success";
-                    }
-                } else {
-                    $message = "Digite o nome.";
-                    $message_type = "error";
-                }
+        if ($action === 'importar_pdf' || $action === 'importar_excel') {
+            if (!in_array($_SESSION['usuario_role'], ['admin','supervisor'], true)) throw new DomainException('Acesso negado.');
+            require_once __DIR__ . '/importacao_service.php';
+            $file = $_FILES['arquivo_excel'] ?? $_FILES['arquivo_pdf'] ?? [];
+            $_SESSION['importacao_previa'] = ['criada'=>time(), 'registros'=>prepararImportacao($file)];
+            header('Location: preview_importacao.php', true, 303); exit;
+        } elseif (in_array($action, ['confirmar_chegada','confirmar_multiplos','confirmar_chegada_lote'], true)) {
+            $ids = isset($_POST['id']) ? [(int)$_POST['id']] : (array)($_POST['selecionados'] ?? []);
+            $count = confirmarPresencas($pdo,$ids,$_SESSION['usuario_role']);
+            $message = "Presença confirmada para $count novos registros.";
+            if ($action === 'confirmar_chegada' && $count === 1) {
+                $s = $pdo->prepare('SELECT nome, senha FROM atendimentos WHERE id=?'); $s->execute([(int)$_POST['id']]); $confirmado=$s->fetch();
+                $message = "Presença confirmada: {$confirmado['nome']}. Senha: {$confirmado['senha']}.";
             }
+        } else {
+            $message = operarPauta($pdo,$action,$_POST,$dataFiltro);
         }
-        
-        // Ação 2: Importação de Pauta em Excel
-        elseif ($action === 'importar_pdf') {
-            if ($userRole !== 'admin') {
-                $message = "Acesso Negado: Apenas administradores podem importar pautas.";
-                $message_type = "error";
-            } else {
-                if (isset($_FILES['arquivo_pdf']) && $_FILES['arquivo_pdf']['error'] === UPLOAD_ERR_OK) {
-                    $file_tmp = $_FILES['arquivo_pdf']['tmp_name'];
-                    $filename = htmlspecialchars($_FILES['arquivo_pdf']['name'], ENT_QUOTES, 'UTF-8');
-                    $file_size = $_FILES['arquivo_pdf']['size'];
-                    $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-                    
-                    if ($ext !== 'xlsx') {
-                        $message = "Selecione um arquivo Excel (.xlsx) válido.";
-                        $message_type = "error";
-                    } elseif ($file_size > 5 * 1024 * 1024) { // 5MB
-                        $message = "Erro: O arquivo enviado excede o limite de tamanho permitido de 5MB.";
-                        $message_type = "error";
-                    } else {
-                        // Detecção inteligente do executável Python (compatível com Windows local e Linux/Docker de produção)
-                        $python_cmd = 'python3';
-                        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-                            $python_cmd = 'python';
-                        } else {
-                            $check_py3 = shell_exec('which python3 2>/dev/null');
-                            if (empty(trim($check_py3))) {
-                                $python_cmd = 'python';
-                            }
-                        }
-                        
-                        $cmd = $python_cmd . " " . escapeshellarg(__DIR__ . '/import_excel.py') . " " . escapeshellarg($file_tmp) . " 2>&1";
-                        
-                        $output = [];
-                        $return_var = 0;
-                        exec($cmd, $output, $return_var);
-                        
-                        if ($return_var === 0) {
-                            $json_str = implode("\n", $output);
-                            $records = json_decode($json_str, true);
-                            
-                            if (is_array($records) && !empty($records)) {
-                                if (isset($records[0]['error'])) {
-                                    $message = "Erro no processamento do arquivo: " . htmlspecialchars($records[0]['error']);
-                                    $message_type = "error";
-                                } else {
-                                    $today = date('Y-m-d');
-                                    
-                                    // Carrega peritos existentes para evitar redundâncias na pauta
-                                    $existingPeritos = [];
-                                    $pst = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE perito IS NOT NULL AND perito != ''");
-                                    while ($row = $pst->fetch()) {
-                                        $p = $row['perito'];
-                                        $existingPeritos[simplifyName($p)] = $p;
-                                    }
-
-                                    // Carrega processos e suas datas já cadastrados para evitar duplicados ou para atualizar se mudaram
-                                    $existingAppointments = [];
-                                    $prStmt = $pdo->query("SELECT id, processo, data_pauta, nome, perito, cpf FROM atendimentos WHERE processo IS NOT NULL AND processo != '' AND data_pauta IS NOT NULL");
-                                    while ($row = $prStmt->fetch()) {
-                                        $key = simplifyName($row['processo']) . '_' . $row['data_pauta'];
-                                        $existingAppointments[$key] = [
-                                            'id' => $row['id'],
-                                            'nome' => $row['nome'],
-                                            'perito' => $row['perito'],
-                                            'cpf' => $row['cpf']
-                                        ];
-                                    }
-
-                                    // Carrega os CPFs e usernames de usuários cadastrados para cache em memória
-                                    $existingUsers = [];
-                                    try {
-                                        $uStmt = $pdo->query("SELECT cpf, username FROM usuarios");
-                                        while ($row = $uStmt->fetch()) {
-                                            if ($row['cpf']) {
-                                                $existingUsers[$row['cpf']] = true;
-                                            }
-                                            if ($row['username']) {
-                                                $existingUsers[$row['username']] = true;
-                                            }
-                                        }
-                                    } catch (PDOException $e) {}
-
-                                    $pdo->beginTransaction();
-                                    $stmt = $pdo->prepare("INSERT INTO atendimentos (senha, nome, processo, perito, status, data_pauta, cpf) VALUES ('---', ?, ?, ?, 'agendado', ?, ?)");
-                                    $stmtUpdate = $pdo->prepare("UPDATE atendimentos SET nome = ?, perito = ?, cpf = ? WHERE id = ?");
-                                    $stmtUser = $pdo->prepare("INSERT INTO usuarios (username, password, role, nome, cpf) VALUES (?, ?, 'perito', ?, ?)");
-                                    $count = 0;
-                                    $GLOBALS['sga_import_lote'] = true;
-                                    foreach ($records as $r) {
-                                        $procClean = simplifyName($r['processo']);
-
-                                        // Se a importação tem data da perícia (Excel), usamos ela; senão usamos hoje.
-                                        $dataPauta = $today;
-                                        if (isset($r['data_pericia']) && $r['data_pericia']) {
-                                            $dParts = explode(" ", $r['data_pericia']);
-                                            $dataPauta = $dParts[0]; // Pega a parte YYYY-MM-DD
-                                        }
-
-                                        // REGRA: Importar apenas do dia atual para frente
-                                        if ($dataPauta < $today) {
-                                            continue;
-                                        }
-
-                                        // Padroniza e normaliza o nome do perito
-                                        $pName = corrigirNomeInteligente($r['perito']);
-                                        $pName = associarPeritoCadastrado($pName);
-                                        $pClean = simplifyName($pName);
-                                        if (isset($existingPeritos[$pClean])) {
-                                            $pName = $existingPeritos[$pClean];
-                                        } elseif ($pClean) {
-                                            $existingPeritos[$pClean] = $pName;
-                                        }
-
-                                        // Pré-cadastro automático do Perito como Usuário do sistema
-                                        $pCpf = isset($r['cpf_perito']) ? trim($r['cpf_perito']) : '';
-                                        if ($pName && $pCpf && strlen(preg_replace('/\D/', '', $pCpf)) === 11) {
-                                            $uName = preg_replace('/\D/', '', $pCpf);
-                                            if (!isset($existingUsers[$pCpf]) && !isset($existingUsers[$uName])) {
-                                                // Senha padrão inicial: primeiros 6 dígitos do CPF
-                                                $tempPwd = password_hash(substr($uName, 0, 6), PASSWORD_DEFAULT);
-                                                try {
-                                                    $stmtUser->execute([$uName, $tempPwd, $pName, $pCpf]);
-                                                    $existingUsers[$pCpf] = true;
-                                                    $existingUsers[$uName] = true;
-                                                } catch (PDOException $e) {
-                                                    // Ignora falhas de inserção de usuário para não travar a pauta
-                                                }
-                                            }
-                                        }
-
-                                        // Se a planilha/PDF não tem nome do periciado, usamos o CPF ou um marcador
-                                        $periciadoNome = isset($r['periciado']) ? corrigirNomeInteligente($r['periciado']) : '';
-                                        if (!$periciadoNome) {
-                                            if (isset($r['cpf']) && $r['cpf']) {
-                                                $periciadoNome = "(Sem Nome) - CPF " . $r['cpf'];
-                                            } else {
-                                                $periciadoNome = "(Sem Nome)";
-                                            }
-                                        }
-
-                                        $cpf = $r['cpf'] ?? null;
-                                        $appKey = $procClean . '_' . $dataPauta;
-
-                                        // REGRA: Se o processo já existir para a data, atualiza os dados se diferirem
-                                        if ($procClean && isset($existingAppointments[$appKey])) {
-                                            $existing = $existingAppointments[$appKey];
-                                            $changed = ($existing['nome'] !== $periciadoNome) || 
-                                                       ($existing['perito'] !== $pName) || 
-                                                       ($existing['cpf'] !== $cpf);
-                                            if ($changed) {
-                                                $stmtUpdate->execute([$periciadoNome, $pName ?: null, $cpf ?: null, $existing['id']]);
-                                                $count++;
-                                            }
-                                            continue;
-                                        }
-
-                                        $stmt->execute([
-                                            $periciadoNome,
-                                            $r['processo'] ?: null,
-                                            $pName ?: null,
-                                            $dataPauta,
-                                            $cpf ?: null
-                                        ]);
-                                        $count++;
-                                        
-                                        // Registra a importação no mapa para evitar duplicidade na própria planilha
-                                        if ($procClean) {
-                                            $existingAppointments[$appKey] = [
-                                                'id' => null, // não é mais necessário para inserções locais da mesma planilha
-                                                'nome' => $periciadoNome,
-                                                'perito' => $pName,
-                                                'cpf' => $cpf
-                                            ];
-                                        }
-                                    }
-                                    unset($GLOBALS['sga_import_lote']);
-                                    $pdo->commit();
-                                    
-                                    // Libera a memória RAM do PHP ativamente
-                                    unset($records);
-                                    unset($existingAppointments);
-                                    unset($existingPeritos);
-                                    unset($existingUsers);
-                                    gc_collect_cycles();
-
-                                    $message = "Sucesso! $count novos registros importados (perícias duplicadas ou já existentes foram ignoradas).";
-                                    $message_type = "success";
-                                }
-                            } else {
-                                $message = "Nenhum registro extraído.";
-                                $message_type = "error";
-                            }
-                        } else {
-                            $err_msg = !empty($output) ? implode("<br>", array_map('htmlspecialchars', $output)) : "Código de saída: " . $return_var;
-                            $message = "Erro no processamento do arquivo:<br>" . $err_msg;
-                            $message_type = "error";
-                        }
-                    }
-                } else {
-                    $message = "Selecione um arquivo Excel (.xlsx) válido.";
-                    $message_type = "error";
-                }
-            }
-        }
-        
-        // Ação 3: Confirmar Chegada do Periciado na recepção
-        elseif ($action === 'confirmar_chegada') {
-            $id = (int)($_POST['id'] ?? 0);
-            if ($id) {
-                // Valida se o agendamento é de hoje para o perfil 'recepcao'
-                $stmt = $pdo->prepare("SELECT data_pauta FROM atendimentos WHERE id = ?");
-                $stmt->execute([$id]);
-                $dataPautaAtendimento = $stmt->fetchColumn();
-                
-                if ($dataPautaAtendimento !== date('Y-m-d') && $userRole === 'recepcao') {
-                    $message = "Acesso Negado: A recepção só pode confirmar a chegada na pauta do dia atual.";
-                    $message_type = "error";
-                } elseif ($userRole === 'recepcao' && !isPautaLiberada($pdo, $dataPautaAtendimento)) {
-                    $message = "Acesso Negado: A pauta do dia " . date('d/m/Y', strtotime($dataPautaAtendimento)) . " ainda não foi homologada pelo supervisor.";
-                    $message_type = "error";
-                } else {
-                    $senha = getNextSenha($pdo);
-                    $stmt = $pdo->prepare("UPDATE atendimentos SET status = 'presente', senha = ?, chegada_em = CURRENT_TIMESTAMP WHERE id = ?");
-                    $stmt->execute([$senha, $id]);
-                    
-                    $stName = $pdo->prepare("SELECT nome FROM atendimentos WHERE id = ?");
-                    $stName->execute([$id]);
-                    $pName = $stName->fetchColumn();
-                    registrarLog($pdo, 'Confirmar Presença', "Paciente: $pName, Senha: $senha", $id);
-                    
-                    $message = "Chegada confirmada! Senha: $senha";
-                    $message_type = "success";
-                }
-            }
-        }
-        
-        // Ação 4: Remover Agendamento / Retornar da Fila
-        elseif ($action === 'remover') {
-            $id = (int)($_POST['id'] ?? 0);
-            if ($id) {
-                $stmt = $pdo->prepare("SELECT status FROM atendimentos WHERE id = ?");
-                $stmt->execute([$id]);
-                $status = $stmt->fetchColumn();
-                
-                if ($status && $status !== 'agendado') {
-                    // Retorna para a lista de agendados (Apenas Admin e Supervisor podem fazer)
-                    if (!in_array($userRole, ['admin', 'supervisor'])) {
-                        $message = "Acesso Negado: A recepção comum não tem permissão para retornar periciados para agendados.";
-                        $message_type = "error";
-                    } else {
-                        $stmt = $pdo->prepare("UPDATE atendimentos SET status = 'agendado', senha = NULL, chegada_em = NULL, chamado_em = NULL, sala = NULL WHERE id = ?");
-                        $stmt->execute([$id]);
-                        
-                        $stName = $pdo->prepare("SELECT nome FROM atendimentos WHERE id = ?");
-                        $stName->execute([$id]);
-                        $pName = $stName->fetchColumn();
-                        registrarLog($pdo, 'Retornar Agendamento', "Paciente: $pName, Retornou ao status de Agendado", $id);
-                        
-                        $message = "Periciado retornou para a lista de agendados.";
-                        $message_type = "success";
-                    }
-                } else {
-                    // Exclusão física (Apenas admin e supervisor)
-                    if (!in_array($userRole, ['admin', 'supervisor'])) {
-                        $message = "Acesso Negado: A recepção comum não tem permissão para excluir registros.";
-                        $message_type = "error";
-                    } else {
-                        $stName = $pdo->prepare("SELECT nome, processo FROM atendimentos WHERE id = ?");
-                        $stName->execute([$id]);
-                        $pData = $stName->fetch();
-                        
-                        $stmt = $pdo->prepare("DELETE FROM atendimentos WHERE id = ?");
-                        $stmt->execute([$id]);
-                        
-                        if ($pData) {
-                            registrarLog($pdo, 'Excluir Agendamento', "Paciente: {$pData['nome']}, Processo: {$pData['processo']}", $id);
-                        }
-                        
-                        $message = "Registro removido.";
-                        $message_type = "info";
-                    }
-                }
-            }
-        }
-        
-        // Ação 5: Exclusão em Lote ou Retorno para Agendados
-        elseif ($action === 'remover_multiplos') {
-            if (!in_array($userRole, ['admin', 'supervisor'])) {
-                $message = "Acesso Negado: Apenas supervisores ou administradores podem executar esta ação.";
-                $message_type = "error";
-            } else {
-                $ids = $_POST['selecionados'] ?? [];
-                if (!empty($ids)) {
-                    $ids = array_map('intval', $ids);
-                    
-                    $pdo->beginTransaction();
-                    $excluidos = 0;
-                    $retornados = 0;
-                    foreach ($ids as $id) {
-                        $stmt = $pdo->prepare("SELECT status, nome FROM atendimentos WHERE id = ?");
-                        $stmt->execute([$id]);
-                        $row = $stmt->fetch();
-                        
-                        if ($row) {
-                            if ($row['status'] && $row['status'] !== 'agendado') {
-                                $stmt = $pdo->prepare("UPDATE atendimentos SET status = 'agendado', senha = NULL, chegada_em = NULL, chamado_em = NULL, sala = NULL WHERE id = ?");
-                                $stmt->execute([$id]);
-                                registrarLog($pdo, 'Retornar Agendamento', "Paciente: {$row['nome']} (Retorno em Lote)", $id);
-                                $retornados++;
-                            } else {
-                                $stmt = $pdo->prepare("DELETE FROM atendimentos WHERE id = ?");
-                                $stmt->execute([$id]);
-                                registrarLog($pdo, 'Excluir Agendamento', "Paciente: {$row['nome']} (Exclusão em Lote)", $id);
-                                $excluidos++;
-                            }
-                        }
-                    }
-                    $pdo->commit();
-                    registrarLog($pdo, 'Remover Multiplos', "Registros retornados: $retornados, Registros excluidos: $excluidos");
-                    
-                    if ($retornados > 0 && $excluidos > 0) {
-                        $message = "$retornados periciados retornaram para agendados e $excluidos agendamentos manuais foram excluídos!";
-                    } elseif ($retornados > 0) {
-                        $message = "$retornados periciados retornaram para a lista de agendados!";
-                    } else {
-                        $message = "$excluidos agendamentos excluídos!";
-                    }
-                    $message_type = "info";
-                } else {
-                    $message = "Nenhum periciado selecionado.";
-                    $message_type = "error";
-                }
-            }
-        }
-
-        // Ação 5.5: Confirmação de Chegada em Lote (Múltipla)
-        elseif ($action === 'confirmar_multiplos') {
-            $ids = $_POST['selecionados'] ?? [];
-            if (!empty($ids)) {
-                $ids = array_map('intval', $ids);
-                
-                // Valida se todos os registros pertencem à pauta de hoje e se a pauta está liberada caso seja recepção
-                $podeConfirmar = true;
-                $motivoBloqueio = '';
-                if ($userRole === 'recepcao') {
-                    foreach ($ids as $id) {
-                        $stmt = $pdo->prepare("SELECT data_pauta FROM atendimentos WHERE id = ?");
-                        $stmt->execute([$id]);
-                        $dataP = $stmt->fetchColumn();
-                        if ($dataP !== date('Y-m-d')) {
-                            $podeConfirmar = false;
-                            $motivoBloqueio = "A recepção só pode confirmar a chegada na pauta do dia atual.";
-                            break;
-                        }
-                        if (!isPautaLiberada($pdo, $dataP)) {
-                            $podeConfirmar = false;
-                            $motivoBloqueio = "A pauta do dia " . date('d/m/Y', strtotime($dataP)) . " ainda não foi homologada pelo supervisor.";
-                            break;
-                        }
-                    }
-                }
-                
-                if (!$podeConfirmar) {
-                    $message = "Acesso Negado: " . $motivoBloqueio;
-                    $message_type = "error";
-                } else {
-                    $pdo->beginTransaction();
-                    $count = 0;
-                    foreach ($ids as $id) {
-                        $senha = getNextSenha($pdo);
-                        $stmt = $pdo->prepare("UPDATE atendimentos SET status = 'presente', senha = ?, chegada_em = CURRENT_TIMESTAMP WHERE id = ?");
-                        $stmt->execute([$senha, $id]);
-                        
-                        $stName = $pdo->prepare("SELECT nome FROM atendimentos WHERE id = ?");
-                        $stName->execute([$id]);
-                        $pName = $stName->fetchColumn();
-                        registrarLog($pdo, 'Confirmar Presença', "Paciente: $pName, Senha: $senha (Em Lote)", $id);
-                        $count++;
-                    }
-                    $pdo->commit();
-                    registrarLog($pdo, 'Confirmar Presença Multipla', "Registros confirmados em lote: $count");
-                    
-                    $message = "Chegada confirmada para $count periciados com sucesso!";
-                    $message_type = "success";
-                }
-            } else {
-                $message = "Nenhum periciado selecionado.";
-                $message_type = "error";
-            }
-        }
-        
-        // Ação 6: Limpar todos os agendamentos pendentes da data selecionada
-        elseif ($action === 'limpar_pauta_hoje') {
-            if (!in_array($userRole, ['admin', 'supervisor'])) {
-                $message = "Acesso Negado: Apenas administradores ou supervisores podem limpar a pauta.";
-                $message_type = "error";
-            } else {
-                $stmt = $pdo->prepare("DELETE FROM atendimentos WHERE data_pauta = ? AND status = 'agendado'");
-                $stmt->execute([$dataFiltro]);
-                $count = $stmt->rowCount();
-                registrarLog($pdo, 'Limpar Pauta', "Pauta do dia $dataFiltro limpa. Registros removidos: $count");
-                $message = "Pauta de " . date('d/m/Y', strtotime($dataFiltro)) . " limpa! Todos os agendamentos não confirmados foram removidos.";
-                $message_type = "info";
-            }
-        }
-
-        // Ação 8: Editar dados do atendimento (Nome, Processo, Perito, CPF)
-        elseif ($action === 'editar_atendimento') {
-            if (!in_array($userRole, ['admin', 'supervisor'])) {
-                $message = "Acesso Negado: Apenas administradores ou supervisores podem editar dados de periciados.";
-                $message_type = "error";
-            } else {
-                $id = (int)($_POST['id'] ?? 0);
-                $nome = trim($_POST['nome'] ?? '');
-                $processo = trim($_POST['processo'] ?? '');
-                $perito = trim($_POST['perito'] ?? '');
-                $cpf = trim($_POST['cpf'] ?? '');
-                
-                if ($id && $nome) {
-                    $nome = corrigirNomeInteligente($nome);
-                    $perito = corrigirNomeInteligente($perito);
-                    $perito = associarPeritoCadastrado($perito);
-                    
-                    // Deduplicação de perito: busca se já existe o perito com grafia aproximada no banco
-                    $peritoClean = simplifyName($perito);
-                    if ($peritoClean) {
-                        $pst = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE perito IS NOT NULL AND perito != ''");
-                        while ($row = $pst->fetch()) {
-                            if (simplifyName($row['perito']) === $peritoClean) {
-                                    $perito = $row['perito']; // Adota a grafia do banco
-                                    break;
-                            }
-                        }
-                    }
-                    
-                    $stmt = $pdo->prepare("UPDATE atendimentos SET nome = ?, processo = ?, perito = ?, cpf = ? WHERE id = ?");
-                    $stmt->execute([$nome, $processo ?: null, $perito ?: null, $cpf ?: null, $id]);
-                    $message = "Dados do periciado atualizados com sucesso!";
-                    $message_type = "success";
-                } else {
-                    $message = "Dados insuficientes para edição.";
-                    $message_type = "error";
-                }
-            }
-        }
-        
-        // Ação 9: Configuração do Vídeo da TV
-        elseif ($action === 'set_yt_url') {
-            if ($userRole !== 'admin') {
-                $message = "Acesso Negado: Apenas administradores podem configurar o vídeo da TV.";
-                $message_type = "error";
-            } else {
-                $yt_url = trim($_POST['yt_url'] ?? '');
-                set_config($pdo, 'youtube_url', $yt_url);
-                $yt_file = __DIR__ . '/youtube_url.txt';
-                @file_put_contents($yt_file, $yt_url);
-                $message = "Vídeo de fundo da TV atualizado!";
-                $message_type = "success";
-            }
-        }
-    }
+        $message_type = 'success';
+    } catch (DomainException $e) { $message = $e->getMessage(); $message_type = 'error'; }
+    catch (Throwable $e) { $message = erroPublico($e); $message_type = 'error'; }
+    $_SESSION['flash_recepcao'] = [$message,$message_type];
+    header('Location: recepcao.php' . '?data_filtro=' . urlencode($dataFiltro), true, 303); exit;
 }
 
 // Carrega listas para exibição limitadas à data selecionada (já definida no topo)
@@ -643,7 +76,7 @@ if (empty($yt_url)) {
 }
 
 $pauta_liberada = isPautaLiberada($pdo, $dataFiltro);
-$permite_checkin = (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['usuario_role'] === 'recepcao' && $dataFiltro === date('Y-m-d') && $pauta_liberada));
+$permite_checkin = $dataFiltro === date('Y-m-d') && (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['usuario_role'] === 'recepcao' && $dataFiltro === date('Y-m-d') && $pauta_liberada));
 
 // Recepção comum não visualiza dados de pautas que não foram homologadas/liberadas pelo supervisor
 $agendados = [];
@@ -660,7 +93,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
     $stmt->execute([$dataFiltro]);
     $presentes = $stmt->fetchAll();
 
-    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'chamada' AND data_pauta = ? ORDER BY chamado_em DESC");
+    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status IN ('chamada','atendimento') AND data_pauta = ? ORDER BY chamado_em DESC");
     $stmt->execute([$dataFiltro]);
     $chamados = $stmt->fetchAll();
 
@@ -674,10 +107,11 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=device-width, initial-scale=1.0">
-    <title>Recepção - <?= htmlspecialchars($sys_name) ?></title>
+    <title>Recepção - <?= escapar($sys_name) ?></title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
     <script src="tema.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="assets/tailwind.css">
+    <link rel="stylesheet" href="assets/usabilidade.css">
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
     <!-- Header -->
@@ -691,7 +125,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 </div>
             </a>
             <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
-                <?= htmlspecialchars(ucfirst($_SESSION['usuario_role'])) ?>
+                <?= escapar(ucfirst($_SESSION['usuario_role'])) ?>
             </span>
         </div>
         <div class="flex items-center space-x-3">
@@ -715,94 +149,17 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 <a href="usuarios.php" class="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-900/60 bg-indigo-950/30 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
             <?php endif; ?>
 
-            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= htmlspecialchars($_SESSION['usuario_name']) ?></strong></span>
-            <a href="logout.php" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</a>
+            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
+            <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
 
     <main class="flex-1 max-w-7xl w-full mx-auto p-6 <?= in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) ? 'grid grid-cols-1 lg:grid-cols-3 gap-6' : 'space-y-6' ?>">
-        <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-        <!-- Sidebar de Operações (Importação e Cadastro Manual) -->
-        <div class="space-y-6">
-            <?php if ($message): ?>
-                <div class="p-3 rounded-lg border text-xs text-center font-medium <?= $message_type === 'success' ? 'bg-green-950/40 border-green-900/80 text-green-300' : ($message_type === 'info' ? 'bg-blue-950/40 border-blue-900/80 text-blue-300' : 'bg-red-950/40 border-red-900/80 text-red-300') ?>">
-                    <?= htmlspecialchars($message) ?>
-                </div>
-            <?php endif; ?>
-
-            <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
-            <!-- Formulário de Importação de Arquivo -->
-            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
-                <h2 class="text-sm font-semibold uppercase text-blue-500 tracking-wider mb-4 flex items-center gap-2">
-                    <span>📄</span> Importar Pauta (Excel .xlsx)
-                </h2>
-                <form id="form-importar" method="POST" enctype="multipart/form-data" class="space-y-4">
-                    <input type="hidden" name="action" value="importar_pdf">
-                    <div>
-                        <label class="block text-xs text-gray-400 mb-1">Selecione o arquivo da Pauta (Excel .xlsx)</label>
-                        <input type="file" name="arquivo_pdf" accept=".xlsx" required class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white file:bg-gray-700 file:border-0 file:text-white file:text-xs file:font-semibold file:px-2.5 file:py-1 file:rounded file:mr-2 file:hover:bg-gray-600">
-                    </div>
-                    <button type="submit" id="btn-importar" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2">
-                        <span id="btn-importar-texto">Importar Dados</span>
-                    </button>
-                </form>
-            </div>
-            <?php endif; ?>
-
-            <!-- Cadastro Manual de Periciados -->
-            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
-                <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider mb-4">Adicionar Periciado Manual</h2>
-                <form method="POST" class="space-y-4">
-                    <input type="hidden" name="action" value="agendar_unico">
-                    <div>
-                        <label class="block text-xs text-gray-400 mb-1">Nome do Periciado</label>
-                        <input type="text" name="nome" required placeholder="Nome Completo" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs text-gray-400 mb-1">Processo</label>
-                        <input type="text" name="processo" placeholder="0000000-00.2026.4.05.8000" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs text-gray-400 mb-1">CPF do Periciado</label>
-                        <input type="text" name="cpf" placeholder="000.000.000-00" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs text-gray-400 mb-1">Nome do Perito</label>
-                        <input type="text" name="perito" placeholder="Nome do Médico/Perito" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
-                    </div>
-                    <button type="submit" class="w-full bg-gray-800 hover:bg-gray-750 border border-gray-700 text-white text-xs font-semibold py-2.5 rounded-lg transition">
-                        Agendar
-                    </button>
-                </form>
-            </div>
-
-            <!-- Configuração do Vídeo da TV -->
-            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
-                <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider mb-4 flex items-center gap-2">
-                    <span>📺</span> Vídeo de Fundo da TV
-                </h2>
-                <form method="POST" class="space-y-4">
-                    <input type="hidden" name="action" value="set_yt_url">
-                    <div>
-                        <label class="block text-xs text-gray-400 mb-1">Link do Vídeo (YouTube)</label>
-                        <input type="url" name="yt_url" value="<?= htmlspecialchars($yt_url) ?>" required placeholder="https://www.youtube.com/watch?v=..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
-                    </div>
-                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2.5 rounded-lg transition">
-                        Atualizar Vídeo
-                    </button>
-                </form>
-                <p class="text-[10px] text-gray-500 mt-3 leading-normal">
-                    ⚠️ <strong>Nota:</strong> Certifique-se de usar um vídeo público do YouTube que permita reprodução incorporada (incorporação). Vídeos com restrições de idade ou proteção contra bots não carregarão no painel.
-                </p>
-            </div>
-        </div>
-        <?php endif; ?>
-
         <!-- Área de Listas (Fila de Hoje) -->
-        <div class="<?= in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) ? 'lg:col-span-2' : '' ?> space-y-6">
-            <?php if (!in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) && $message): ?>
-                <div class="p-3 rounded-lg border text-xs text-center font-medium <?= $message_type === 'success' ? 'bg-green-950/40 border-green-900/80 text-green-300' : ($message_type === 'info' ? 'bg-blue-950/40 border-blue-900/80 text-blue-300' : 'bg-red-950/40 border-red-900/80 text-red-300') ?>">
-                    <?= htmlspecialchars($message) ?>
+        <div class="sga-queue <?= in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) ? 'lg:col-span-2' : '' ?> space-y-6">
+            <?php if ($message): ?>
+                <div role="status" aria-live="polite" class="sga-feedback p-3 rounded-lg border text-xs text-center font-medium <?= $message_type === 'success' ? 'bg-green-950/40 border-green-900/80 text-green-300' : ($message_type === 'info' ? 'bg-blue-950/40 border-blue-900/80 text-blue-300' : 'bg-red-950/40 border-red-900/80 text-red-300') ?>">
+                    <?= escapar($message) ?>
                 </div>
             <?php endif; ?>
             <!-- Filtro de Data da Pauta -->
@@ -812,7 +169,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                     <span class="text-xs font-semibold uppercase text-gray-400 tracking-wider">Visualizando Pauta de:</span>
                 </div>
                 <form method="GET" action="recepcao.php" class="flex items-center gap-2 w-full sm:w-auto">
-                    <input type="date" name="data_filtro" id="data-filtro-input" value="<?= htmlspecialchars($dataFiltro) ?>" onchange="this.form.submit()" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 w-full sm:w-auto">
+                    <input type="date" name="data_filtro" id="data-filtro-input" aria-label="Data da pauta" value="<?= escapar($dataFiltro) ?>" onchange="this.form.submit()" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 w-full sm:w-auto">
                     <button type="button" onclick="irParaHoje()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition shrink-0">
                         Hoje
                     </button>
@@ -836,7 +193,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
 
             <!-- 1. Agendados (Ainda não chegaram) -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
-                <form method="POST" id="form-agendados">
+                <form method="POST" id="form-agendados"><?= csrfCampo() ?>
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
                         <h2 class="text-sm font-semibold uppercase text-amber-400 tracking-wider flex items-center gap-2">
                             <span>Agendados Para <?= date('d/m/Y', strtotime($dataFiltro)) ?></span>
@@ -850,11 +207,11 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                 </button>
                             <?php endif; ?>
                             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                                <button type="submit" name="action" value="remover_multiplos" id="btn-excluir-selecionados" disabled onclick="return confirm('Excluir periciados selecionados?');" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex-1 sm:flex-none">
-                                    🗑️ Excluir Selecionados
+                                <button type="submit" name="action" value="remover_multiplos" id="btn-excluir-selecionados" disabled onclick="return confirm('Cancelar os agendamentos selecionados? O histórico será preservado.');" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex-1 sm:flex-none">
+                                    🗑️ Cancelar selecionados
                                 </button>
                                 <button type="button" onclick="limparPautaHoje()" class="bg-orange-950/40 hover:bg-orange-900/40 border border-orange-900/60 text-orange-400 text-xs px-3 py-1.5 rounded-lg transition flex-1 sm:flex-none">
-                                    ⚠️ Limpar Pauta
+                                    Cancelar pendentes
                                 </button>
                             <?php endif; ?>
                         </div>
@@ -862,7 +219,9 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
 
                     <!-- Input para busca textual instantânea -->
                     <div class="mb-4">
-                        <input type="text" id="filtro-busca" placeholder="🔍 Buscar por nome, processo ou perito..." class="w-full bg-gray-950 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
+                        <label for="filtro-busca" class="sr-only">Buscar agendamento</label>
+                        <div class="sga-search"><input type="search" id="filtro-busca" autocomplete="off" placeholder="Nome, CPF, processo ou perito" class="w-full bg-gray-950 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"><button type="button" id="limpar-busca" class="sga-neutral">Limpar busca</button></div>
+                        <p id="busca-resultado" role="status" aria-live="polite" class="sga-helper"></p>
                     </div>
 
                     <!-- Alerta de agendamentos em outras datas -->
@@ -881,7 +240,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                 <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">
                                     <?php if ($permite_checkin): ?>
                                         <th class="pb-2 w-8">
-                                            <input type="checkbox" id="chk-select-all" class="rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0 focus:ring-offset-0">
+                                            <input type="checkbox" id="chk-select-all" aria-label="Selecionar agendados visíveis" class="rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0 focus:ring-offset-0">
                                         </th>
                                     <?php endif; ?>
                                     <th class="pb-2">Nome / Processo / CPF</th>
@@ -898,33 +257,33 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                     </tr>
                                 <?php else: ?>
                                     <?php foreach ($agendados as $item): ?>
-                                        <tr onclick="if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'BUTTON' && !event.target.closest('button') && !event.target.closest('a')) mostrarModalDetalhes({ nome: '<?= htmlspecialchars($item['nome'], ENT_QUOTES) ?>', cpf: '<?= htmlspecialchars($item['cpf'] ?? '---', ENT_QUOTES) ?>', processo: '<?= htmlspecialchars($item['processo'], ENT_QUOTES) ?>', perito: '<?= htmlspecialchars($item['perito'], ENT_QUOTES) ?>', data_pauta: '<?= date('d/m/Y', strtotime($item['data_pauta'])) ?>', status: '<?= $item['status'] ?>', chegada_em: '<?= $item['chegada_em'] ? date('H:i:s', strtotime($item['chegada_em'])) : '---' ?>' })" class="row-agendado cursor-pointer hover:bg-gray-850/40 transition">
+                                        <tr data-nome="<?= escapar($item['nome']) ?>" onclick="if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'BUTTON' && !event.target.closest('button') && !event.target.closest('a')) mostrarModalDetalhes({ nome: <?= jsValor($item['nome']) ?>, cpf: <?= jsValor($item['cpf'] ?? '---') ?>, processo: <?= jsValor($item['processo']) ?>, perito: <?= jsValor($item['perito']) ?>, data_pauta: '<?= date('d/m/Y', strtotime($item['data_pauta'])) ?>', status: <?= jsValor($item['status']) ?>, chegada_em: '<?= $item['chegada_em'] ? date('H:i:s', strtotime($item['chegada_em'])) : '---' ?>' })" class="row-agendado cursor-pointer hover:bg-gray-850/40 transition">
                                             <?php if ($permite_checkin): ?>
-                                                <td class="py-3">
-                                                    <input type="checkbox" name="selecionados[]" value="<?= $item['id'] ?>" class="chk-item rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0 focus:ring-offset-0">
+                                                <td class="sga-select py-3">
+                                                    <input type="checkbox" name="selecionados[]" value="<?= $item['id'] ?>" aria-label="Selecionar <?= escapar($item['nome']) ?>" class="chk-item rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0 focus:ring-offset-0">
                                                 </td>
                                             <?php endif; ?>
-                                            <td class="py-3">
-                                                <div class="font-semibold text-white truncate max-w-[200px]"><?= htmlspecialchars($item['nome']) ?></div>
+                                            <td class="sga-patient py-3">
+                                                <div class="font-semibold text-white truncate max-w-[200px]"><?= escapar($item['nome']) ?></div>
                                                 <div class="text-[10px] text-gray-500 font-mono">
-                                                    <?= htmlspecialchars($item['processo'] ?: 'Sem processo') ?>
+                                                    <?= escapar($item['processo'] ?: 'Sem processo') ?>
                                                     <?php if (!empty($item['cpf'])): ?>
-                                                        <span class="text-blue-400 ml-1.5">| CPF: <?= htmlspecialchars($item['cpf']) ?></span>
+                                                        <span class="text-blue-400 ml-1.5">| CPF: <?= escapar($item['cpf']) ?></span>
                                                     <?php endif; ?>
                                                 </div>
                                             </td>
-                                            <td class="py-3 text-xs text-gray-300 truncate max-w-[150px]"><?= htmlspecialchars($item['perito'] ?: 'Não associado') ?></td>
-                                            <td class="py-3 text-right flex items-center justify-end gap-1.5">
+                                            <td class="sga-doctor py-3 text-xs text-gray-300 truncate max-w-[150px]"><?= escapar($item['perito'] ?: 'Não associado') ?></td>
+                                            <td class="sga-actions py-3 text-right flex items-center justify-end gap-1.5">
                                                 <?php if ($permite_checkin): ?>
                                                     <button type="button" onclick="confirmarChegada(<?= $item['id'] ?>)" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-2.5 py-1 rounded transition">
                                                         Confirmar Chegada
                                                     </button>
                                                 <?php endif; ?>
                                                 <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                                                    <button type="button" onclick="removerIndividual(<?= $item['id'] ?>)" class="bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
-                                                        Remover
+                                                    <button type="button" onclick="removerIndividual(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['status']) ?>)" class="bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
+                                                        <?= $item['status'] === 'agendado' ? 'Cancelar' : 'Desfazer presença' ?>
                                                     </button>
-                                                    <button type="button" onclick="iniciarEdicao(<?= $item['id'] ?>, '<?= htmlspecialchars(addslashes($item['nome'])) ?>', '<?= htmlspecialchars(addslashes($item['processo'])) ?>', '<?= htmlspecialchars(addslashes($item['perito'])) ?>', '<?= htmlspecialchars(addslashes($item['cpf'] ?? '')) ?>')" title="Editar dados" class="bg-gray-800 hover:bg-gray-750 text-gray-300 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
+                                                    <button type="button" onclick="iniciarEdicao(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['processo']) ?>, <?= jsValor($item['perito']) ?>, <?= jsValor($item['cpf'] ?? '') ?>)" aria-label="Editar agendamento de <?= escapar($item['nome']) ?>" title="Editar dados" class="bg-gray-800 hover:bg-gray-750 text-gray-300 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
                                                         ✏️
                                                     </button>
                                                 <?php endif; ?>
@@ -938,15 +297,15 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 </form>
 
                 <!-- Formulário oculto para envio de chegada individual -->
-                <form id="form-chegada-unica" method="POST" class="hidden">
+                <form id="form-chegada-unica" method="POST" class="hidden"><?= csrfCampo() ?>
                     <input type="hidden" name="action" value="confirmar_chegada">
                     <input type="hidden" name="id" id="chegada-id">
                 </form>
-                <form id="form-remover-unico" method="POST" class="hidden">
+                <form id="form-remover-unico" method="POST" class="hidden"><?= csrfCampo() ?>
                     <input type="hidden" name="action" value="remover">
                     <input type="hidden" name="id" id="remover-id">
                 </form>
-                <form id="form-limpar-pauta" method="POST" class="hidden">
+                <form id="form-limpar-pauta" method="POST" class="hidden"><?= csrfCampo() ?>
                     <input type="hidden" name="action" value="limpar_pauta_hoje">
                 </form>
             </div>
@@ -970,7 +329,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                 <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">
                                     <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
                                         <th class="pb-2 w-8">
-                                            <input type="checkbox" id="chk-select-all-presentes" class="rounded bg-gray-800 border-gray-700 text-emerald-500 focus:ring-0 focus:ring-offset-0">
+                                            <input type="checkbox" id="chk-select-all-presentes" aria-label="Selecionar pessoas na fila" class="rounded bg-gray-800 border-gray-700 text-emerald-500 focus:ring-0 focus:ring-offset-0">
                                         </th>
                                     <?php endif; ?>
                                     <th class="pb-2">Senha</th>
@@ -989,30 +348,30 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                     </tr>
                                 <?php else: ?>
                                     <?php foreach ($presentes as $item): ?>
-                                        <tr onclick="if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'BUTTON' && !event.target.closest('button') && !event.target.closest('a')) mostrarModalDetalhes({ nome: '<?= htmlspecialchars($item['nome'], ENT_QUOTES) ?>', cpf: '<?= htmlspecialchars($item['cpf'] ?? '---', ENT_QUOTES) ?>', processo: '<?= htmlspecialchars($item['processo'], ENT_QUOTES) ?>', perito: '<?= htmlspecialchars($item['perito'], ENT_QUOTES) ?>', data_pauta: '<?= date('d/m/Y', strtotime($item['data_pauta'])) ?>', status: '<?= $item['status'] ?>', chegada_em: '<?= $item['chegada_em'] ? date('H:i:s', strtotime($item['chegada_em'])) : '---' ?>' })" class="cursor-pointer hover:bg-gray-850/40 transition">
+                                        <tr data-nome="<?= escapar($item['nome']) ?>" onclick="if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'BUTTON' && !event.target.closest('button') && !event.target.closest('a')) mostrarModalDetalhes({ nome: <?= jsValor($item['nome']) ?>, cpf: <?= jsValor($item['cpf'] ?? '---') ?>, processo: <?= jsValor($item['processo']) ?>, perito: <?= jsValor($item['perito']) ?>, data_pauta: '<?= date('d/m/Y', strtotime($item['data_pauta'])) ?>', status: <?= jsValor($item['status']) ?>, chegada_em: '<?= $item['chegada_em'] ? date('H:i:s', strtotime($item['chegada_em'])) : '---' ?>' })" class="cursor-pointer hover:bg-gray-850/40 transition">
                                             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
                                                 <td class="py-3">
-                                                    <input type="checkbox" name="selecionados[]" value="<?= $item['id'] ?>" class="chk-presente-item rounded bg-gray-800 border-gray-700 text-emerald-500 focus:ring-0 focus:ring-offset-0">
+                                                    <input type="checkbox" name="selecionados[]" value="<?= $item['id'] ?>" aria-label="Selecionar <?= escapar($item['nome']) ?> na fila" class="chk-presente-item rounded bg-gray-800 border-gray-700 text-emerald-500 focus:ring-0 focus:ring-offset-0">
                                                 </td>
                                             <?php endif; ?>
-                                            <td class="py-3 font-mono font-bold text-blue-400"><?= htmlspecialchars($item['senha']) ?></td>
+                                            <td class="py-3 font-mono font-bold text-blue-400"><?= escapar($item['senha']) ?></td>
                                             <td class="py-3">
-                                                <div class="font-semibold text-white truncate max-w-[200px]"><?= htmlspecialchars($item['nome']) ?></div>
+                                                <div class="font-semibold text-white truncate max-w-[200px]"><?= escapar($item['nome']) ?></div>
                                                 <div class="text-[10px] text-gray-500 font-mono">
-                                                    <?= htmlspecialchars($item['processo'] ?: 'Sem processo') ?>
+                                                    <?= escapar($item['processo'] ?: 'Sem processo') ?>
                                                     <?php if (!empty($item['cpf'])): ?>
-                                                        <span class="text-emerald-400 ml-1.5">| CPF: <?= htmlspecialchars($item['cpf']) ?></span>
+                                                        <span class="text-emerald-400 ml-1.5">| CPF: <?= escapar($item['cpf']) ?></span>
                                                     <?php endif; ?>
                                                 </div>
                                             </td>
-                                            <td class="py-3 text-xs text-gray-300 truncate max-w-[120px]"><?= htmlspecialchars($item['perito'] ?: 'Não associado') ?></td>
+                                            <td class="py-3 text-xs text-gray-300 truncate max-w-[120px]"><?= escapar($item['perito'] ?: 'Não associado') ?></td>
                                             <td class="py-3 text-xs text-gray-400"><?= date('H:i:s', strtotime($item['chegada_em'])) ?></td>
                                             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
                                                 <td class="py-3 text-right flex items-center justify-end gap-1.5">
-                                                    <button type="button" onclick="removerIndividual(<?= $item['id'] ?>)" class="bg-gray-800 hover:bg-gray-750 text-gray-400 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
-                                                        Remover
+                                                    <button type="button" onclick="removerIndividual(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['status']) ?>)" class="bg-gray-800 hover:bg-gray-750 text-gray-400 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
+                                                        <?= $item['status'] === 'agendado' ? 'Cancelar' : 'Desfazer presença' ?>
                                                     </button>
-                                                    <button type="button" onclick="iniciarEdicao(<?= $item['id'] ?>, '<?= htmlspecialchars(addslashes($item['nome'])) ?>', '<?= htmlspecialchars(addslashes($item['processo'])) ?>', '<?= htmlspecialchars(addslashes($item['perito'])) ?>', '<?= htmlspecialchars(addslashes($item['cpf'] ?? '')) ?>')" title="Editar dados" class="bg-gray-800 hover:bg-gray-750 text-gray-300 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
+                                                    <button type="button" onclick="iniciarEdicao(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['processo']) ?>, <?= jsValor($item['perito']) ?>, <?= jsValor($item['cpf'] ?? '') ?>)" aria-label="Editar agendamento de <?= escapar($item['nome']) ?>" title="Editar dados" class="bg-gray-800 hover:bg-gray-750 text-gray-300 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
                                                         ✏️
                                                     </button>
                                                 </td>
@@ -1039,13 +398,13 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                             <?php foreach ($chamados as $item): ?>
                                 <div class="bg-gray-950/60 border border-gray-800 p-3 rounded-xl flex justify-between items-center">
                                     <div class="truncate flex-1 pr-2">
-                                        <div class="text-xs font-semibold text-white truncate"><?= htmlspecialchars($item['nome']) ?></div>
-                                        <div class="text-[10px] text-gray-400 truncate font-mono">Processo: <?= htmlspecialchars($item['processo']) ?></div>
-                                        <div class="text-[10px] text-gray-400 truncate">Perito: <?= htmlspecialchars($item['perito']) ?></div>
-                                        <div class="text-[10px] text-emerald-400 mt-0.5"><?= htmlspecialchars($item['sala']) ?></div>
+                                        <div class="text-xs font-semibold text-white truncate"><?= escapar($item['nome']) ?></div>
+                                        <div class="text-[10px] text-gray-400 truncate font-mono">Processo: <?= escapar($item['processo']) ?></div>
+                                        <div class="text-[10px] text-gray-400 truncate">Perito: <?= escapar($item['perito']) ?></div>
+                                        <div class="text-[10px] text-emerald-400 mt-0.5"><?= escapar($item['sala']) ?></div>
                                     </div>
                                     <div class="text-right">
-                                        <div class="text-sm font-black text-blue-400"><?= htmlspecialchars($item['senha']) ?></div>
+                                        <div class="text-sm font-black text-blue-400"><?= escapar($item['senha']) ?></div>
                                         <div class="text-[9px] text-gray-500"><?= date('H:i', strtotime($item['chamado_em'])) ?></div>
                                     </div>
                                 </div>
@@ -1064,12 +423,12 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                             <?php foreach ($concluidos as $item): ?>
                                 <div class="bg-gray-950/30 border border-gray-800/40 p-3 rounded-xl flex justify-between items-center opacity-70">
                                     <div class="truncate flex-1 pr-2">
-                                        <div class="text-xs font-semibold text-gray-300 truncate"><?= htmlspecialchars($item['nome']) ?></div>
-                                        <div class="text-[10px] text-gray-500 truncate">Perito: <?= htmlspecialchars($item['perito']) ?></div>
-                                        <div class="text-[10px] text-gray-500 mt-0.5"><?= htmlspecialchars($item['sala']) ?></div>
+                                        <div class="text-xs font-semibold text-gray-300 truncate"><?= escapar($item['nome']) ?></div>
+                                        <div class="text-[10px] text-gray-500 truncate">Perito: <?= escapar($item['perito']) ?></div>
+                                        <div class="text-[10px] text-gray-500 mt-0.5"><?= escapar($item['sala']) ?></div>
                                     </div>
                                     <div class="text-right">
-                                        <div class="text-sm font-bold text-gray-400"><?= htmlspecialchars($item['senha']) ?></div>
+                                        <div class="text-sm font-bold text-gray-400"><?= escapar($item['senha']) ?></div>
                                         <div class="text-[9px] text-gray-600 font-semibold">Fim: <?= date('H:i', strtotime($item['chamado_em'])) ?></div>
                                     </div>
                                 </div>
@@ -1084,7 +443,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
         <div class="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
             <h3 class="text-sm font-bold uppercase text-blue-500 tracking-wider mb-4">📝 Editar Periciado</h3>
             
-            <form method="POST" class="space-y-4">
+            <form method="POST" class="space-y-4"><?= csrfCampo() ?>
                 <input type="hidden" name="action" value="editar_atendimento">
                 <input type="hidden" name="id" id="edit-id">
                 
@@ -1119,12 +478,88 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
             </form>
         </div>
     </div>
+        <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
+        <!-- Sidebar de Operações (Importação e Cadastro Manual) -->
+        <div class="sga-operations space-y-6">
+            <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
+            <!-- Formulário de Importação de Arquivo -->
+            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
+                <h2 class="text-sm font-semibold uppercase text-blue-500 tracking-wider mb-4 flex items-center gap-2">
+                    <span>📄</span> Importar Pauta (Excel .xlsx)
+                </h2>
+                <form id="form-importar" method="POST" enctype="multipart/form-data" class="space-y-4"><?= csrfCampo() ?>
+                    <input type="hidden" name="action" value="importar_pdf">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Selecione o arquivo da Pauta (Excel .xlsx)</label>
+                        <input type="file" name="arquivo_pdf" accept=".xlsx" required class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white file:bg-gray-700 file:border-0 file:text-white file:text-xs file:font-semibold file:px-2.5 file:py-1 file:rounded file:mr-2 file:hover:bg-gray-600">
+                    </div>
+                    <button type="submit" id="btn-importar" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2">
+                        <span id="btn-importar-texto">Importar Dados</span>
+                    </button>
+                </form>
+            </div>
+            <?php endif; ?>
+
+            <datalist id="peritos-cadastrados">
+            <?php foreach ($pdo->query("SELECT nome FROM usuarios WHERE role='perito' AND nome IS NOT NULL ORDER BY nome")->fetchAll(PDO::FETCH_COLUMN) as $nomePerito): ?>
+                <option value="<?= escapar($nomePerito) ?>"></option>
+            <?php endforeach; ?>
+            </datalist>
+            <!-- Cadastro Manual de Periciados -->
+            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
+                <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider mb-4">Adicionar Periciado Manual</h2>
+                <form method="POST" class="space-y-4"><?= csrfCampo() ?>
+                    <input type="hidden" name="action" value="agendar_unico">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Nome do Periciado</label>
+                        <input type="text" name="nome" required maxlength="100" placeholder="Nome Completo" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Processo</label>
+                        <input type="text" name="processo" maxlength="50" placeholder="0000000-00.2026.4.05.8000" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">CPF do Periciado</label>
+                        <input type="text" name="cpf" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Nome do Perito</label>
+                        <input type="text" name="perito" required maxlength="100" list="peritos-cadastrados" placeholder="Nome do Médico/Perito" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <button type="submit" class="w-full bg-gray-800 hover:bg-gray-750 border border-gray-700 text-white text-xs font-semibold py-2.5 rounded-lg transition">
+                        Agendar
+                    </button>
+                </form>
+            </div>
+
+            <!-- Configuração do Vídeo da TV -->
+            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
+                <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider mb-4 flex items-center gap-2">
+                    <span>📺</span> Vídeo de Fundo da TV
+                </h2>
+                <form method="POST" class="space-y-4"><?= csrfCampo() ?>
+                    <input type="hidden" name="action" value="set_yt_url">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Link do Vídeo (YouTube)</label>
+                        <input type="url" name="yt_url" value="<?= escapar($yt_url) ?>" required placeholder="https://www.youtube.com/watch?v=..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2.5 rounded-lg transition">
+                        Atualizar Vídeo
+                    </button>
+                </form>
+                <p class="text-[10px] text-gray-500 mt-3 leading-normal">
+                    ⚠️ <strong>Nota:</strong> Certifique-se de usar um vídeo público do YouTube que permita reprodução incorporada (incorporação). Vídeos com restrições de idade ou proteção contra bots não carregarão no painel.
+                </p>
+            </div>
+        </div>
+        <?php endif; ?>
+
     </main>
 
-    <!-- Rodapé Flutuante Discreto -->
-    <div class="fixed bottom-2 right-4 text-[9px] text-gray-600 font-medium z-50 pointer-events-none">
+    <!-- Rodapé fora da área dos controles -->
+    <footer class="py-4 px-6 text-center text-xs text-gray-500">
         &copy; <?= date('Y') ?> - Desenvolvido pela DTI - Justiça Federal em Alagoas
-    </div>
+    </footer>
 
     <!-- Script JavaScript local para controle de seleção e filtro -->
     <script>
@@ -1162,7 +597,8 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 if (!this.checked) {
                     chkSelectAll.checked = false;
                 } else {
-                    const allChecked = document.querySelectorAll('.chk-item:checked').length === chkItems.length;
+                    const visiveis = [...chkItems].filter(c => c.closest('tr').style.display !== 'none');
+                    const allChecked = visiveis.length > 0 && visiveis.every(c => c.checked);
                     chkSelectAll.checked = allChecked;
                 }
                 toggleBulkDeleteButton();
@@ -1177,7 +613,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
 
         // Submete ação para limpar agendados do dia
         function limparPautaHoje() {
-            if (confirm('Tem certeza de que deseja limpar a pauta de hoje? Isso excluirá todos os periciados agendados que ainda não tiveram sua chegada confirmada.')) {
+            if (confirm('Cancelar todos os agendamentos pendentes desta data? Pessoas na fila ou em atendimento serão preservadas.')) {
                 document.getElementById('form-limpar-pauta').submit();
             }
         }
@@ -1187,11 +623,11 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
         if (filtroBusca) {
             filtroBusca.addEventListener('input', function() {
                 const query = this.value.toLowerCase().trim();
-                const queryClean = query.replace(/[^a-z0-9]/g, '');
+                const queryClean = query.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
                 
                 rows.forEach(row => {
                     const text = row.innerText.toLowerCase();
-                    const textClean = text.replace(/[^a-z0-9]/g, '');
+                    const textClean = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
                     
                     if (text.includes(query) || (queryClean && textClean.includes(queryClean))) {
                         row.style.display = '';
@@ -1204,6 +640,11 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 });
                 
                 toggleBulkDeleteButton();
+                const visiveis = [...rows].filter(r => r.style.display !== 'none');
+                const resultado = document.getElementById('busca-resultado');
+                resultado.textContent = query ? (visiveis.length ? `${visiveis.length} agendamento(s) encontrado(s).` : 'Nenhum agendamento encontrado. Confira a data ou limpe a busca.') : '';
+                resultado.classList.toggle('sga-empty-search', query.length > 0 && visiveis.length === 0);
+                if (chkSelectAll) { chkSelectAll.checked = false; chkSelectAll.indeterminate = false; }
 
                 // Busca em outras datas via AJAX
                 clearTimeout(timeoutBuscaOutroDia);
@@ -1220,16 +661,9 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                     data.forEach(item => {
                                         const div = document.createElement('div');
                                         div.className = 'bg-blue-900/30 border border-blue-800/40 p-2.5 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1.5';
-                                        div.innerHTML = `
-                                            <div>
-                                                <strong class="text-white font-bold">${item.nome}</strong>
-                                                <span class="text-blue-400 font-medium ml-1.5">| Perito: ${item.perito || 'Não associado'}</span>
-                                            </div>
-                                            <div class="flex items-center gap-2 text-[10px]">
-                                                <span class="bg-blue-950 text-blue-400 px-2 py-0.5 rounded font-bold uppercase">${item.status_formatado}</span>
-                                                <span class="bg-gray-800 text-gray-300 px-2 py-0.5 rounded font-mono font-bold">${item.data_pauta_formatada}</span>
-                                            </div>
-                                        `;
+                                        const texto = document.createElement('span');
+                                        texto.textContent = `${item.nome} | Perito: ${item.perito || 'Não associado'} | ${item.status_formatado} | ${item.data_pauta_formatada}`;
+                                        div.appendChild(texto);
                                         listaEl.appendChild(div);
                                     });
                                     alertaEl.classList.remove('hidden');
@@ -1249,6 +683,12 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
             });
         }
 
+        document.getElementById('limpar-busca')?.addEventListener('click', () => {
+            filtroBusca.value = ''; filtroBusca.dispatchEvent(new Event('input', {bubbles:true})); filtroBusca.focus();
+        });
+
+        filtroBusca?.addEventListener('keydown', event => { if (event.key === 'Enter') event.preventDefault(); });
+
         // Controle de seleção para a Fila de Espera (Presentes)
         const chkSelectAllPresentes = document.getElementById('chk-select-all-presentes');
         const chkPresentesItems = document.querySelectorAll('.chk-presente-item');
@@ -1264,7 +704,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
         if (chkSelectAllPresentes) {
             chkSelectAllPresentes.addEventListener('change', function() {
                 chkPresentesItems.forEach(chk => {
-                    chk.checked = this.checked;
+                    chk.checked = this.checked && chk.closest('tr').style.display !== 'none';
                 });
                 toggleBulkRemoverPresentesButton();
             });
@@ -1283,8 +723,9 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
         });
 
         // Remove individualmente da fila de espera e retorna para agendados
-        function removerIndividual(id) {
-            if (confirm('Deseja remover este periciado da fila de espera e retorná-lo para a lista de agendados?')) {
+        function removerIndividual(id, nome, status) {
+            const mensagem = status === 'agendado' ? `Cancelar o agendamento de ${nome}? O histórico será preservado.` : `Desfazer a presença de ${nome} e voltar para agendados?`;
+            if (confirm(mensagem)) {
                 document.getElementById('remover-id').value = id;
                 document.getElementById('form-remover-unico').submit();
             }
@@ -1429,5 +870,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
             </div>
         </div>
     </div>
+<script src="assets/acessibilidade.js" defer></script>
+<script src="assets/usabilidade.js" defer></script>
 </body>
 </html>

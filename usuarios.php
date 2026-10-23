@@ -10,7 +10,7 @@
  * - Exclusão de contas (impedindo o usuário atual de deletar a própria sessão).
  */
 
-session_start();
+
 require_once __DIR__ . '/banco.php';
 
 // Proteção de Acesso: Apenas administradores podem gerenciar perfis e senhas
@@ -19,143 +19,23 @@ if (!isset($_SESSION['usuario_id']) || $_SESSION['usuario_role'] !== 'admin') {
     exit;
 }
 
-// Forçar troca de senha de primeiro acesso
-if (isset($_SESSION['usuario_id'])) {
-    $checkStmt = $pdo->prepare("SELECT cpf, password, role FROM usuarios WHERE id = ?");
-    $checkStmt->execute([$_SESSION['usuario_id']]);
-    $uData = $checkStmt->fetch();
-    if ($uData) {
-        $pwdPadrao = '';
-        if ($uData['role'] === 'perito' && !empty($uData['cpf'])) {
-            $cpfLimpo = preg_replace('/\D/', '', $uData['cpf']);
-            if (strlen($cpfLimpo) === 11) {
-                $pwdPadrao = substr($cpfLimpo, 0, 6);
-            }
-        }
-        if ($pwdPadrao && password_verify($pwdPadrao, $uData['password'])) {
-            header("Location: alterar_senha_obrigatorio.php");
-            exit;
-        }
-    }
-}
-
 $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
 $message = '';
 $message_type = '';
 
 $current_user_id = $_SESSION['usuario_id'];
 
-// Processamento de Ações do Formulário (POST)
+require_once __DIR__ . '/usuarios_service.php';
+[$message,$message_type] = $_SESSION['flash_usuarios'] ?? ['', '']; unset($_SESSION['flash_usuarios']);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action'])) {
-        $action = $_POST['action'];
-        
-        // Ação 1: Cadastrar Novo Usuário
-        if ($action === 'cadastrar') {
-            $username = trim($_POST['username'] ?? '');
-            $password = $_POST['password'] ?? '';
-            $role = $_POST['role'] ?? 'recepcao';
-            $nome = trim($_POST['nome'] ?? '');
-            
-            if ($username && $password) {
-                try {
-                    // Impede duplicar o nome de usuário no banco de dados
-                    $stmt = $pdo->prepare("SELECT COUNT(*) FROM usuarios WHERE username = ?");
-                    $stmt->execute([$username]);
-                    if ($stmt->fetchColumn() > 0) {
-                        $message = "Nome de usuário '$username' já está cadastrado.";
-                        $message_type = "error";
-                    } else {
-                        // Aplica hash bcrypt nativo e insere o registro
-                        $hash = password_hash($password, PASSWORD_DEFAULT);
-                        $stmt = $pdo->prepare("INSERT INTO usuarios (username, password, role, nome) VALUES (?, ?, ?, ?)");
-                        $stmt->execute([$username, $hash, $role, $nome ?: null]);
-                        $message = "Usuário '$username' cadastrado com sucesso!";
-                        $message_type = "success";
-                    }
-                } catch (Exception $e) {
-                    $message = "Erro ao cadastrar: " . $e->getMessage();
-                    $message_type = "error";
-                }
-            } else {
-                $message = "Preencha todos os campos.";
-                $message_type = "error";
-            }
-        }
-        
-        // Ação 2: Editar Usuário Existente
-        elseif ($action === 'editar') {
-            $id = (int)($_POST['id'] ?? 0);
-            $username = trim($_POST['username'] ?? '');
-            $password = $_POST['password'] ?? '';
-            $role = $_POST['role'] ?? 'recepcao';
-            $nome = trim($_POST['nome'] ?? '');
-            
-            if ($id && $username) {
-                try {
-                    // Valida se o novo nome de usuário não está em uso por outra conta
-                    $stmt = $pdo->prepare("SELECT COUNT(*) FROM usuarios WHERE username = ? AND id != ?");
-                    $stmt->execute([$username, $id]);
-                    if ($stmt->fetchColumn() > 0) {
-                        $message = "Nome de usuário '$username' já está cadastrado para outra pessoa.";
-                        $message_type = "error";
-                    } else {
-                        // Se uma nova senha for informada, gera o hash e atualiza, senão mantém a senha atual
-                        if ($password) {
-                            $hash = password_hash($password, PASSWORD_DEFAULT);
-                            $stmt = $pdo->prepare("UPDATE usuarios SET username = ?, password = ?, role = ?, nome = ? WHERE id = ?");
-                            $stmt->execute([$username, $hash, $role, $nome ?: null, $id]);
-                        } else {
-                            $stmt = $pdo->prepare("UPDATE usuarios SET username = ?, role = ?, nome = ? WHERE id = ?");
-                            $stmt->execute([$username, $role, $nome ?: null, $id]);
-                        }
-                        
-                        // Atualiza os dados da sessão em tempo real se o usuário editado for a conta logada
-                        if ($id === $current_user_id) {
-                            $_SESSION['usuario_name'] = $username;
-                            $_SESSION['usuario_role'] = $role;
-                            $_SESSION['usuario_nome'] = $nome ?: $username;
-                        }
-                        
-                        $message = "Usuário '$username' atualizado com sucesso!";
-                        $message_type = "success";
-                    }
-                } catch (Exception $e) {
-                    $message = "Erro ao atualizar: " . $e->getMessage();
-                    $message_type = "error";
-                }
-            } else {
-                $message = "Preencha os campos obrigatórios.";
-                $message_type = "error";
-            }
-        }
-        
-        // Ação 3: Deletar Usuário
-        elseif ($action === 'deletar') {
-            $id = (int)($_POST['id'] ?? 0);
-            if ($id) {
-                // Impede que o usuário exclua a si mesmo
-                if ($id === $current_user_id) {
-                    $message = "Você não pode excluir sua própria conta enquanto estiver conectado!";
-                    $message_type = "error";
-                } else {
-                    try {
-                        $stmt = $pdo->prepare("DELETE FROM usuarios WHERE id = ?");
-                        $stmt->execute([$id]);
-                        $message = "Usuário removido com sucesso.";
-                        $message_type = "info";
-                    } catch (Exception $e) {
-                        $message = "Erro ao excluir: " . $e->getMessage();
-                        $message_type = "error";
-                    }
-                }
-            }
-        }
-    }
+    try { $message=operarUsuario($pdo,$_POST); $message_type='success'; }
+    catch (DomainException $e) { $message=$e->getMessage(); $message_type='error'; }
+    catch (Throwable $e) { $message=erroPublico($e); $message_type='error'; }
+    $_SESSION['flash_usuarios']=[$message,$message_type]; header('Location: usuarios.php',true,303); exit;
 }
 
 // Busca todos os usuários ordenados por ID para a listagem
-$stmt = $pdo->query("SELECT id, username, role, nome FROM usuarios ORDER BY id ASC");
+$stmt = $pdo->query("SELECT id, username, role, nome, must_change_password FROM usuarios ORDER BY id ASC");
 $usuarios = $stmt->fetchAll();
 ?>
 <!DOCTYPE html>
@@ -163,9 +43,10 @@ $usuarios = $stmt->fetchAll();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=device-width, initial-scale=1.0">
-    <title>Gerenciamento de Perfis e Senhas - <?= htmlspecialchars($sys_name) ?></title>
+    <title>Gerenciamento de Perfis e Senhas - <?= escapar($sys_name) ?></title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="assets/tailwind.css">
+    <link rel="stylesheet" href="assets/usabilidade.css">
     <script src="tema.js"></script>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
@@ -180,7 +61,7 @@ $usuarios = $stmt->fetchAll();
                 </div>
             </a>
             <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
-                <?= htmlspecialchars(ucfirst($_SESSION['usuario_role'])) ?>
+                <?= escapar(ucfirst($_SESSION['usuario_role'])) ?>
             </span>
         </div>
         <div class="flex items-center space-x-3">
@@ -204,8 +85,8 @@ $usuarios = $stmt->fetchAll();
                 <a href="usuarios.php" class="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-900/60 bg-indigo-950/30 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
             <?php endif; ?>
 
-            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= htmlspecialchars($_SESSION['usuario_name']) ?></strong></span>
-            <a href="logout.php" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</a>
+            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
+            <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
 
@@ -213,8 +94,8 @@ $usuarios = $stmt->fetchAll();
         <!-- Formulário Lateral para Cadastro e Edição -->
         <div class="md:col-span-1 space-y-6">
             <?php if ($message): ?>
-                <div class="p-3 rounded-lg border text-xs text-center font-medium <?= $message_type === 'success' ? 'bg-green-950/40 border-green-900/80 text-green-300' : ($message_type === 'info' ? 'bg-blue-950/40 border-blue-900/80 text-blue-300' : 'bg-red-950/40 border-red-900/80 text-red-300') ?>">
-                    <?= htmlspecialchars($message) ?>
+                <div role="status" aria-live="polite" class="sga-feedback p-3 rounded-lg border text-xs text-center font-medium <?= $message_type === 'success' ? 'bg-green-950/40 border-green-900/80 text-green-300' : ($message_type === 'info' ? 'bg-blue-950/40 border-blue-900/80 text-blue-300' : 'bg-red-950/40 border-red-900/80 text-red-300') ?>">
+                    <?= escapar($message) ?>
                 </div>
             <?php endif; ?>
 
@@ -224,7 +105,7 @@ $usuarios = $stmt->fetchAll();
                     🆕 Cadastrar Novo Usuário
                 </h2>
                 
-                <form method="POST" id="user-form" class="space-y-4">
+                <form method="POST" id="user-form" class="space-y-4"><?= csrfCampo() ?>
                     <input type="hidden" name="action" id="form-action" value="cadastrar">
                     <input type="hidden" name="id" id="user-id" value="">
                     
@@ -236,7 +117,7 @@ $usuarios = $stmt->fetchAll();
                     <div>
                         <label class="block text-xs text-gray-400 mb-1 font-semibold uppercase">Nome Completo</label>
                         <input type="text" name="nome" id="form-nome" placeholder="Ex: GEORGE ALVES CORDEIRO JUNIOR" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
-                        <span class="text-[10px] text-gray-500 mt-1 block">Para peritos, deve ser idêntico ao nome da pauta importada.</span>
+                        <span class="text-[10px] text-gray-500 mt-1 block">A pauta usa vínculo interno do profissional. Confira o nome e CPF na importação.</span>
                     </div>
                     
                     <div>
@@ -295,8 +176,8 @@ $usuarios = $stmt->fetchAll();
                             <?php foreach ($usuarios as $u): ?>
                                 <tr>
                                     <td class="py-3 font-mono text-xs text-gray-500"><?= $u['id'] ?></td>
-                                    <td class="py-3 font-bold text-white"><?= htmlspecialchars($u['username']) ?></td>
-                                    <td class="py-3 text-gray-300"><?= htmlspecialchars($u['nome'] ?? '') ?></td>
+                                    <td class="py-3 font-bold text-white"><?= escapar($u['username']) ?><?php if ($u['must_change_password']): ?><span class="block text-xs">Ativação / troca de senha pendente</span><?php endif; ?></td>
+                                    <td class="py-3 text-gray-300"><?= escapar($u['nome'] ?? '') ?></td>
                                     <td class="py-3">
                                         <?php if ($u['role'] === 'admin'): ?>
                                             <span class="bg-blue-950 text-blue-400 text-[10px] px-2.5 py-0.5 rounded-full border border-blue-900/50 uppercase font-semibold">Administrador</span>
@@ -310,10 +191,10 @@ $usuarios = $stmt->fetchAll();
                                     </td>
                                     <td class="py-3 text-right">
                                         <div class="flex justify-end gap-2">
-                                            <button onclick="editUser(<?= $u['id'] ?>, '<?= htmlspecialchars($u['username'], ENT_QUOTES) ?>', '<?= htmlspecialchars($u['nome'] ?? '', ENT_QUOTES) ?>', '<?= $u['role'] ?>')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold px-2.5 py-1 rounded transition border border-gray-750">
+                                            <button onclick="editUser(<?= $u['id'] ?>, <?= jsValor($u['username']) ?>, <?= jsValor($u['nome'] ?? '') ?>, <?= jsValor($u['role']) ?>)" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold px-2.5 py-1 rounded transition border border-gray-750">
                                                 Editar
                                             </button>
-                                            <form method="POST" class="inline" onsubmit="return confirm('Deseja excluir este usuário?');">
+                                            <form method="POST" class="inline" onsubmit="return confirm('Deseja excluir este usuário?');"><?= csrfCampo() ?>
                                                 <input type="hidden" name="action" value="deletar">
                                                 <input type="hidden" name="id" value="<?= $u['id'] ?>">
                                                 <button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-2.5 py-1 rounded transition">
@@ -400,5 +281,7 @@ $usuarios = $stmt->fetchAll();
             });
         }
     </script>
+<script src="assets/acessibilidade.js" defer></script>
+<script src="assets/usabilidade.js" defer></script>
 </body>
 </html>

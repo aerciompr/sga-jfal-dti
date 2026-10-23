@@ -6,33 +6,13 @@
  * completo de atendimentos e o Log Geral de Auditoria de Ações do sistema.
  */
 
-session_start();
+
 require_once __DIR__ . '/banco.php';
 
 // Proteção de Acesso: Apenas administradores e supervisores podem auditar os dados
 if (!isset($_SESSION['usuario_id']) || !in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])) {
     header("Location: dashboard.php");
     exit;
-}
-
-// Verificação de Segurança: Forçar troca de senha de primeiro acesso
-if (isset($_SESSION['usuario_id'])) {
-    $checkStmt = $pdo->prepare("SELECT cpf, password, role FROM usuarios WHERE id = ?");
-    $checkStmt->execute([$_SESSION['usuario_id']]);
-    $uData = $checkStmt->fetch();
-    if ($uData) {
-        $pwdPadrao = '';
-        if ($uData['role'] === 'perito' && !empty($uData['cpf'])) {
-            $cpfLimpo = preg_replace('/\D/', '', $uData['cpf']);
-            if (strlen($cpfLimpo) === 11) {
-                $pwdPadrao = substr($cpfLimpo, 0, 6);
-            }
-        }
-        if ($pwdPadrao && password_verify($pwdPadrao, $uData['password'])) {
-            header("Location: alterar_senha_obrigatorio.php");
-            exit;
-        }
-    }
 }
 
 $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
@@ -76,11 +56,11 @@ if ($filtro_sala) {
 // Filtro por Atraso de Espera (SLA)
 if ($filtro_atraso) {
     if ($filtro_atraso === '15') {
-        $sql .= " AND (chamado_em IS NOT NULL AND TIMESTAMPDIFF(MINUTE, chegada_em, chamado_em) > 15)";
+        $sql .= " AND (chamado_em IS NOT NULL AND TIMESTAMPDIFF(MINUTE, chegada_em, COALESCE(primeira_chamada_em, chamado_em)) > 15)";
     } elseif ($filtro_atraso === '30') {
-        $sql .= " AND (chamado_em IS NOT NULL AND TIMESTAMPDIFF(MINUTE, chegada_em, chamado_em) > 30)";
+        $sql .= " AND (chamado_em IS NOT NULL AND TIMESTAMPDIFF(MINUTE, chegada_em, COALESCE(primeira_chamada_em, chamado_em)) > 30)";
     } elseif ($filtro_atraso === '60') {
-        $sql .= " AND (chamado_em IS NOT NULL AND TIMESTAMPDIFF(MINUTE, chegada_em, chamado_em) > 60)";
+        $sql .= " AND (chamado_em IS NOT NULL AND TIMESTAMPDIFF(MINUTE, chegada_em, COALESCE(primeira_chamada_em, chamado_em)) > 60)";
     }
 }
 
@@ -94,7 +74,7 @@ if ($busca !== '') {
 if ($ordenacao === 'chegada_asc') {
     $sql .= " ORDER BY chegada_em ASC, id ASC";
 } elseif ($ordenacao === 'espera_desc') {
-    $sql .= " ORDER BY TIMESTAMPDIFF(SECOND, chegada_em, COALESCE(chamado_em, CURRENT_TIMESTAMP)) DESC, id DESC";
+    $sql .= " ORDER BY TIMESTAMPDIFF(SECOND, chegada_em, COALESCE(primeira_chamada_em, chamado_em, CURRENT_TIMESTAMP)) DESC, id DESC";
 } elseif ($ordenacao === 'duracao_desc') {
     $sql .= " ORDER BY TIMESTAMPDIFF(SECOND, iniciado_em, finalizado_em) DESC, id DESC";
 } elseif ($ordenacao === 'nome_asc') {
@@ -104,98 +84,39 @@ if ($ordenacao === 'chegada_asc') {
     $sql .= " ORDER BY chegada_em DESC, id DESC";
 }
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$atendimentos = $stmt->fetchAll();
-
-// Consulta de Logs de Auditoria Filtrada
-$logs_auditoria_lista = [];
-if ($aba === 'logs') {
-    $sqlLogs = "SELECT * FROM logs_auditoria WHERE DATE(criado_em) >= ? AND DATE(criado_em) <= ?";
-    $paramsLogs = [$data_inicio, $data_fim];
-    
-    if ($busca !== '') {
-        $sqlLogs .= " AND (usuario_nome LIKE ? OR acao LIKE ? OR detalhes LIKE ?)";
-        $paramsLogs[] = "%$busca%";
-        $paramsLogs[] = "%$busca%";
-        $paramsLogs[] = "%$busca%";
-    }
-    $sqlLogs .= " ORDER BY id DESC LIMIT 500";
-    $stmtLogs = $pdo->prepare($sqlLogs);
-    $stmtLogs->execute($paramsLogs);
-    $logs_auditoria_lista = $stmtLogs->fetchAll();
+$exportar = ($_GET['action'] ?? '') === 'exportar';
+$pagina = max(1, (int)($_GET['pagina'] ?? 1)); $porPagina = 100;
+$from = preg_replace('/ ORDER BY.*$/s', '', substr($sql, strpos($sql, 'FROM')));
+$agregado = $pdo->prepare("SELECT COUNT(*) total, SUM(chegada_em IS NOT NULL) chegadas, SUM(primeira_chamada_em IS NOT NULL OR chamado_em IS NOT NULL) chamadas, AVG(CASE WHEN chegada_em IS NOT NULL AND COALESCE(primeira_chamada_em,chamado_em) >= chegada_em THEN TIMESTAMPDIFF(SECOND,chegada_em,COALESCE(primeira_chamada_em,chamado_em)) END) espera, AVG(CASE WHEN finalizado_em >= iniciado_em THEN TIMESTAMPDIFF(SECOND,iniciado_em,finalizado_em) END) duracao " . $from);
+$agregado->execute($params); $resumoFiltro = $agregado->fetch();
+$totalRegistros=(int)$resumoFiltro['total'];
+$sqlLogs = 'SELECT * FROM logs_auditoria WHERE criado_em >= ? AND criado_em < DATE_ADD(?, INTERVAL 1 DAY)';
+$paramsLogs = [$data_inicio, $data_fim];
+if ($busca !== '') { $sqlLogs .= ' AND (usuario_nome LIKE ? OR acao LIKE ? OR detalhes LIKE ?)'; $paramsLogs=array_merge($paramsLogs,["%$busca%","%$busca%","%$busca%"]); }
+$sqlLogs .= ' ORDER BY id DESC';
+if ($exportar) {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename=sga_auditoria_' . date('Ymd_His') . '.csv');
+    $out=fopen('php://output','w'); fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
+    $pdo->setAttribute(Pdo\Mysql::ATTR_USE_BUFFERED_QUERY,false);
+    $exp=$pdo->prepare($aba==='logs' ? $sqlLogs : $sql); $exp->execute($aba==='logs' ? $paramsLogs : $params);
+    $campos=$aba==='logs' ? ['id','criado_em','usuario_nome','acao','detalhes','request_id'] : ['id','senha','nome','processo','perito','sala','status','data_pauta','chegada_em','primeira_chamada_em','chamado_em','iniciado_em','finalizado_em','chamadas_count'];
+    csvSeguro($out,$campos);
+    while ($row=$exp->fetch()) csvSeguro($out,array_map(static fn($c)=>$row[$c]??'', $campos));
+    fclose($out); exit;
 }
-
-// Pré-carrega de forma otimizada os logs vinculados aos atendimentos visíveis (Ciclo de Vida)
-$logs_por_atendimento = [];
-if ($aba === 'atendimentos' && !empty($atendimentos)) {
-    $atendimento_ids = array_column($atendimentos, 'id');
-    if (!empty($atendimento_ids)) {
-        $in_clause = implode(',', array_map('intval', $atendimento_ids));
-        try {
-            $stmtLogsLink = $pdo->query("SELECT * FROM logs_auditoria WHERE atendimento_id IN ($in_clause) ORDER BY id ASC");
-            while ($l = $stmtLogsLink->fetch()) {
-                $logs_por_atendimento[$l['atendimento_id']][] = $l;
-            }
-        } catch (PDOException $e) {}
-    }
+$totalPagina=$totalRegistros;
+if ($aba==='logs') {
+    $cnt=$pdo->prepare(preg_replace('/SELECT \* /','SELECT COUNT(*) ',preg_replace('/ ORDER BY.*$/s','',$sqlLogs),1)); $cnt->execute($paramsLogs); $totalPagina=(int)$cnt->fetchColumn();
 }
-
-// Ação: EXPORTAÇÃO PARA PLANILHA CSV
-if (isset($_GET['action']) && $_GET['action'] === 'exportar') {
-    if ($aba === 'atendimentos') {
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename=auditoria_atendimentos_' . date('Ymd_His') . '.csv');
-        $output = fopen('php://output', 'w');
-        fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
-        
-        fputcsv($output, ['ID', 'Senha', 'Paciente', 'Processo', 'Perito', 'Sala', 'Status', 'Data Pauta', 'Chegada', 'Chamada', 'Início Perícia', 'Fim Perícia', 'Duração', 'Chamadas TV']);
-        foreach ($atendimentos as $row) {
-            $duracao = '---';
-            if (!empty($row['iniciado_em']) && !empty($row['finalizado_em'])) {
-                $diff = strtotime($row['finalizado_em']) - strtotime($row['iniciado_em']);
-                if ($diff >= 0) {
-                    $duracao = floor($diff / 60) . 'm ' . ($diff % 60) . 's';
-                }
-            }
-            fputcsv($output, [
-                $row['id'],
-                $row['senha'],
-                $row['nome'] ?: 'N/A',
-                $row['processo'] ?: 'N/A',
-                $row['perito'] ?: 'N/A',
-                $row['sala'] ?: 'N/A',
-                ucfirst($row['status']),
-                $row['data_pauta'],
-                $row['chegada_em'] ?: 'Não confirmada',
-                $row['chamado_em'] ?: 'Não chamado',
-                $row['iniciado_em'] ?: '---',
-                $row['finalizado_em'] ?: '---',
-                $duracao,
-                $row['chamadas_count']
-            ]);
-        }
-        fclose($output);
-        exit;
-    } else {
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename=auditoria_logs_acoes_' . date('Ymd_His') . '.csv');
-        $output = fopen('php://output', 'w');
-        fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
-        
-        fputcsv($output, ['ID', 'Data/Hora', 'Operador/Usuário', 'Ação', 'Detalhes Adicionais']);
-        foreach ($logs_auditoria_lista as $row) {
-            fputcsv($output, [
-                $row['id'],
-                date('d/m/Y H:i:s', strtotime($row['criado_em'])),
-                $row['usuario_nome'],
-                $row['acao'],
-                $row['detalhes']
-            ]);
-        }
-        fclose($output);
-        exit;
-    }
+$pagina=min($pagina,max(1,(int)ceil($totalPagina/$porPagina))); $offset=($pagina-1)*$porPagina;
+$stmt=$pdo->prepare($sql . " LIMIT $porPagina OFFSET $offset"); $stmt->execute($params); $atendimentos=$stmt->fetchAll();
+$logs_auditoria_lista=[];
+if ($aba==='logs') { $stmt=$pdo->prepare($sqlLogs . " LIMIT $porPagina OFFSET $offset"); $stmt->execute($paramsLogs); $logs_auditoria_lista=$stmt->fetchAll(); }
+$logs_por_atendimento=[];
+if ($aba==='atendimentos' && $atendimentos) {
+    $ids=implode(',',array_map('intval',array_column($atendimentos,'id')));
+    foreach ($pdo->query("SELECT * FROM logs_auditoria WHERE atendimento_id IN ($ids) ORDER BY id") as $log) $logs_por_atendimento[$log['atendimento_id']][]=$log;
 }
 
 // Estatísticas Rápidas de SLA (Calculadas sobre o filtro)
@@ -217,7 +138,7 @@ foreach ($atendimentos as $row) {
     // SLA de Espera (Chegada até Chamada)
     if (!empty($row['chegada_em']) && !empty($row['chamado_em'])) {
         $t_chegada = strtotime($row['chegada_em']);
-        $t_chamada = strtotime($row['chamado_em']);
+        $t_chamada = strtotime($row['primeira_chamada_em'] ?: $row['chamado_em']);
         if ($t_chamada >= $t_chegada) {
             $soma_espera += ($t_chamada - $t_chegada);
             $total_espera_validos++;
@@ -248,6 +169,10 @@ if ($total_pericia_validos > 0) {
 }
 
 // Dropdowns de filtros dinâmicos
+// Cards sempre usam o filtro inteiro, independentemente da página exibida.
+$total_chegadas=(int)$resumoFiltro['chegadas']; $total_chamadas=(int)$resumoFiltro['chamadas'];
+$tempo_medio_espera_txt=$resumoFiltro['espera']===null ? '---' : round((float)$resumoFiltro['espera']/60,1).' min';
+$tempo_medio_pericia_txt=$resumoFiltro['duracao']===null ? '---' : round((float)$resumoFiltro['duracao']/60,1).' min';
 $peritos_lista = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE perito IS NOT NULL AND perito != '' ORDER BY perito ASC")->fetchAll(PDO::FETCH_COLUMN);
 $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS NOT NULL AND sala != '' ORDER BY sala ASC")->fetchAll(PDO::FETCH_COLUMN);
 ?>
@@ -256,9 +181,10 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Auditoria Geral - <?= htmlspecialchars($sys_name) ?></title>
+    <title>Auditoria Geral - <?= escapar($sys_name) ?></title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="assets/tailwind.css">
+    <link rel="stylesheet" href="assets/usabilidade.css">
     <script src="tema.js"></script>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
@@ -273,7 +199,7 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
                 </div>
             </a>
             <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
-                <?= htmlspecialchars(ucfirst($_SESSION['usuario_role'])) ?>
+                <?= escapar(ucfirst($_SESSION['usuario_role'])) ?>
             </span>
         </div>
         <div class="flex items-center space-x-3">
@@ -297,8 +223,8 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
                 <a href="usuarios.php" class="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-900/60 bg-indigo-950/30 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
             <?php endif; ?>
 
-            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= htmlspecialchars($_SESSION['usuario_name']) ?></strong></span>
-            <a href="logout.php" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</a>
+            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
+            <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
 
@@ -309,7 +235,7 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
                 <p class="text-xs text-gray-400">Histórico de pautas, tempo de espera na recepção, duração de perícias e log geral de ações.</p>
             </div>
             
-            <a href="?action=exportar&<?= http_build_query($_GET) ?>" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow transition flex items-center gap-2">
+            <a href="?<?= escapar(http_build_query(array_merge($_GET,['action'=>'exportar']))) ?>" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow transition flex items-center gap-2">
                 📥 Exportar Planilha (CSV)
             </a>
         </div>
@@ -317,25 +243,25 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
         <!-- Painel de Filtros Avançados -->
         <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
             <form method="GET" class="space-y-4">
-                <input type="hidden" name="aba" value="<?= htmlspecialchars($aba) ?>">
+                <input type="hidden" name="aba" value="<?= escapar($aba) ?>">
                 
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <!-- Data Início -->
                     <div>
                         <label class="block text-[10px] text-gray-400 mb-1 font-bold uppercase tracking-wider">Data Inicial</label>
-                        <input type="date" name="data_inicio" value="<?= htmlspecialchars($data_inicio) ?>" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 font-mono">
+                        <input type="date" name="data_inicio" value="<?= escapar($data_inicio) ?>" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 font-mono">
                     </div>
                     
                     <!-- Data Fim -->
                     <div>
                         <label class="block text-[10px] text-gray-400 mb-1 font-bold uppercase tracking-wider">Data Final</label>
-                        <input type="date" name="data_fim" value="<?= htmlspecialchars($data_fim) ?>" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 font-mono">
+                        <input type="date" name="data_fim" value="<?= escapar($data_fim) ?>" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 font-mono">
                     </div>
                     
                     <!-- Busca Livre -->
                     <div class="md:col-span-2">
                         <label class="block text-[10px] text-gray-400 mb-1 font-bold uppercase tracking-wider">Busca Livre (Nome/Processo/Ação)</label>
-                        <input type="text" name="busca" value="<?= htmlspecialchars($busca) ?>" placeholder="<?= $aba === 'logs' ? 'Digite a ação ou operador do log...' : 'Digite o nome do paciente, processo ou perito...' ?>" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
+                        <input type="text" name="busca" value="<?= escapar($busca) ?>" placeholder="<?= $aba === 'logs' ? 'Digite a ação ou operador do log...' : 'Digite o nome do paciente, processo ou perito...' ?>" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
                     </div>
                 </div>
 
@@ -347,8 +273,8 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
                             <select name="perito" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
                                 <option value="">-- Todos --</option>
                                 <?php foreach ($peritos_lista as $p): ?>
-                                    <option value="<?= htmlspecialchars($p) ?>" <?= $filtro_perito === $p ? 'selected' : '' ?>>
-                                        <?= htmlspecialchars($p) ?>
+                                    <option value="<?= escapar($p) ?>" <?= $filtro_perito === $p ? 'selected' : '' ?>>
+                                        <?= escapar($p) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -372,8 +298,8 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
                             <select name="sala" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
                                 <option value="">-- Todas --</option>
                                 <?php foreach ($salas_lista as $s): ?>
-                                    <option value="<?= htmlspecialchars($s) ?>" <?= $filtro_sala === $s ? 'selected' : '' ?>>
-                                        <?= htmlspecialchars($s) ?>
+                                    <option value="<?= escapar($s) ?>" <?= $filtro_sala === $s ? 'selected' : '' ?>>
+                                        <?= escapar($s) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -443,17 +369,17 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
 
             <div class="bg-gray-900 p-5 rounded-2xl border border-gray-800 shadow-xl">
                 <div class="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Registros Filtrados</div>
-                <div class="text-2xl font-black text-white mt-1"><?= count($atendimentos) ?></div>
+                <div class="text-2xl font-black text-white mt-1"><?= $totalRegistros ?></div>
                 <div class="text-[9px] text-gray-500 mt-1">Total de registros no período selecionado.</div>
             </div>
         </div>
 
         <!-- Seletor de Abas de Auditoria -->
         <div class="flex border-b border-gray-850 gap-2">
-            <a href="?aba=atendimentos&data_inicio=<?= $data_inicio ?>&data_fim=<?= $data_fim ?>&perito=<?= $filtro_perito ?>&status=<?= $filtro_status ?>&sala=<?= $filtro_sala ?>&atraso=<?= $filtro_atraso ?>&ordenacao=<?= $ordenacao ?>&busca=<?= urlencode($busca) ?>" class="px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition <?= $aba === 'atendimentos' ? 'border-blue-500 text-blue-400 bg-gray-900/40' : 'border-transparent text-gray-500 hover:text-gray-300' ?>">
+            <a href="?<?= escapar(http_build_query(array_merge($_GET,['aba'=>'atendimentos','pagina'=>1]))) ?>" class="px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition <?= $aba === 'atendimentos' ? 'border-blue-500 text-blue-400 bg-gray-900/40' : 'border-transparent text-gray-500 hover:text-gray-300' ?>">
                 📋 Histórico de Atendimentos
             </a>
-            <a href="?aba=logs&data_inicio=<?= $data_inicio ?>&data_fim=<?= $data_fim ?>&busca=<?= urlencode($busca) ?>" class="px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition <?= $aba === 'logs' ? 'border-blue-500 text-blue-400 bg-gray-900/40' : 'border-transparent text-gray-500 hover:text-gray-300' ?>">
+            <a href="?<?= escapar(http_build_query(array_merge($_GET,['aba'=>'logs','pagina'=>1]))) ?>" class="px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition <?= $aba === 'logs' ? 'border-blue-500 text-blue-400 bg-gray-900/40' : 'border-transparent text-gray-500 hover:text-gray-300' ?>">
                 🛡️ Log Geral de Ações
             </a>
         </div>
@@ -467,7 +393,7 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
                         <span class="text-[10px] text-blue-400 font-medium block mt-1">💡 Dica: Clique na linha do paciente para ver a Timeline de Auditoria individual.</span>
                     </div>
                     <span class="text-xs bg-gray-850 border border-gray-700 text-gray-300 py-1 px-3 rounded-full font-bold">
-                        Total: <?= count($atendimentos) ?> registros
+                        Total: <?= $totalRegistros ?> registros no filtro
                     </span>
                 </div>
 
@@ -510,22 +436,22 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
                                     <!-- Linha Principal Clickável -->
                                     <tr onclick="toggleTimeline(<?= $row['id'] ?>)" class="hover:bg-gray-850/50 cursor-pointer transition select-none">
                                         <!-- Senha -->
-                                        <td class="py-4 px-4 font-mono font-bold text-blue-400 text-center text-sm"><?= htmlspecialchars($row['senha'] ?: '---') ?></td>
+                                        <td class="py-4 px-4 font-mono font-bold text-blue-400 text-center text-sm"><?= escapar($row['senha'] ?: '---') ?></td>
                                         
                                         <!-- Paciente e Processo -->
                                         <td class="py-4 px-4">
                                             <div class="font-bold text-white flex items-center gap-1.5">
-                                                <span><?= htmlspecialchars($row['nome'] ?: 'N/A') ?></span>
+                                                <span><?= escapar($row['nome'] ?: 'N/A') ?></span>
                                                 <span class="text-[9px] text-gray-500 font-semibold" title="Clique para detalhes">🔍</span>
                                             </div>
-                                            <div class="text-[9px] text-gray-500 font-mono mt-0.5"><?= htmlspecialchars($row['processo'] ?: 'Sem processo') ?></div>
+                                            <div class="text-[9px] text-gray-500 font-mono mt-0.5"><?= escapar($row['processo'] ?: 'Sem processo') ?></div>
                                         </td>
                                         
                                         <!-- Perito -->
-                                        <td class="py-4 px-4 text-gray-300 font-medium truncate max-w-[130px]" title="<?= htmlspecialchars($row['perito']) ?>"><?= htmlspecialchars($row['perito'] ?: 'N/A') ?></td>
+                                        <td class="py-4 px-4 text-gray-300 font-medium truncate max-w-[130px]" title="<?= escapar($row['perito']) ?>"><?= escapar($row['perito'] ?: 'N/A') ?></td>
                                         
                                         <!-- Sala -->
-                                        <td class="py-4 px-4 text-gray-300 font-semibold text-center"><?= htmlspecialchars($row['sala'] ?: '---') ?></td>
+                                        <td class="py-4 px-4 text-gray-300 font-semibold text-center"><?= escapar($row['sala'] ?: '---') ?></td>
                                         
                                         <!-- Status -->
                                         <td class="py-4 px-4 text-center">
@@ -591,11 +517,11 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
                                                                 <div class="absolute -left-1.5 mt-1 h-2.5 w-2.5 rounded-full <?= $bullet_color ?> border border-gray-900"></div>
                                                                 
                                                                 <div class="flex items-center justify-between text-xs">
-                                                                    <span class="font-bold text-gray-200 uppercase text-[10px] tracking-wide"><?= htmlspecialchars($evt['acao']) ?></span>
+                                                                    <span class="font-bold text-gray-200 uppercase text-[10px] tracking-wide"><?= escapar($evt['acao']) ?></span>
                                                                     <span class="text-[9px] text-gray-500 font-mono"><?= date('d/m/Y H:i:s', strtotime($evt['criado_em'])) ?></span>
                                                                 </div>
-                                                                <p class="text-[11px] text-gray-400 mt-0.5"><?= htmlspecialchars($evt['detalhes']) ?></p>
-                                                                <span class="text-[9px] text-gray-600 block mt-0.5">Operador: <strong class="text-gray-500"><?= htmlspecialchars($evt['usuario_nome']) ?></strong></span>
+                                                                <p class="text-[11px] text-gray-400 mt-0.5"><?= escapar($evt['detalhes']) ?></p>
+                                                                <span class="text-[9px] text-gray-600 block mt-0.5">Operador: <strong class="text-gray-500"><?= escapar($evt['usuario_nome']) ?></strong></span>
                                                             </div>
                                                         <?php endforeach; ?>
                                                     <?php endif; ?>
@@ -615,7 +541,7 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
                 <div class="p-6 border-b border-gray-850 flex justify-between items-center bg-gray-900/50">
                     <h3 class="text-xs font-bold uppercase text-gray-400 tracking-wider">Log de Atividades do Sistema</h3>
                     <span class="text-xs bg-gray-850 border border-gray-700 text-gray-300 py-1 px-3 rounded-full font-bold">
-                        Mostrando últimos <?= count($logs_auditoria_lista) ?> logs
+                        Página <?= $pagina ?> — <?= count($logs_auditoria_lista) ?> logs de <?= $totalPagina ?>
                     </span>
                 </div>
 
@@ -641,7 +567,7 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
                                         <td class="py-4 px-6 text-gray-400 font-mono w-[150px]"><?= date('d/m/Y H:i:s', strtotime($log['criado_em'])) ?></td>
                                         
                                         <!-- Operador -->
-                                        <td class="py-4 px-6 font-semibold text-white w-[180px]"><?= htmlspecialchars($log['usuario_nome']) ?></td>
+                                        <td class="py-4 px-6 font-semibold text-white w-[180px]"><?= escapar($log['usuario_nome']) ?></td>
                                         
                                         <!-- Ação (Badge Colorido) -->
                                         <td class="py-4 px-6 w-[180px]">
@@ -658,13 +584,13 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
                                             } elseif ($ac === 'Login') {
                                                 echo '<span class="bg-violet-950 text-violet-400 text-[9px] px-2.5 py-0.5 rounded-full border border-violet-900/50 uppercase font-bold tracking-wider">Login</span>';
                                             } else {
-                                                echo '<span class="bg-gray-800 text-gray-300 text-[9px] px-2.5 py-0.5 rounded-full border border-gray-700 uppercase font-bold tracking-wider">' . htmlspecialchars($ac) . '</span>';
+                                                echo '<span class="bg-gray-800 text-gray-300 text-[9px] px-2.5 py-0.5 rounded-full border border-gray-700 uppercase font-bold tracking-wider">' . escapar($ac) . '</span>';
                                             }
                                             ?>
                                         </td>
 
                                         <!-- Detalhes -->
-                                        <td class="py-4 px-6 text-gray-300 leading-normal" title="<?= htmlspecialchars($log['detalhes']) ?>"><?= htmlspecialchars($log['detalhes']) ?></td>
+                                        <td class="py-4 px-6 text-gray-300 leading-normal" title="<?= escapar($log['detalhes']) ?>"><?= escapar($log['detalhes']) ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
@@ -673,6 +599,12 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
                 </div>
             </div>
         <?php endif; ?>
+        <nav aria-label="Paginação da auditoria" class="flex gap-4 py-4">
+            <span>Página <?= $pagina ?> de <?= max(1,(int)ceil($totalPagina/$porPagina)) ?></span>
+            <?php foreach (['Anterior'=>$pagina-1,'Próxima'=>$pagina+1] as $texto=>$destino): if ($destino<1 || $destino>ceil($totalPagina/$porPagina)) continue; ?>
+            <a class="underline" href="?<?= escapar(http_build_query(array_merge($_GET,['pagina'=>$destino]))) ?>"><?= $texto ?></a>
+            <?php endforeach; ?>
+        </nav>
     </main>
 
     <!-- JavaScript para controle do Accordion de Ciclo de Vida -->
@@ -689,5 +621,7 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
     <footer class="bg-gray-900 border-t border-gray-800 py-4 text-center text-[10px] text-gray-500 font-medium tracking-wide">
         <span>&copy; <?= date('Y') ?> - Desenvolvido pela DTI - Justiça Federal em Alagoas</span>
     </footer>
+<script src="assets/acessibilidade.js" defer></script>
+<script src="assets/usabilidade.js" defer></script>
 </body>
 </html>

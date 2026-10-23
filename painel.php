@@ -10,26 +10,12 @@
 
 require_once __DIR__ . '/banco.php';
 
-// Obtém os atendimentos chamados no dia de hoje para exibir no rodapé
-$today = date('Y-m-d');
-$stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status IN ('chamada', 'concluido') AND data_pauta = ? ORDER BY chamado_em DESC LIMIT 5");
-$stmt->execute([$today]);
-$recentes = $stmt->fetchAll();
-
+$recentes = $pdo->query('SELECT nome, sala, criado_em AS chamado_em FROM eventos_chamada WHERE data_pauta = CURRENT_DATE() ORDER BY id DESC LIMIT 4')->fetchAll();
 $ultima = $recentes[0] ?? null;
-$nome = $ultima ? $ultima['nome'] : 'Aguardando Atendimento';
-$sala = $ultima ? $ultima['sala'] : '---';
-
-// Carrega e decodifica a URL do YouTube configurada (prioriza banco de dados com fallback para arquivo)
-$yt_url = get_config($pdo, 'youtube_url');
-if (empty($yt_url)) {
-    $yt_file = __DIR__ . '/youtube_url.txt';
-    $yt_url = file_exists($yt_file) ? trim(file_get_contents($yt_file)) : 'https://www.youtube.com/watch?v=5qap5aO4i9A';
-}
-$video_id = '5qap5aO4i9A';
-if (preg_match('%(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)|.*[?&]v=)|youtu\.be/)([^"&?/ ]{11})%i', $yt_url, $match)) {
-    $video_id = $match[1];
-}
+$nome = $ultima['nome'] ?? 'Aguardando Atendimento';
+$sala = $ultima['sala'] ?? '---';
+$video_id = videoId(get_config($pdo, 'youtube_url'));
+$cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_chamada')->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -39,7 +25,8 @@ if (preg_match('%(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)|.*[?&]v=)|youtu\.
     <title>Painel de Chamadas - JFAL</title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
     <!-- Tailwind CSS para estilização moderna -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="assets/tailwind.css">
+    <link rel="stylesheet" href="assets/usabilidade.css">
     <script src="tema.js"></script>
     <style>
         /* Animação suave para surgimento do modal de chamada */
@@ -61,7 +48,7 @@ if (preg_match('%(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)|.*[?&]v=)|youtu\.
         }
     </style>
 </head>
-<body class="bg-gray-950 text-white min-h-screen flex flex-col overflow-hidden">
+<body class="sga-tv bg-gray-950 text-white h-screen flex flex-col overflow-hidden">
     
     <!-- Cabeçalho Principal (Logo, data e relógio) -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex justify-between items-center shadow-md z-10">
@@ -72,7 +59,7 @@ if (preg_match('%(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)|.*[?&]v=)|youtu\.
                 <p class="text-[10px] text-gray-400 font-semibold tracking-widest uppercase mt-0.5">Seção Judiciária de Alagoas</p>
             </div>
         </div>
-        <div class="flex items-center space-x-6">
+        <div class="flex items-center gap-4"><span id="conexao-tv" role="status">Conectando…</span><button type="button" onclick="document.getElementById('preparar-tv').classList.remove('hidden')" class="sga-neutral">Som e tela</button>
             <div id="data-atual" class="text-sm text-gray-400 font-medium uppercase">--/--/----</div>
             <div id="relogio" class="text-lg font-bold font-mono text-gray-200">00:00:00</div>
         </div>
@@ -80,15 +67,45 @@ if (preg_match('%(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)|.*[?&]v=)|youtu\.
 
     <!-- Área Central: Vídeo em Tela Cheia e modal de sobreposição -->
     <main class="flex-1 bg-black overflow-hidden relative">
+        <div class="sga-tv-fallback">
+            <img src="assets/catavento-jfal.png" alt="Justiça Federal em Alagoas" class="h-24 mb-6">
+            <h2>Aguardando próximas chamadas</h2>
+            <p id="video-info">Acompanhe o nome e a sala indicados na tela.</p>
+        </div>
         
         <!-- Contêiner do reprodutor do YouTube -->
         <div id="player" class="w-full h-full pointer-events-none"></div>
 
-        <!-- Botão flutuante para liberar áudio (exigência de segurança dos navegadores) -->
-        <div class="absolute top-4 right-4 z-40">
-            <button onclick="ativarAudio()" id="btn-audio" class="bg-blue-600/20 hover:bg-blue-600/35 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-xl text-xs font-semibold transition backdrop-blur-sm shadow-lg">
-                🔊 Ativar Áudio (Voz)
-            </button>
+        <div class="sga-tv-instructions" id="preparar-tv">
+            <h2 class="font-bold mb-2">Antes de iniciar os atendimentos</h2>
+            <p id="audio-status" role="status" class="text-sm mb-3">Ative a voz e teste o som nos alto-falantes da TV.</p>
+            <div class="sga-toques">
+                <label for="toque-alerta">Toque de alerta</label>
+                <div class="sga-toolbar">
+                    <select id="toque-alerta" class="sga-toque-select">
+                        <option value="novosga">Novo SGA (padrão)</option>
+                        <option value="original">Original (atual)</option>
+                        <option value="suave">Campainha suave</option>
+                        <option value="dingdong">Ding-dong</option>
+                        <option value="bipes">Dois bipes discretos</option>
+                        <option value="notas">Três notas</option>
+                        <option value="cristal">Cristal</option>
+                    </select>
+                    <button type="button" id="ouvir-toque" class="sga-neutral">Ouvir só o toque</button>
+                </div>
+                <div class="sga-toolbar">
+                    <label for="volume-toque">Volume do toque</label>
+                    <input type="range" id="volume-toque" min="0" max="100" step="5" value="100" aria-describedby="toque-status">
+                    <output id="volume-toque-valor" for="volume-toque">100%</output>
+                </div>
+                <p id="toque-status" role="status">A escolha fica salva neste navegador. A voz permanece igual.</p>
+            </div>
+            <div class="sga-toolbar">
+                <button type="button" onclick="ativarAudio()" id="btn-audio" class="sga-neutral">Ativar voz</button>
+                <button type="button" onclick="testarSom()" class="sga-neutral">Testar som</button>
+                <button type="button" onclick="alternarTelaCheia()" id="btn-tela-cheia" class="sga-neutral">Tela cheia</button>
+                <button type="button" onclick="document.getElementById('preparar-tv').classList.add('hidden')" id="fechar-preparo-tv" class="sga-neutral" hidden>Concluir preparação</button>
+            </div>
         </div>
 
         <!-- Modal de Chamada (Escondido por padrão, aparece quando um paciente é chamado) -->
@@ -132,8 +149,8 @@ if (preg_match('%(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)|.*[?&]v=)|youtu\.
                     ?>
                         <div class="bg-gray-950/60 border border-gray-800/50 rounded-xl py-2.5 px-4 flex justify-between items-center <?= $i === 0 ? 'border-blue-500/30 bg-blue-950/20' : '' ?>">
                             <div class="text-left truncate flex-1">
-                                <div class="text-sm font-black text-white truncate"><?= htmlspecialchars($item['nome'] ?: 'Sem Nome') ?></div>
-                                <div class="text-[10px] text-emerald-400 font-semibold truncate mt-0.5"><?= htmlspecialchars($item['sala']) ?></div>
+                                <div class="text-sm font-black text-white truncate"><?= escapar($item['nome'] ?: 'Sem Nome') ?></div>
+                                <div class="text-[10px] text-emerald-400 font-semibold truncate mt-0.5"><?= escapar($item['sala']) ?></div>
                             </div>
                         </div>
                     <?php else: ?>
@@ -148,11 +165,9 @@ if (preg_match('%(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)|.*[?&]v=)|youtu\.
 
     <script>
         // Variáveis globais compartilhadas com assets/app.js
-        window.initialVideoId = "<?= htmlspecialchars($video_id) ?>";
-        window.currentSenha = "";
-        window.currentNome = "<?= htmlspecialchars($nome) ?>";
-        window.currentSala = "<?= htmlspecialchars($sala) ?>";
-        window.currentChamadoEm = "<?= htmlspecialchars($ultima ? $ultima['chamado_em'] : '') ?>";
+        window.initialVideoId = <?= json_encode($video_id, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+        window.initialCursor = <?= $cursorInicial ?>;
+        window.eventDay = '<?= date('Y-m-d') ?>';
 
         // Relógio e Data do painel
         function updateClock() {
@@ -165,6 +180,11 @@ if (preg_match('%(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)|.*[?&]v=)|youtu\.
         setInterval(updateClock, 1000);
         updateClock();
     </script>
+
+    <link rel="preload" href="assets/sons/ekiga-vm.wav" as="fetch" crossorigin>
+    <script src="assets/toques.js"></script>
     <script src="assets/app.js"></script>
+<script src="assets/acessibilidade.js" defer></script>
+<script src="assets/usabilidade.js" defer></script>
 </body>
 </html>
