@@ -111,12 +111,12 @@ $usuarios = $stmt->fetchAll();
                     
                     <div>
                         <label class="block text-xs text-gray-400 mb-1 font-semibold uppercase">Nome de Usuário</label>
-                        <input type="text" name="username" id="form-username" required placeholder="Ex: joao.recepcao" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                        <input type="text" name="username" maxlength="50" id="form-username" required placeholder="Ex: joao.recepcao" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
                     </div>
                     
                     <div>
                         <label class="block text-xs text-gray-400 mb-1 font-semibold uppercase">Nome Completo</label>
-                        <input type="text" name="nome" id="form-nome" placeholder="Ex: GEORGE ALVES CORDEIRO JUNIOR" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                        <input type="text" name="nome" maxlength="100" id="form-nome" placeholder="Ex: GEORGE ALVES CORDEIRO JUNIOR" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
                         <span class="text-[10px] text-gray-500 mt-1 block">A pauta usa vínculo interno do profissional. Confira o nome e CPF na importação.</span>
                     </div>
                     
@@ -157,7 +157,7 @@ $usuarios = $stmt->fetchAll();
                         <span class="bg-gray-800 text-gray-400 text-xs px-2.5 py-0.5 rounded-full font-bold"><?= count($usuarios) ?></span>
                     </h2>
                     <div class="w-full sm:w-64">
-                        <input type="text" id="busca-usuarios" onkeyup="filtrarUsuarios()" placeholder="🔍 Filtrar por nome ou login..." class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition">
+                        <input type="text" id="busca-usuarios" aria-label="Buscar usuário" oninput="filtrarUsuarios()" placeholder="🔍 Filtrar por nome ou login..." class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition">
                     </div>
                 </div>
 
@@ -229,6 +229,8 @@ $usuarios = $stmt->fetchAll();
             
             const passInput = document.getElementById('form-password');
             passInput.required = false;
+            passInput.value = "";
+            passInput.setCustomValidity("");
             passInput.placeholder = "Senha (Opcional)";
             document.getElementById('password-help').classList.remove('hidden');
             

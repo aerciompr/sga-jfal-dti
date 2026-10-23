@@ -37,6 +37,42 @@ class Cliente:
 
 
 class HttpTests(unittest.TestCase):
+    def test_rotas_por_perfil(self):
+        comuns = ['dashboard.php', 'ajuda.php', 'alterar_senha_obrigatorio.php', 'logout.php']
+        restritas = {
+            'recepcao.php': {'admin', 'supervisor', 'recepcao'},
+            'atendente.php': {'admin', 'perito'},
+            'gerenciar_pauta.php': {'admin', 'supervisor'},
+            'salas.php': {'admin', 'supervisor'},
+            'usuarios.php': {'admin'},
+            'auditoria.php': {'admin', 'supervisor'},
+        }
+        for perfil, login, senha in [
+            ('admin', 'admin-test', 'Senha-local-teste-2026!'),
+            ('supervisor', 'supervisor-test', 'Senha-local-teste-2026!'),
+            ('recepcao', 'recepcao-test', 'Senha-local-teste-2026!'),
+            ('perito', 'perito-a', 'Nova-senha-teste-2026!'),
+        ]:
+            c = Cliente(); self.assertEqual(200, c.login(login, senha)[0])
+            for rota in comuns + list(restritas):
+                with self.subTest(perfil=perfil, rota=rota):
+                    status, _, destino, _ = c.abrir(rota)
+                    self.assertLess(status, 500)
+                    if rota in comuns or perfil in restritas[rota]:
+                        esperado = 'atendente.php' if perfil == 'perito' and rota == 'dashboard.php' else rota
+                        self.assertEqual(esperado, urllib.parse.urlsplit(destino).path.rsplit('/', 1)[-1])
+                    else:
+                        self.assertNotEqual(rota, urllib.parse.urlsplit(destino).path.rsplit('/', 1)[-1])
+            status, _, _, _ = c.abrir('preview_importacao.php')
+            self.assertEqual(410 if perfil in ('admin', 'supervisor') else 403, status)
+            status, _, _, _ = c.abrir('api_verificar_outro_dia.php?busca=Teste')
+            self.assertEqual(403 if perfil == 'perito' else 200, status)
+        for rota in comuns + list(restritas) + ['preview_importacao.php', 'api_verificar_outro_dia.php']:
+            with self.subTest(anonimo=rota):
+                status, _, destino, _ = Cliente().abrir(rota)
+                self.assertEqual(200, status)
+                self.assertTrue(urllib.parse.urlsplit(destino).path.endswith('/index.php'))
+
     def test_sem_csrf(self):
         self.assertEqual(403, Cliente().abrir('index.php', {'username': 'admin-test', 'password': 'invalida'})[0])
 
@@ -89,12 +125,13 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(200,c.abrir('api_senhas_recentes.php')[0])
 
     def test_tv_abre_sem_autorizacao(self):
-        c=Cliente();status,html,url,_=c.abrir('painel.php')
+        c=Cliente();status,html,url,headers=c.abrir('painel.php')
         self.assertEqual(200,status)
         self.assertNotIn('Código de autorização',html)
         self.assertNotIn('token=',url)
         self.assertIn('Testar som',html)
         self.assertEqual(0,len(c.cookies))
+        self.assertEqual('strict-origin-when-cross-origin',headers.get('Referrer-Policy'))
 
     def test_exportacao_csv(self):
         c=Cliente();c.login('admin-test')
@@ -145,7 +182,7 @@ class HttpTests(unittest.TestCase):
 
     @unittest.skipUnless(os.environ.get('SGA_APACHE')=='1', 'Exige Apache para verificar .htaccess')
     def test_arquivos_privados(self):
-        for path in ['config.php','banco.php','seguranca.php','tv_autorizacao.php','scripts/migrate.php','import_excel.py','docker-compose.yml','.env','package.json']:
+        for path in ['config.php','banco.php','seguranca.php','youtube.php','tv_autorizacao.php','scripts/migrate.php','import_excel.py','docker-compose.yml','.env','package.json']:
             self.assertIn(Cliente().abrir(path)[0], (403,404), path)
 
 

@@ -1,5 +1,5 @@
 Options -Indexes
-<FilesMatch "^(config|banco|seguranca|atendimento_service|pauta_service|usuarios_service|importacao_service|tv_autorizacao)\.php$">
+<FilesMatch "^(config|banco|youtube|seguranca|atendimento_service|pauta_service|usuarios_service|importacao_service|tv_autorizacao)\.php$">
     Require all denied
 </FilesMatch>
 <FilesMatch "\.(py|md|ya?ml|ini|json|lock|sql|log|env|txt)$">

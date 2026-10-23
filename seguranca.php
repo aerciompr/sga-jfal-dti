@@ -60,7 +60,8 @@ function csvSeguro($arquivo, array $valores): void {
 function protegerRequisicao(PDO $pdo): void {
     if (PHP_SAPI === 'cli') return;
     header('X-Content-Type-Options: nosniff');
-    header('Referrer-Policy: same-origin');
+    // O player YouTube exige identificação da origem (sem enviar caminho ou parâmetros).
+    header('Referrer-Policy: ' . (basename($_SERVER['SCRIPT_NAME'])==='painel.php' ? 'strict-origin-when-cross-origin' : 'same-origin'));
     header('X-Frame-Options: SAMEORIGIN');
     header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://i.ytimg.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com; connect-src 'self' https://www.youtube.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'");
     header('Cache-Control: no-store');
@@ -98,7 +99,8 @@ function protegerRequisicao(PDO $pdo): void {
         }
         foreach ($_POST as $chave => $valor) {
             if (!is_string($valor)) continue;
-            if (preg_match('/(^data_|^nova_data$|_data_|_data$)/', $chave) && $valor !== '' && !dataValida($valor)) abortar(422, 'Data inválida.');
+            $formatoData = $chave==='nova_data' && ($_POST['action']??'')==='mover_pauta' && ($_POST['mover_tipo']??'')==='mes' && strlen($valor)===7 ? 'Y-m' : 'Y-m-d';
+            if (preg_match('/(^data_|^nova_data$|_data_|_data$)/', $chave) && $valor !== '' && !dataValida($valor,$formatoData)) abortar(422, 'Data inválida.');
             if ((str_contains($chave, 'mes_') || str_ends_with($chave, '_mes')) && $valor !== '' && !dataValida($valor, 'Y-m')) abortar(422, 'Mês inválido.');
         }
     }

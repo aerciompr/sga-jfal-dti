@@ -14,7 +14,8 @@ $recentes = $pdo->query('SELECT nome, sala, criado_em AS chamado_em FROM eventos
 $ultima = $recentes[0] ?? null;
 $nome = $ultima['nome'] ?? 'Aguardando Atendimento';
 $sala = $ultima['sala'] ?? '---';
-$video_id = videoId(get_config($pdo, 'youtube_url'));
+$fonteVideo = fonteYouTubePadrao(get_config($pdo, 'youtube_url'));
+$video_id = $fonteVideo['video_id'];
 $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_chamada')->fetchColumn();
 ?>
 <!DOCTYPE html>
@@ -59,7 +60,7 @@ $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_cham
                 <p class="text-[10px] text-gray-400 font-semibold tracking-widest uppercase mt-0.5">Seção Judiciária de Alagoas</p>
             </div>
         </div>
-        <div class="flex items-center gap-4"><span id="conexao-tv" role="status">Conectando…</span><button type="button" onclick="document.getElementById('preparar-tv').classList.remove('hidden')" class="sga-neutral">Som e tela</button>
+        <div class="flex items-center gap-4"><span id="conexao-tv" role="status">Conectando…</span><button type="button" id="reativar-voz-tv" class="sga-neutral" hidden>Reativar voz</button><button type="button" onclick="document.getElementById('preparar-tv').classList.remove('hidden')" class="sga-neutral">Som e tela</button>
             <div id="data-atual" class="text-sm text-gray-400 font-medium uppercase">--/--/----</div>
             <div id="relogio" class="text-lg font-bold font-mono text-gray-200">00:00:00</div>
         </div>
@@ -166,6 +167,7 @@ $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_cham
     <script>
         // Variáveis globais compartilhadas com assets/app.js
         window.initialVideoId = <?= json_encode($video_id, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+        window.initialPlaylistId = <?= json_encode($fonteVideo['playlist_id'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
         window.initialCursor = <?= $cursorInicial ?>;
         window.eventDay = '<?= date('Y-m-d') ?>';
 
@@ -184,6 +186,7 @@ $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_cham
     <link rel="preload" href="assets/sons/ekiga-vm.wav" as="fetch" crossorigin>
     <script src="assets/toques.js"></script>
     <script src="assets/app.js"></script>
+    <script src="assets/preparacao-tv.js"></script>
 <script src="assets/acessibilidade.js" defer></script>
 <script src="assets/usabilidade.js" defer></script>
 </body>

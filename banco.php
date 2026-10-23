@@ -1,6 +1,7 @@
 <?php
 // Conexão de runtime: nenhuma migração ou reescrita automática de dados.
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/youtube.php';
 require_once __DIR__ . '/seguranca.php';
 require_once __DIR__ . '/atendimento_service.php';
 require_once __DIR__ . '/pauta_service.php';
@@ -112,6 +113,5 @@ function set_config($pdo, $chave, $valor) {
 }
 
 function videoId(string $url): string {
-    if (preg_match('~(?:youtube\.com/(?:watch\?.*v=|embed/)|youtu\.be/)([a-zA-Z0-9_-]{11})(?:[^a-zA-Z0-9_-]|$)~', $url, $m)) return $m[1];
-    return '5qap5aO4i9A';
+    return fonteYouTubePadrao($url)['video_id'];
 }

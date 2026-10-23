@@ -23,6 +23,7 @@ function validarAgendamento(PDO $pdo, array $dados, string $data, ?int $ignorar 
     $perito = trim((string)($dados['perito'] ?? ''));
     $cpf = trim((string)($dados['cpf'] ?? ''));
     if ($nome === '' || mb_strlen($nome) > 100 || strlen($processo) > 50 || $perito === '' || mb_strlen($perito) > 100 || !validarCpf($cpf)) throw new DomainException('Confira nome, processo, perito e CPF.');
+    if ($cpf !== '') $cpf = preg_replace('/^(\d{3})(\d{3})(\d{3})(\d{2})$/', '$1.$2.$3-$4', preg_replace('/\D/', '', $cpf));
     if ($processo !== '') {
         $s = $pdo->prepare("SELECT id, processo, perito FROM atendimentos WHERE data_pauta = ? AND status <> 'cancelado' AND id <> ?"); $s->execute([$data, $ignorar ?? 0]);
         foreach ($s as $item) if (simplifyName($item['processo'] ?? '') === simplifyName($processo) && simplifyNameWithSpaces($item['perito'] ?? '') === simplifyNameWithSpaces($perito)) throw new DomainException('Agendamento duplicado para este processo, data e perito.');
@@ -32,6 +33,7 @@ function validarAgendamento(PDO $pdo, array $dados, string $data, ?int $ignorar 
 
 function operarPauta(PDO $pdo, string $acao, array $dados, string $dataFiltro): string {
     if (!in_array($_SESSION['usuario_role'], ['admin','supervisor'], true)) throw new DomainException('Acesso negado.');
+    if ($acao==='mover_pauta' && ($dados['mover_tipo']??'')==='mes' && dataValida((string)($dados['nova_data']??''),'Y-m')) $dados['nova_data'].='-01';
     if ($acao === 'mover_pauta' && !dataValida((string)($dados['nova_data'] ?? ''))) throw new DomainException('Data de destino inválida.');
     if (!$pdo->query("SELECT GET_LOCK('sga_importacao', 15)")->fetchColumn()) throw new DomainException('Pauta em atualização. Tente novamente.');
     $pdo->beginTransaction();
@@ -46,8 +48,8 @@ function operarPauta(PDO $pdo, string $acao, array $dados, string $dataFiltro): 
         } elseif ($acao === 'set_yt_url') {
             if ($_SESSION['usuario_role'] !== 'admin') throw new DomainException('Apenas administrador pode alterar o vídeo.');
             $url = trim((string)($dados['yt_url'] ?? ''));
-            if (!preg_match('~^https://(?:www\.)?(?:youtube\.com|youtu\.be)/~', $url) || strlen($url) > 500) throw new DomainException('Use um endereço HTTPS do YouTube.');
-            set_config($pdo, 'youtube_url', $url); registrarLog($pdo, $acao, 'Vídeo da TV atualizado.'); $mensagem = 'Vídeo atualizado.';
+            if (fonteYouTube($url)===null) throw new DomainException('Use um link HTTPS válido de vídeo ou playlist do YouTube.');
+            set_config($pdo, 'youtube_url', $url); registrarLog($pdo, $acao, 'Vídeo ou playlist da TV atualizado.'); $mensagem = 'Conteúdo da TV atualizado.';
         } elseif ($acao === 'agendar_unico') {
             if (!dataValida($dataFiltro) || $dataFiltro < date('Y-m-d')) throw new DomainException('Agende para hoje ou data futura.');
             [$nome,$processo,$perito,$cpf,$peritoId] = validarAgendamento($pdo, $dados, $dataFiltro);

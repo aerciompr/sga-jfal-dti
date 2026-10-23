@@ -1,4 +1,53 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const limites={username:50,nome:location.pathname.endsWith('/salas.php')?50:100,perito:100,novo_perito:100,nome_avulso:100,yt_url:500};
+    for(const [nome,limite] of Object.entries(limites))
+        for(const campo of document.querySelectorAll(`input[name="${nome}"]`)) campo.maxLength=limite;
+    // CPF usa a mesma pontuação do importador; nenhum caractere inválido é descartado.
+    const cpfValido = digitos => {
+        if (!/^\d{11}$/.test(digitos) || /^(\d)\1{10}$/.test(digitos)) return false;
+        for (let n=9;n<11;n++) {
+            let soma=0; for(let i=0;i<n;i++) soma+=Number(digitos[i])*(n+1-i);
+            if (Number(digitos[n])!==(soma*10%11)%10) return false;
+        }
+        return true;
+    };
+    for (const campo of document.querySelectorAll('input[name="cpf"]')) {
+        campo.inputMode='numeric'; campo.maxLength=14;
+        const atualizar=()=>{
+            const texto=campo.value, digitos=texto.replace(/\D/g,'');
+            const permitido=/^[\d.\-\s]*$/.test(texto);
+            const posicao=campo.selectionStart;
+            const antes=texto.slice(0,posicao??texto.length).replace(/\D/g,'').length;
+            if (permitido && digitos.length<=11) {
+                campo.value=digitos.replace(/^(\d{3})(\d)/,'$1.$2').replace(/^(\d{3}\.\d{3})(\d)/,'$1.$2').replace(/(\d{3}\.\d{3}\.\d{3})(\d)/,'$1-$2');
+                if(document.activeElement===campo && posicao!==null) {
+                    let pos=0, vistos=0;
+                    while(pos<campo.value.length && vistos<antes) {if(/\d/.test(campo.value[pos])) vistos++; pos++;}
+                    campo.setSelectionRange(pos,pos);
+                }
+            }
+            campo.setCustomValidity(texto.trim()==='' || (permitido && cpfValido(digitos)) ? '' : 'Informe um CPF válido com 11 dígitos ou deixe o campo vazio.');
+        };
+        campo.addEventListener('input',atualizar); campo.addEventListener('blur',atualizar);
+        atualizar();
+    }
+    // Só formata processos com 20 dígitos completos; identificadores legados continuam aceitos.
+    for (const campo of document.querySelectorAll('input[name="processo"]')) {
+        campo.maxLength=50;
+        campo.addEventListener('blur',()=>{
+            const texto=campo.value.trim(), digitos=texto.replace(/\D/g,'');
+            if (/^[\d.\-\s]+$/.test(texto) && digitos.length===20)
+                campo.value=digitos.replace(/^(\d{7})(\d{2})(\d{4})(\d)(\d{2})(\d{4})$/,'$1-$2.$3.$4.$5.$6');
+        });
+    }
+    for (const campo of document.querySelectorAll('input[name="password"],input[name="nova_senha"],input[name="confirma_senha"]')) {
+        if (location.pathname.endsWith('/index.php')) continue;
+        const validar=()=>{
+            const bytes=new TextEncoder().encode(campo.value).length;
+            campo.setCustomValidity(campo.value==='' || (bytes>=12 && bytes<=72) ? '' : 'Use uma senha de 12 a 72 bytes; letras acentuadas podem ocupar mais de um byte.');
+        };
+        campo.addEventListener('input',validar);
+    }
     // Os atributos já existem no HTML principal; estes controles também atendem formulários de gestão.
     for (const input of document.querySelectorAll('input[type="password"]')) {
         const wrapper = document.createElement('div'); wrapper.className = 'sga-password';

@@ -7,7 +7,8 @@
 
 let audioAtivado = false;
 let ytPlayer = null;
-let currentVideoId = window.initialVideoId || '5qap5aO4i9A';
+let currentPlaylistId = window.initialPlaylistId || '';
+let currentVideoId = currentPlaylistId ? '' : (window.initialVideoId || '5qap5aO4i9A');
 
 // Método de callback acionado automaticamente pela API do IFrame do YouTube
 window.onYouTubeIframeAPIReady = function() {
@@ -16,10 +17,11 @@ window.onYouTubeIframeAPIReady = function() {
         width: '100%',
         videoId: currentVideoId,
         playerVars: {
+            'origin': window.location.origin,
             'autoplay': 1,
             'mute': 1,       // Começa mutado por exigência de segurança dos navegadores modernos
             'loop': 1,       // Loop infinito do vídeo de relaxamento
-            'playlist': currentVideoId,
+            ...(currentPlaylistId ? {listType:'playlist',list:currentPlaylistId} : {playlist:currentVideoId}),
             'controls': 0,   // Remove barra de controles
             'showinfo': 0,
             'rel': 0,
@@ -44,6 +46,7 @@ function videoIndisponivel() {
 function onPlayerReady(event) {
     const player = document.getElementById('player');
     if (player) player.hidden = false;
+    event.target.setLoop(true);
     event.target.playVideo();
     if (audioAtivado) {
         event.target.unMute();
@@ -163,7 +166,15 @@ const esperar = ms => new Promise(resolve => setTimeout(resolve, ms));
 function falarSenha(nome, sala) {
     return new Promise(resolve => {
         if (!audioAtivado || !window.speechSynthesis) { esperar(6000).then(() => resolve(false)); return; }
-        if (ytPlayer?.setVolume) ytPlayer.setVolume(10);
+        const playerAnuncio=ytPlayer;
+        let restaurarVideo=()=>{};
+        try {
+            if (playerAnuncio?.mute && playerAnuncio?.isMuted) {
+                const estavaMudo=playerAnuncio.isMuted();
+                playerAnuncio.mute();
+                restaurarVideo=()=>{ if (!estavaMudo) playerAnuncio.unMute(); };
+            }
+        } catch (_) { /* Vídeo indisponível não impede o anúncio. */ }
         playChime();
         setTimeout(() => {
             const fala = new SpeechSynthesisUtterance(`Atenção: ${nome || 'Atendimento'}. Dirija-se à ${sala}`);
@@ -174,12 +185,12 @@ function falarSenha(nome, sala) {
             const fim = (sucesso) => {
                 if (concluido) return;
                 concluido = true; clearTimeout(timeout);
-                if (ytPlayer?.setVolume) ytPlayer.setVolume(50);
+                try { restaurarVideo(); } catch (_) {}
                 resolve(sucesso);
             };
             const timeout = setTimeout(() => { speechSynthesis.cancel(); fim(false); }, 20000);
             fala.onend = () => fim(true); fala.onerror = () => fim(false);
-            speechSynthesis.speak(fala);
+            try { speechSynthesis.speak(fala); } catch (_) { fim(false); }
         }, window.sgaToques?.espera() ?? 400);
     });
 }
@@ -200,11 +211,16 @@ async function verificarNovaSenha() {
         const dados = await resposta.json();
         if (!dados.success) throw new Error('Resposta inválida');
         indicador.textContent = `Conectado • ${new Date().toLocaleTimeString('pt-BR')}`;
-        if (dados.video_id !== currentVideoId) {
+        const listaRecebida=dados.playlist_id || '';
+        if (dados.video_id !== currentVideoId || listaRecebida !== currentPlaylistId) {
             currentVideoId = dados.video_id;
+            currentPlaylistId = listaRecebida;
             const player = document.getElementById('player');
             if (player) player.hidden = false;
-            if (ytPlayer?.loadVideoById) ytPlayer.loadVideoById(currentVideoId);
+            if (ytPlayer?.loadPlaylist) {
+                ytPlayer.loadPlaylist(currentPlaylistId ? {listType:'playlist',list:currentPlaylistId,index:0} : [currentVideoId]);
+                ytPlayer.setLoop(true);
+            }
         }
         for (const evento of dados.eventos) {
             if (Number(evento.id) <= cursor) continue;

@@ -2,7 +2,7 @@
 
 ## Stack existente no Portainer (ajuste posterior)
 
-A configuração Compose foi adaptada à instalação existente informada pelo responsável: MySQL **8.0.46**, volume externo **sga-dti_db_data**, acesso HTTP na intranet pela porta 8085. Não há atualização do mecanismo para 8.4 neste Compose. A seção abaixo sobre MySQL 8.4 descreve a preparação anterior e não deve ser aplicada ao volume existente.
+A configuração Compose foi adaptada à instalação existente informada pelo responsável: MySQL **8.0.46**, volume externo **sga-dti_db_data**, acesso HTTP na intranet pela porta 8085. Não há atualização do mecanismo para 8.4 neste Compose. O volume é externo: o Compose falha se ele não existir, em vez de criar silenciosamente uma base vazia.
 
 No Portainer, informar DB_NAME, DB_USER, DB_PASS e MYSQL_ROOT_PASSWORD com os valores atuais. Para o ambiente HTTP informado, SESSION_SECURE=0; com HTTPS, usar 1. DB_VOLUME_NAME permite selecionar outro volume existente, sem criar nem copiar dados automaticamente. Não usar o caminho interno `_data` como bind mount.
 
@@ -12,7 +12,7 @@ Fazer backup e ensaiar em cópia isolada antes do redeploy. O Compose usa build 
 
 ## Situação da entrega
 
-As correções estão no código local. Não foram publicadas nem aplicadas ao banco oficial. A previsão informada é segunda-feira, **26/10/2026**.
+As correções são versionadas e publicadas no repositório. A execução no Portainer e no banco oficial é feita pelo responsável; os testes automatizados descritos aqui usam somente bases fictícias locais. A previsão informada é segunda-feira, **26/10/2026**.
 
 Antes da liberação: executar o pipeline Docker/MySQL, restaurar uma cópia do banco em homologação, conferir as pendências do preflight, validar o fluxo com os operadores e testar imagem/áudio no navegador físico da TV. Testes locais com PHP e MariaDB não substituem essa etapa.
 
@@ -32,15 +32,17 @@ Antes da liberação: executar o pipeline Docker/MySQL, restaurar uma cópia do 
 
 ## Preparação do Compose
 
-1. Copiar `.env.example` para `.env` e preencher senhas aleatórias diferentes, nome do banco e configuração HTTPS. Não commitar `.env`.
-2. `SESSION_SECURE=1` na produção HTTPS. Usar `0` apenas na homologação HTTP local. O proxy deve encaminhar o host e preservar os cookies; não se confia automaticamente em `X-Forwarded-*` do cliente. Se houver proxy, configurar seus IPs exatos em `TRUSTED_PROXY_IPS` e fazê-lo sobrescrever `X-Real-IP` com a origem real. Isso preserva auditoria e limita tentativas por origem, sem tratar todos os operadores como um único IP.
-3. Por padrão, a aplicação escuta `127.0.0.1:8085`, para proxy reverso no host. Se o proxy estiver em outro container, configurar uma rede compartilhada somente para `web` e o proxy; não expor o MySQL.
-4. Definir `SGA_RELEASE` com um identificador único, por exemplo `2026-10-26-r1`, para manter a imagem anterior disponível.
-5. Não substituir o volume atual pelo volume novo sem importar os dados. O projeto Compose agora se chama `sga-jfal`, e seus volumes podem ter nomes diferentes dos antigos. Inventariar os volumes existentes antes de qualquer comando.
+1. Copiar `.env.example` para `.env` e preencher credenciais atuais da instalação existente, nome do banco, volume e configuração HTTP/HTTPS. Em uma instalação nova, gerar senhas individuais fortes. Não commitar `.env`.
+2. `SESSION_SECURE=1` na produção HTTPS. Usar `0` no acesso HTTP da intranet informado pelo responsável. O proxy deve encaminhar o host e preservar os cookies; não se confia automaticamente em `X-Forwarded-*` do cliente. Se houver proxy, configurar seus IPs exatos em `TRUSTED_PROXY_IPS` e fazê-lo sobrescrever `X-Real-IP` com a origem real. Isso preserva auditoria e limita tentativas por origem, sem tratar todos os operadores como um único IP.
+3. Por padrão, a aplicação publica `0.0.0.0:8085`, para o acesso direto na intranet. Com proxy no host, ajustar `WEB_BIND=127.0.0.1`. Se o proxy estiver em outro container, configurar uma rede compartilhada somente para `web` e o proxy; não expor o MySQL.
+4. Registrar o commit implantado e preservar a imagem anterior antes de reconstruir web/migrate.
+5. O banco usa explicitamente o volume externo `sga-dti_db_data`. `DB_VOLUME_NAME` permite selecionar outro volume existente. Não substituir ou remover o volume da produção.
 
-As imagens base estão fixadas por digest e as bibliotecas têm versões/lockfile. Atualizações de segurança devem renovar esses valores e passar novamente pela homologação. A imagem usa PHP 8.4 e MySQL 8.4; **não montar diretamente um volume MySQL 8.0 antigo nesta versão sem validar o caminho de upgrade**. Preferir dump lógico e restauração em novo volume, ensaiados previamente.
+A imagem PHP está fixada por digest (PHP 8.4.27), as bibliotecas têm versões/lockfile e o MySQL usa a versão exata 8.0.46. Não alterar a versão do mecanismo do banco sobre o volume existente sem validar o caminho de upgrade. Para uma futura atualização do MySQL, preferir dump lógico e restauração em volume separado, ensaiados previamente.
 
 ## Sequência para banco novo ou homologação
+
+Para homologação isolada, criar previamente um volume externo próprio e configurar `DB_VOLUME_NAME` para ele; nunca apontar o teste para `sga-dti_db_data`. O Compose atual não cria usuários em volumes existentes.
 
 ```bash
 docker compose config --quiet
@@ -52,7 +54,7 @@ docker compose ps
 curl --fail http://127.0.0.1:8085/health.php
 ```
 
-Banco novo exige `BOOTSTRAP_ADMIN_PASSWORD` de pelo menos 12 caracteres. O usuário inicial é `admin`, com troca obrigatória. Remover essa variável do ambiente depois do bootstrap. `migrate` usa root somente nessa execução e restringe o usuário da aplicação a SELECT/INSERT/UPDATE/DELETE. O banco não tem porta publicada.
+Banco novo exige `BOOTSTRAP_ADMIN_PASSWORD` de pelo menos 12 caracteres. O usuário inicial é `admin`, com troca obrigatória. Remover essa variável do ambiente depois do bootstrap. No ambiente legado, aplicação e migração usam root. Para usar conta restrita, criá-la previamente e validar seus privilégios; definir `RUNTIME_DB_USER` somente para uma conta dedicada, nunca root. O banco não tem porta publicada.
 
 Se restaurar um banco antigo em volume novo, criar o usuário de aplicação e suas permissões antes de subir web. A inicialização automática do MySQL só cria usuário/senhas na primeira criação do volume; editar `.env` não altera usuários de um volume já inicializado.
 
@@ -87,7 +89,7 @@ Se houver gravações após a liberação, não restaurar automaticamente um dum
 
 ## Validação automatizada
 
-O workflow `.github/workflows/validate.yml` constrói a imagem, usa MySQL 8.4 descartável, executa migração duas vezes, lint PHP, testes de integração, concorrência, importador, cliente da TV, HTTP e bloqueio de arquivos privados pelo Apache. A execução em GitHub depende de enviar o código e habilitar Actions; nenhum push foi feito automaticamente.
+O workflow `.github/workflows/validate.yml` constrói a imagem, usa MySQL 8.4 descartável, executa migração duas vezes, lint PHP, testes de integração, concorrência, importador, cliente da TV, HTTP e bloqueio de arquivos privados pelo Apache. A execução em GitHub depende de enviar o código e habilitar Actions; consultar o resultado da execução no GitHub Actions após o push.
 
 `tests/integration.php` apaga dados **somente** se `SGA_TEST=1` e `DB_NAME=sga_test`. Não usar a base oficial em testes. Os dados e credenciais de fixture são exclusivos de ambiente descartável.
 

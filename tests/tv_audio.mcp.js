@@ -11,6 +11,16 @@ async (page) => {
         await p.waitForFunction(()=>{const t=document.getElementById('audio-status')?.textContent||'';return t.includes('Teste concluído')||t.includes('Não foi possível');},{},{timeout:25000});
         const status=await p.locator('#audio-status').innerText();
         await p.screenshot({path:'.playwright-mcp/tv-teste-som.png',fullPage:false});
-        return {sinteseConcluida:status.includes('Teste concluído'),status,conexao:await p.locator('#conexao-tv').innerText(),vozes:await p.evaluate(()=>speechSynthesis.getVoices().map(v=>v.lang))};
+        const vozes=await p.evaluate(()=>speechSynthesis.getVoices().map(v=>v.lang));
+        if(status.includes('Teste concluído')) {
+            await p.getByRole('button',{name:'Concluir preparação',exact:true}).click();
+            await p.reload();
+            if(!await p.locator('#preparar-tv').isHidden())throw Error('Preparação reapareceu');
+            await p.getByRole('button',{name:'Reativar voz',exact:true}).click();
+            if(!await p.locator('#reativar-voz-tv').isHidden())throw Error('Reativação falhou');
+            await p.getByRole('button',{name:'Som e tela',exact:true}).click();
+            if(!await p.locator('#preparar-tv').isVisible())throw Error('Controles não reabriram');
+        }
+        return {preparacaoPersistida:status.includes('Teste concluído'),sinteseConcluida:status.includes('Teste concluído'),status,conexao:await p.locator('#conexao-tv').innerText(),vozes};
     } finally {await browser.close();}
 }

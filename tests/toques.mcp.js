@@ -9,6 +9,8 @@ async (page) => {
         const context=await browser.newContext({viewport:{width:1366,height:768}});
         await context.addInitScript(()=>{
             window.__falas=0;window.__osc=0;window.__pendentes=0;
+            const AudioNativo=window.Audio;
+            window.Audio=function(src){const som=new AudioNativo(src);som.addEventListener('playing',()=>{window.__osc++;window.__pendentes++;});som.addEventListener('ended',()=>window.__pendentes--);return som;};
             const speak=speechSynthesis.speak.bind(speechSynthesis);
             speechSynthesis.speak=u=>{window.__falas++;return speak(u);};
             const Original=window.AudioContext;
@@ -25,19 +27,20 @@ async (page) => {
         await p.route('https://www.youtube.com/**',route=>route.abort());
         await p.goto(base+'/painel.php');
         const select=p.getByLabel('Toque de alerta',{exact:true});
-        check(await select.locator('option').count()===6,'Seis toques incluídos');
-        check(await select.inputValue()==='original','Original preservado como padrão');
+        check(await select.locator('option').count()===7,'Sete toques incluídos');
+        check(await select.inputValue()==='novosga','Novo SGA como padrão');
         const volume=p.getByLabel('Volume do toque',{exact:true});
         await volume.focus();await volume.press('Home');for(let n=0;n<12;n++)await volume.press('ArrowRight');
         check(await volume.inputValue()==='60','Volume do toque ajustável pelo teclado');
-        for(const id of ['original','suave','dingdong','bipes','notas','cristal']) {
+        for(const id of ['novosga','original','suave','dingdong','bipes','notas','cristal']) {
             await select.selectOption(id);
             const antes=await p.evaluate(()=>window.__osc);
             await p.getByRole('button',{name:'Ouvir só o toque',exact:true}).click();
+            await p.waitForFunction(n=>window.__osc>n,antes);
             check(await p.evaluate(()=>window.__osc)>antes,`Prévia reproduz ${id}`);
             await p.waitForFunction(()=>window.__pendentes===0);
         }
-        check(await p.evaluate(()=>window.__falas)===0,'Ouvir os seis toques não dispara voz');
+        check(await p.evaluate(()=>window.__falas)===0,'Ouvir os sete toques não dispara voz');
         await p.reload();
         check(await select.inputValue()==='cristal' && await volume.inputValue()==='60','Seleção e volume preservados após recarregar');
         await volume.focus();await volume.press('Home');
@@ -48,7 +51,7 @@ async (page) => {
         await p.screenshot({path:'.playwright-mcp/toques-tv.png',fullPage:false});
         const bloqueado=await browser.newContext();
         await bloqueado.addInitScript(()=>Object.defineProperty(window,'localStorage',{get(){throw new Error('bloqueado');}}));
-        const b=await bloqueado.newPage();await b.goto(base+'/painel.php?token=local-tv-test-token');
+        const b=await bloqueado.newPage();await b.goto(base+'/painel.php');
         await b.getByLabel('Toque de alerta',{exact:true}).selectOption('dingdong');
         check((await b.locator('#toque-status').innerText()).includes('nesta sessão'),'Storage bloqueado mantém escolha em memória com aviso');
         return {aprovados:resultados.length,resultados};

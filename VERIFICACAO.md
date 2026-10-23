@@ -47,10 +47,18 @@ Em 22/10, o navegador integrado não conseguiu iniciar. Em **23/10**, a revisão
 
 Ainda é necessário ouvir o som na TV física e homologar a experiência com os operadores. A revisão não constitui certificação de acessibilidade, auditoria jurídica ou garantia de ausência de vulnerabilidades.
 
-Ainda precisam ocorrer no ambiente da instituição: restore de uma cópia controlada da base real, conferência de vínculos/estados legados com preflight, TLS/proxy, segredos, acesso de TV, backup externo/retensão, janela de mudança e teste pelos operadores. O workflow foi criado, mas não executado no GitHub porque não houve push.
+Ainda precisam ocorrer no ambiente da instituição: restore de uma cópia controlada da base real, conferência de vínculos/estados legados com preflight, TLS/proxy, segredos, acesso de TV, backup externo/retensão, janela de mudança e teste pelos operadores. O workflow está publicado; o resultado no GitHub Actions deve ser conferido para o commit implantado.
 
 Consulte [PRODUCAO.md](PRODUCAO.md) para a sequência de implantação, mudanças operacionais e melhorias sugeridas. O relatório `ANALISE_TECNICA_2026-10-22.md` registra os achados anteriores às correções.
 
 ## Ajuste para intranet exclusiva (23/10)
 
 Por solicitação do responsável, o painel e suas duas APIs de consulta abrem diretamente, sem sessão de TV, código ou expiração. O login dos operadores e a proteção das operações permanecem. Removida a exigência de TV_TOKEN do Compose e atualizado o roteiro HTTP e MCP. Os registros de autorização acima descrevem a versão anterior.
+
+## Vídeo e playlist institucional
+
+Validação de 12 endereços válidos/inválidos em `tests/youtube.php`. No MCP Playwright, com API YouTube simulada, confirmadas troca de vídeo para playlist e retorno ao vídeo, com repetição habilitada (`tests/playlist.mcp.js`). A reprodução real da playlist institucional depende de seu link e da liberação de incorporação de seus vídeos. Permanecem os 13 testes JavaScript de fila, toques e restauração de áudio passando. Sem alteração do esquema do banco.
+
+## Encerramento da revisão de controles e campos — 23/10/2026
+
+Ver [REVISAO_FINAL_2026-10-23.md](REVISAO_FINAL_2026-10-23.md): controles por clique e teclado, menus, rotas por perfil, ações em lote, máscaras e compatibilidade de importação. Esta revisão final é local; não representa teste no servidor oficial.

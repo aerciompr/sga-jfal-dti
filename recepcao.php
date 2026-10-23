@@ -368,12 +368,9 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                             <td class="py-3 text-xs text-gray-400"><?= date('H:i:s', strtotime($item['chegada_em'])) ?></td>
                                             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
                                                 <td class="py-3 text-right flex items-center justify-end gap-1.5">
-                                                    <button type="button" onclick="removerIndividual(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['status']) ?>)" class="bg-gray-800 hover:bg-gray-750 text-gray-400 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
-                                                        <?= $item['status'] === 'agendado' ? 'Cancelar' : 'Desfazer presença' ?>
-                                                    </button>
-                                                    <button type="button" onclick="iniciarEdicao(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['processo']) ?>, <?= jsValor($item['perito']) ?>, <?= jsValor($item['cpf'] ?? '') ?>)" aria-label="Editar agendamento de <?= escapar($item['nome']) ?>" title="Editar dados" class="bg-gray-800 hover:bg-gray-750 text-gray-300 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
-                                                        ✏️
-                                                    </button>
+                                                    <?php if ((int)$item['chamadas_count'] === 0): ?><button type="button" onclick="removerIndividual(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['status']) ?>)" class="bg-gray-800 hover:bg-gray-750 text-gray-400 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
+                                                        Desfazer presença
+                                                    </button><?php endif; ?>
                                                 </td>
                                             <?php endif; ?>
                                         </tr>
@@ -449,22 +446,22 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 
                 <div>
                     <label class="block text-xs text-gray-400 mb-1 font-semibold uppercase">Nome do Paciente</label>
-                    <input type="text" name="nome" id="edit-nome" required class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    <input type="text" name="nome" maxlength="100" id="edit-nome" required class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
                 </div>
                 
                 <div>
                     <label class="block text-xs text-gray-400 mb-1 font-semibold uppercase">Processo</label>
-                    <input type="text" name="processo" id="edit-processo" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    <input type="text" name="processo" maxlength="50" id="edit-processo" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
                 </div>
                 
                 <div>
                     <label class="block text-xs text-gray-400 mb-1 font-semibold uppercase">CPF do Paciente</label>
-                    <input type="text" name="cpf" id="edit-cpf" placeholder="000.000.000-00" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    <input type="text" name="cpf" maxlength="14" id="edit-cpf" placeholder="000.000.000-00" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
                 </div>
                 
                 <div>
                     <label class="block text-xs text-gray-400 mb-1 font-semibold uppercase">Perito</label>
-                    <input type="text" name="perito" id="edit-perito" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    <input type="text" name="perito" maxlength="100" id="edit-perito" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
                 </div>
                 
                 <div class="flex justify-end gap-3 pt-2">
@@ -535,20 +532,20 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
             <!-- Configuração do Vídeo da TV -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
                 <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider mb-4 flex items-center gap-2">
-                    <span>📺</span> Vídeo de Fundo da TV
+                    <span>📺</span> Vídeo ou Playlist da TV
                 </h2>
                 <form method="POST" class="space-y-4"><?= csrfCampo() ?>
                     <input type="hidden" name="action" value="set_yt_url">
                     <div>
-                        <label class="block text-xs text-gray-400 mb-1">Link do Vídeo (YouTube)</label>
+                        <label class="block text-xs text-gray-400 mb-1">Link do vídeo ou playlist (YouTube)</label>
                         <input type="url" name="yt_url" value="<?= escapar($yt_url) ?>" required placeholder="https://www.youtube.com/watch?v=..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
                     </div>
                     <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2.5 rounded-lg transition">
-                        Atualizar Vídeo
+                        Atualizar conteúdo
                     </button>
                 </form>
                 <p class="text-[10px] text-gray-500 mt-3 leading-normal">
-                    ⚠️ <strong>Nota:</strong> Certifique-se de usar um vídeo público do YouTube que permita reprodução incorporada (incorporação). Vídeos com restrições de idade ou proteção contra bots não carregarão no painel.
+                    ⚠️ <strong>Nota:</strong> Cole o link de um vídeo ou de uma playlist institucional pública ou não listada. Links com “list=” reproduzem a playlist inteira em sequência, repetindo ao final. Todos os vídeos precisam permitir incorporação. Vídeos com restrições de idade ou proteção contra bots não carregarão no painel.
                 </p>
             </div>
         </div>

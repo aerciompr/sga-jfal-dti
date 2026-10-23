@@ -38,3 +38,17 @@ Os roteiros reproduzíveis estão em `tests/usabilidade.mcp.js`, `tests/fluxo_op
 As capturas geradas durante a homologação ficam em `.playwright-mcp/`, fora do Git e da imagem Docker. Nenhuma operação de teste foi realizada sobre a produção da JFAL.
 
 O toque padrão passou a ser **Novo SGA**, com o arquivo original `ekiga-vm.wav` servido localmente. Se este navegador já tinha uma escolha salva, selecione **Novo SGA (padrão)** em Som e tela. A fala começa após o toque completo, preservando voz, texto e velocidade.
+
+## Vídeo ou playlist institucional
+
+Na Recepção, como administrador, use **Vídeo ou Playlist da TV**. Cole um link HTTPS de vídeo ou playlist do YouTube e clique em **Atualizar conteúdo**. O painel reconhece automaticamente; links com `list=` usam a playlist inteira. Sem `list=`, o vídeo único se repete. A lista toca em sequência e repete ao final. A alteração chega à TV pela atualização automática, sem reiniciar o sistema.
+
+A playlist deve ser pública ou não listada e seus vídeos devem permitir incorporação, sem exigir login. O computador da TV precisa acessar o YouTube. O vídeo fica mudo durante o anúncio e recupera o estado anterior depois. Não há alteração do esquema do banco: usa a configuração existente `youtube_url`.
+
+## Campos e importação
+
+O CPF aceita digitação ou colagem com e sem pontuação e confere os dígitos verificadores. É opcional e mantém zeros à esquerda. Processos com 20 dígitos são pontuados ao sair do campo; identificadores antigos continuam aceitos até 50 caracteres. Datas usam os controles nativos do navegador.
+
+A importação aceita CPF com ou sem máscara e os dois formatos de processo sem duplicar o mesmo agendamento. Na planilha, mantenha CPFs e números de processo como **texto**, para preservar zeros e todos os dígitos; a máscara não recupera números já alterados pelo Excel. A prévia permite conferir CPF antes de confirmar. Não é necessário aplicar máscara na planilha.
+
+Após **Concluir preparação**, recarregar a TV não reabre os controles. O botão **Reativar voz** permite habilitar o áudio novamente; **Som e tela** reabre as opções a qualquer momento. A escolha do toque e seu volume permanecem salvos no mesmo navegador.

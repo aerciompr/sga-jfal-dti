@@ -39,7 +39,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     } catch (DomainException $e) { $message = $e->getMessage(); $message_type = 'error'; }
     catch (Throwable $e) { $message = erroPublico($e); $message_type = 'error'; }
     $_SESSION['flash_pauta'] = [$message,$message_type];
-    header('Location: gerenciar_pauta.php' . '', true, 303); exit;
+    $filtrosRetorno = array_intersect_key($_GET, array_flip(['filtro_tipo','data_busca','mes_busca']));
+    header('Location: gerenciar_pauta.php' . ($filtrosRetorno ? '?' . http_build_query($filtrosRetorno) : ''), true, 303); exit;
 }
 
 
@@ -379,7 +380,7 @@ try {
                                     <?php foreach ($atendimentos as $item): ?>
                                         <tr onclick="if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'BUTTON' && !event.target.closest('button') && !event.target.closest('a')) mostrarModalDetalhes({ nome: <?= jsValor($item['nome']) ?>, cpf: <?= jsValor($item['cpf'] ?? '---') ?>, processo: <?= jsValor($item['processo']) ?>, perito: <?= jsValor($item['perito']) ?>, data_pauta: '<?= date('d/m/Y', strtotime($item['data_pauta'])) ?>', status: <?= jsValor($item['status']) ?>, chegada_em: '<?= $item['chegada_em'] ? date('H:i:s', strtotime($item['chegada_em'])) : '---' ?>' })" class="hover:bg-gray-900/30 cursor-pointer transition">
                                             <td class="py-3">
-                                                <input type="checkbox" name="selecionados[]" value="<?= $item['id'] ?>" class="chk-item rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0 focus:ring-offset-0">
+                                                <input type="checkbox" name="selecionados[]" value="<?= $item['id'] ?>" data-status="<?= escapar($item['status']) ?>" data-chamadas="<?= (int)$item['chamadas_count'] ?>" aria-label="Selecionar <?= escapar($item['nome']) ?>" class="chk-item rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0 focus:ring-offset-0">
                                             </td>
                                             <td class="py-3 text-xs font-mono text-gray-400">
                                                 <?= date('d/m/Y', strtotime($item['data_pauta'])) ?>
@@ -421,15 +422,17 @@ try {
                                                         <button type="button" onclick="confirmarChegadaIndividual(<?= $item['id'] ?>)" title="Confirmar Presença" class="bg-emerald-950/40 hover:bg-emerald-900/40 border border-emerald-900/60 text-emerald-400 text-[10px] px-2 py-1 rounded font-bold transition">
                                                             ✔️ Confirmar
                                                         </button>
-                                                    <?php else: ?>
+                                                    <?php elseif ($status === 'presente' && (int)$item['chamadas_count'] === 0): ?>
                                                         <button type="button" onclick="removerChegadaIndividual(<?= $item['id'] ?>)" title="Retornar para Agendados" class="bg-amber-950/40 hover:bg-amber-900/40 border border-amber-900/60 text-amber-400 text-[10px] px-2 py-1 rounded font-bold transition">
                                                             ↩️ Desfazer
                                                         </button>
                                                     <?php endif; ?>
                                                     
+                                                    <?php if ($status === 'agendado'): ?>
                                                     <button type="button" onclick="excluirIndividual(<?= $item['id'] ?>)" title="Cancelar agendamento" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-[10px] px-2 py-1 rounded transition">
                                                         🗑️
                                                     </button>
+                                                    <?php endif; ?>
                                                 </div>
                                             </td>
                                         </tr>
@@ -497,6 +500,7 @@ try {
         function excluirIndividual(id) {
             if (confirm('Cancelar este agendamento, preservando o histórico?')) {
                 document.getElementById('ind-action').value = 'excluir_selecionados';
+                document.getElementById('ind-id').value = id;
                 document.getElementById('ind-selecionados').value = id;
                 document.getElementById('form-action-individual').submit();
             }
@@ -594,9 +598,10 @@ try {
             const count = selecionados.length;
             
             if (count > 0) {
-                btnChegada.disabled = false;
-                btnCancelar.disabled = false;
-                btnExcluir.disabled = false;
+                const itens=Array.from(chks).filter(chk=>chk.checked);
+                btnChegada.disabled = !itens.some(chk=>chk.dataset.status==='agendado');
+                btnCancelar.disabled = !itens.some(chk=>chk.dataset.status==='presente' && chk.dataset.chamadas==='0');
+                btnExcluir.disabled = !itens.some(chk=>chk.dataset.status==='agendado');
                 lblSelecionados.innerText = `${count} registro(s) selecionado(s).`;
             } else {
                 btnChegada.disabled = true;

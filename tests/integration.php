@@ -9,7 +9,7 @@ function rejeita(callable $fn, string $nome): void { try { $fn(); } catch (Domai
 function item(PDO $pdo,int $id): array { $s=$pdo->prepare('SELECT * FROM atendimentos WHERE id=?');$s->execute([$id]); return $s->fetch(); }
 foreach (['eventos_chamada','atendimentos','logs_auditoria','pautas_liberadas','sequencia_diaria_senhas','locks_peritos','login_tentativas','salas_peritos','usuarios'] as $table) $pdo->exec("DELETE FROM $table");
 $ins=$pdo->prepare('INSERT INTO usuarios (username,password,role,nome) VALUES (?,?,?,?)');
-foreach ([['admin-test','admin','Administrador Teste'],['perito-a','perito','Perito Teste A'],['perito-b','perito','Perito Teste B'],['recepcao-test','recepcao','Recepção Teste']] as [$login,$role,$nome]) $ins->execute([$login,password_hash('Senha-local-teste-2026!',PASSWORD_DEFAULT),$role,$nome]);
+foreach ([['admin-test','admin','Administrador Teste'],['perito-a','perito','Perito Teste A'],['perito-b','perito','Perito Teste B'],['recepcao-test','recepcao','Recepção Teste'],['supervisor-test','supervisor','Supervisão Teste']] as [$login,$role,$nome]) $ins->execute([$login,password_hash('Senha-local-teste-2026!',PASSWORD_DEFAULT),$role,$nome]);
 $ids=$pdo->query('SELECT username,id FROM usuarios')->fetchAll(PDO::FETCH_KEY_PAIR);
 $_SESSION=['usuario_id'=>$ids['admin-test'],'usuario_role'=>'admin','usuario_name'=>'admin-test'];
 operarPauta($pdo,'liberar_pauta',['data_alvo'=>date('Y-m-d')],date('Y-m-d'));
@@ -50,6 +50,15 @@ $reg=['processo'=>'IMPORT-TESTE','perito'=>'Perito Teste A','cpf_perito'=>'','cp
 $futuro=$reg; $futuro['data_pericia']=(new DateTimeImmutable('+1 day'))->format('Y-m-d');
 $r=importarRegistros($pdo,[$reg,$futuro]); check($r['novos']===2,'Importação mantém datas diferentes');
 $r=importarRegistros($pdo,[$reg,$futuro]); check($r['novos']===0 && $r['atualizados']===0,'Reimportação idempotente');
+$dataMascara=(new DateTimeImmutable('+3 days'))->format('Y-m-d');
+$mascarado=['nome'=>'Pessoa Máscara','processo'=>'0000001-00.2026.4.05.8000','perito'=>'Perito Teste A','cpf'=>'52998224725'];
+operarPauta($pdo,'agendar_unico',$mascarado,$dataMascara);
+$mascaraId=(int)$pdo->query('SELECT MAX(id) FROM atendimentos')->fetchColumn();
+check(item($pdo,$mascaraId)['cpf']==='529.982.247-25','CPF manual normalizado como importador');
+$importado=['processo'=>'00000010020264058000','perito'=>'Perito Teste A','cpf_perito'=>'','cpf'=>'529.982.247-25','periciado'=>'Pessoa Máscara','data_pericia'=>$dataMascara];
+$r=importarRegistros($pdo,[$importado]);check($r['novos']===0 && $r['atualizados']===0,'Máscaras não duplicam nem alteram importação equivalente');
+$mascarado['processo']='00000010020264058000';
+rejeita(fn()=>operarPauta($pdo,'agendar_unico',$mascarado,$dataMascara),'Duplicidade manual independe da máscara do processo');
 rejeita(fn()=>operarUsuario($pdo,['action'=>'editar','id'=>$ids['admin-test'],'username'=>'admin-test','role'=>'recepcao','nome'=>'Teste','password'=>'']),'Preserva último administrador');
 $antes=$pdo->query('SELECT session_version FROM usuarios WHERE id='.$ids['perito-a'])->fetchColumn();
 operarUsuario($pdo,['action'=>'editar','id'=>$ids['perito-a'],'username'=>'perito-a','role'=>'perito','nome'=>'Perito Teste A','password'=>'Nova-senha-teste-2026!']);
@@ -61,7 +70,7 @@ $stream=fopen('php://memory','r+');csvSeguro($stream,['=1+1','Nome']);rewind($st
 check(!dataValida('2026-02-31'),'Rejeita data impossível');
 $mensal=$dados; $mensal['processo']='MES-TESTE';
 operarPauta($pdo,'agendar_unico',$mensal,'2030-03-31');$mesId=(int)$pdo->query('SELECT MAX(id) FROM atendimentos')->fetchColumn();
-operarPauta($pdo,'mover_pauta',['mover_tipo'=>'mes','mover_mes_origem'=>'2030-03','nova_data'=>'2030-04-01'],date('Y-m-d'));
+operarPauta($pdo,'mover_pauta',['mover_tipo'=>'mes','mover_mes_origem'=>'2030-03','nova_data'=>'2030-04'],date('Y-m-d'));
 check(item($pdo,$mesId)['data_pauta']==='2030-04-30','Remanejamento mensal respeita último dia do mês');
 // Falha de trilha crítica deve reverter a mutação.
 $pdo->exec("CREATE TRIGGER teste_log_falha BEFORE INSERT ON logs_auditoria FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='falha simulada'");
