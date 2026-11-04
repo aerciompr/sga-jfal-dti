@@ -17,6 +17,7 @@ function prepararImportacao(array $arquivo): array {
 }
 
 function importarRegistros(PDO $pdo, array $registros): array {
+    @set_time_limit(300);
     $lock = $pdo->query("SELECT GET_LOCK('sga_importacao', 15)")->fetchColumn();
     if (!$lock) throw new DomainException('Outra importação está em andamento. Tente novamente.');
     $pdo->beginTransaction();
@@ -25,7 +26,14 @@ function importarRegistros(PDO $pdo, array $registros): array {
         $buscar = $pdo->prepare("SELECT * FROM atendimentos WHERE LOWER(REPLACE(REPLACE(REPLACE(REPLACE(processo, '.', ''), '-', ''), '/', ''), ' ', '')) = ? AND data_pauta = ? AND perito = ? AND status <> 'cancelado' FOR UPDATE");
         $inserir = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, status, data_pauta, cpf) VALUES (?, ?, ?, 'agendado', ?, ?)");
         $atualizar = $pdo->prepare("UPDATE atendimentos SET nome = ?, cpf = ? WHERE id = ? AND status = 'agendado'");
+        $vincularAtendimento = $pdo->prepare("UPDATE atendimentos SET perito_id = ? WHERE id = ? AND status = 'agendado' AND (perito_id IS NULL OR perito_id = ?)");
+        $buscarUsuarioCpf = $pdo->prepare("SELECT id, nome, role FROM usuarios WHERE username = ? OR REPLACE(REPLACE(cpf, '.', ''), '-', '') = ? FOR UPDATE");
+        $inserirUsuarioPerito = $pdo->prepare("INSERT INTO usuarios (username, password, role, nome, cpf, must_change_password) VALUES (?, ?, 'perito', ?, ?, 1)");
+        $atualizarCpfUsuario = $pdo->prepare("UPDATE usuarios SET cpf = ? WHERE id = ? AND (cpf IS NULL OR cpf = '')");
+        $cachePeritos = [];
+
         foreach ($registros as $r) {
+            $item = null;
             if (!dataValida($r['data_pericia']) || $r['data_pericia'] < date('Y-m-d')) throw new DomainException('Prévia expirada ou data inválida. Reimporte o arquivo.');
             $nome = $r['periciado'] ?: '(Nome pendente — conferir documento)';
             $buscar->execute([simplifyName($r['processo']), $r['data_pericia'], $r['perito']]); $existentes = $buscar->fetchAll();
@@ -64,25 +72,31 @@ function importarRegistros(PDO $pdo, array $registros): array {
                 $atendimentoId = (int)$pdo->lastInsertId();
                 registrarLog($pdo, 'Importar Agendamento', json_encode($r, JSON_UNESCAPED_UNICODE), $atendimentoId); $novos++;
             }
-            $vinculo = peritoId($pdo, $r['perito']);
-            if ($r['cpf_perito']) {
-                $cpf = preg_replace('/\D/', '', $r['cpf_perito']);
-                $u = $pdo->prepare("SELECT id, nome, role FROM usuarios WHERE username = ? OR REPLACE(REPLACE(cpf, '.', ''), '-', '') = ? FOR UPDATE");
-                $u->execute([$cpf, $cpf]); $existe = $u->fetchAll();
-                if (count($existe) > 1 || ($existe && ($existe[0]['role'] !== 'perito' || simplifyNameWithSpaces($existe[0]['nome'] ?? '') !== simplifyNameWithSpaces($r['perito'])))) throw new DomainException('CPF de perito associado a cadastro divergente. Revise o cadastro.');
-                if ($existe) $vinculo = (int)$existe[0]['id'];
-                if (!$existe) {
-                    // Sem senha conhecida até um administrador atribuir credencial individual.
-                    $u = $pdo->prepare("INSERT INTO usuarios (username, password, role, nome, cpf, must_change_password) VALUES (?, ?, 'perito', ?, ?, 1)");
-                    $u->execute([$cpf, password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT), $r['perito'], $r['cpf_perito']]);
-                    $vinculo = (int)$pdo->lastInsertId();
-                    registrarLog($pdo, 'Pré-cadastrar Perito', 'Conta requer ativação individual pelo administrador.'); $usuarios++;
+
+            $chavePerito = $r['perito'] . '|' . ($r['cpf_perito'] ?? '');
+            if (!array_key_exists($chavePerito, $cachePeritos)) {
+                $vinculo = peritoId($pdo, $r['perito']);
+                if (!empty($r['cpf_perito'])) {
+                    $cpf = preg_replace('/\D/', '', $r['cpf_perito']);
+                    $buscarUsuarioCpf->execute([$cpf, $cpf]); $existe = $buscarUsuarioCpf->fetchAll();
+                    if (count($existe) > 1 || ($existe && ($existe[0]['role'] !== 'perito' || simplifyNameWithSpaces($existe[0]['nome'] ?? '') !== simplifyNameWithSpaces($r['perito'])))) throw new DomainException('CPF de perito associado a cadastro divergente. Revise o cadastro.');
+                    if ($existe) $vinculo = (int)$existe[0]['id'];
+                    elseif ($vinculo !== null) {
+                        $atualizarCpfUsuario->execute([$r['cpf_perito'], $vinculo]);
+                    } else {
+                        // Sem senha conhecida até um administrador atribuir credencial individual.
+                        $inserirUsuarioPerito->execute([$cpf, password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT), $r['perito'], $r['cpf_perito']]);
+                        $vinculo = (int)$pdo->lastInsertId();
+                        registrarLog($pdo, 'Pré-cadastrar Perito', 'Conta requer ativação individual pelo administrador.'); $usuarios++;
+                    }
                 }
+                $cachePeritos[$chavePerito] = $vinculo;
             }
+            $vinculo = $cachePeritos[$chavePerito];
+
             if ($vinculo !== null) {
-                $v = $pdo->prepare("UPDATE atendimentos SET perito_id = ? WHERE id = ? AND status = 'agendado' AND (perito_id IS NULL OR perito_id = ?)");
-                $v->execute([$vinculo, $atendimentoId, $vinculo]);
-                if ($existentes && $item['perito_id'] !== null && (int)$item['perito_id'] !== $vinculo) throw new DomainException('Agendamento já vinculado a outro profissional. Revise a pauta.');
+                $vincularAtendimento->execute([$vinculo, $atendimentoId, $vinculo]);
+                if ($item !== null && $item['perito_id'] !== null && (int)$item['perito_id'] !== $vinculo) throw new DomainException('Agendamento já vinculado a outro profissional. Revise a pauta.');
             }
         }
         $pdo->commit(); return compact('novos', 'atualizados', 'preservados', 'usuarios');

@@ -72,6 +72,7 @@ def parse_excel(caminho):
                 icpf = coluna(lambda h: 'perito' in h and 'cpf' in h, False)
                 idata = coluna(lambda h: 'data' in h and 'pericia' in h and not any(x in h for x in ('fim', 'ultima')))
                 inome = coluna(lambda h: 'nome' in h and 'perito' not in h and 'especialidade' not in h, False)
+                itipo = coluna(lambda h: h in ('tipo', 'polo', 'tipo parte', 'polo passivo', 'tipo da parte'), False)
                 registros_por_proc = {}
                 for numero, row in enumerate(linhas, 2):
                     if not any(v is not None and str(v).strip() for v in row):
@@ -85,7 +86,14 @@ def parse_excel(caminho):
                             raise ValueError('Processo ou nome do perito ausente/inválido')
                         data = data_pericia(row[idata])
                         documento = str(row[idoc] or '')
-                        pessoa_juridica = '/' in documento
+                        tipo_str = str(row[itipo] or '').strip().upper() if itipo is not None else ''
+                        nome_bruto = str(row[inome] or '').strip() if inome is not None else ''
+                        nome_norm = normalizar(nome_bruto)
+                        pessoa_juridica = (
+                            '/' in documento or
+                            tipo_str in ('REU', 'PASSIVO', 'POLO PASSIVO', 'REU/RE') or
+                            any(pj in nome_norm for pj in ('instituto nacional do seguro social', 'inss', 'fazenda nacional', 'caixa economica', 'banco bradesco', 'uniao federal'))
+                        )
                         cpf = '' if pessoa_juridica else clean_cpf(row[idoc])
                         nome = '' if pessoa_juridica or inome is None else ' '.join(str(row[inome] or '').split())
                         if len(nome) > 100:
@@ -136,6 +144,7 @@ def parse_excel(caminho):
                     {k: v for k, v in item.items() if k != '_pj'}
                     for lista in registros_por_proc.values()
                     for item in lista
+                    if not item.get('_pj')
                 ]
                 if not registros:
                     raise ValueError('Nenhum agendamento encontrado')

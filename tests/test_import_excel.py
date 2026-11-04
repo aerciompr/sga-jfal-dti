@@ -76,5 +76,17 @@ class ImportacaoTest(unittest.TestCase):
     def test_sem_data_nao_presume_hoje(self):
         self.assertIn('error', self.planilha([['TESTE', '', 'Perito', '', 'Pessoa']])[0])
 
+    def test_reu_pj_sem_barra_ignora_como_periciado(self):
+        headers = ['Processo', 'Documento', 'Nome Perito', 'Data perícia', 'Nome Parte', 'Tipo', 'CPF Perito']
+        linhas = [
+            ['0047769-73.2026.4.05.8000', '-', 'Perito Teste', '23/11/2026', 'Instituto Nacional Do Seguro Social', 'REU', '048.548.384-00'],
+            ['0047769-73.2026.4.05.8000', '123.271.144-62', 'Perito Teste', '23/11/2026', 'Melissa Cavalcante De Lima Souza', 'AUTOR', '048.548.384-00'],
+        ]
+        registros = self.planilha(linhas, headers)
+        self.assertEqual(1, len(registros))
+        self.assertEqual('Melissa Cavalcante De Lima Souza', registros[0]['periciado'])
+        self.assertEqual('123.271.144-62', registros[0]['cpf'])
+        self.assertEqual('048.548.384-00', registros[0]['cpf_perito'])
+
 
 if __name__ == '__main__': unittest.main()

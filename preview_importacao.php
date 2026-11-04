@@ -19,10 +19,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet" href="assets/usabilidade.css"></head>
 <body class="bg-gray-950 text-gray-100 p-6"><main class="max-w-5xl mx-auto"><h1 class="text-xl font-bold">Conferir importação</h1>
 <p class="my-4"><?= count($previa['registros']) ?> agendamentos de hoje em diante. Datas passadas foram descartadas. Registros já iniciados serão preservados. Novas contas precisam de senha individual atribuída pelo administrador.</p>
-<?php if ($erro): ?><p role="alert"><?= escapar($erro) ?></p><?php endif; ?>
+<?php if ($erro): ?>
+<div role="alert" class="bg-red-950/80 border border-red-500 text-red-200 px-4 py-3 rounded-lg my-4 text-sm font-semibold flex items-center gap-2">
+    <span class="inline-block w-2 h-2 rounded-full bg-red-400"></span>
+    <span><?= escapar($erro) ?></span>
+</div>
+<?php endif; ?>
 <p>Abaixo, até 100 registros. A confirmação abrange todos os <?= count($previa['registros']) ?> registros validados.</p>
 <div class="overflow-x-auto"><table class="w-full my-4 text-sm"><thead><tr><th>Data</th><th>Processo</th><th>Periciado</th><th>CPF</th><th>Perito</th></tr></thead><tbody>
 <?php foreach (array_slice($previa['registros'], 0, 100) as $r): ?><tr><?php foreach (['data_pericia','processo','periciado','cpf','perito'] as $campo): ?><td class="p-2"><?= escapar($r[$campo] ?: 'Conferir nome') ?></td><?php endforeach; ?></tr><?php endforeach; ?>
-</tbody></table></div><form method="post"><?= csrfCampo() ?><button class="bg-blue-600 p-3 rounded" type="submit">Confirmar importação</button> <button class="bg-gray-700 p-3 rounded" name="cancelar" value="1">Cancelar</button></form></main><script src="assets/acessibilidade.js" defer></script>
+</tbody></table></div><form method="post" onsubmit="var btn=this.querySelector('button[type=submit]'); if(btn){btn.disabled=true;btn.textContent='Importando...';}"><?= csrfCampo() ?><button class="bg-blue-600 hover:bg-blue-500 p-3 rounded font-medium" type="submit">Confirmar importação</button> <button class="bg-gray-700 hover:bg-gray-600 p-3 rounded font-medium ml-2" name="cancelar" value="1">Cancelar</button></form></main><script src="assets/acessibilidade.js" defer></script>
 <script src="assets/usabilidade.js" defer></script>
 </body></html>
