@@ -72,7 +72,7 @@ def parse_excel(caminho):
                 icpf = coluna(lambda h: 'perito' in h and 'cpf' in h, False)
                 idata = coluna(lambda h: 'data' in h and 'pericia' in h and not any(x in h for x in ('fim', 'ultima')))
                 inome = coluna(lambda h: 'nome' in h and 'perito' not in h and 'especialidade' not in h, False)
-                registros = {}
+                registros_por_proc = {}
                 for numero, row in enumerate(linhas, 2):
                     if not any(v is not None and str(v).strip() for v in row):
                         continue
@@ -91,21 +91,55 @@ def parse_excel(caminho):
                         if len(nome) > 100:
                             raise ValueError('Nome do periciado excede 100 caracteres')
                         cpf_perito = clean_cpf(row[icpf]) if icpf is not None else ''
-                        chave = (re.sub(r'\W', '', processo), data, normalizar(perito))
-                        registro = dict(processo=processo, perito=perito, cpf_perito=cpf_perito, cpf=cpf, periciado=nome, data_pericia=data)
-                        if chave in registros:
-                            anterior = registros[chave]
-                            for campo in ('cpf', 'periciado', 'cpf_perito'):
-                                if anterior[campo] and registro[campo] and normalizar(anterior[campo]) != normalizar(registro[campo]):
+                        proc_key = (re.sub(r'\W', '', processo), data, normalizar(perito))
+                        if proc_key not in registros_por_proc:
+                            registros_por_proc[proc_key] = []
+                        lista = registros_por_proc[proc_key]
+
+                        if pessoa_juridica:
+                            if cpf_perito:
+                                for item in lista:
+                                    if not item['cpf_perito']:
+                                        item['cpf_perito'] = cpf_perito
+                            if not lista:
+                                lista.append(dict(processo=processo, perito=perito, cpf_perito=cpf_perito, cpf='', periciado='', data_pericia=data, _pj=True))
+                            continue
+
+                        if len(lista) == 1 and lista[0].get('_pj'):
+                            pj_cpf_perito = lista[0]['cpf_perito']
+                            if not cpf_perito:
+                                cpf_perito = pj_cpf_perito
+                            lista.clear()
+
+                        correspondente = None
+                        for item in lista:
+                            if cpf and item['cpf'] and item['cpf'] == cpf:
+                                if nome and item['periciado'] and normalizar(nome) != normalizar(item['periciado']):
                                     raise ValueError('Partes ou profissionais conflitantes para o mesmo agendamento; revise a pauta')
-                                anterior[campo] = anterior[campo] or registro[campo]
+                                correspondente = item
+                                break
+                            if (not cpf or not item['cpf']) and nome and item['periciado'] and normalizar(nome) == normalizar(item['periciado']):
+                                correspondente = item
+                                break
+
+                        if correspondente:
+                            if cpf_perito and correspondente['cpf_perito'] and cpf_perito != correspondente['cpf_perito']:
+                                raise ValueError('Partes ou profissionais conflitantes para o mesmo agendamento; revise a pauta')
+                            correspondente['cpf'] = correspondente['cpf'] or cpf
+                            correspondente['periciado'] = correspondente['periciado'] or nome
+                            correspondente['cpf_perito'] = correspondente['cpf_perito'] or cpf_perito
                         else:
-                            registros[chave] = registro
+                            lista.append(dict(processo=processo, perito=perito, cpf_perito=cpf_perito, cpf=cpf, periciado=nome, data_pericia=data))
                     except (ValueError, IndexError) as erro:
                         raise ValueError(f'Linha {numero}: {erro}') from erro
+                registros = [
+                    {k: v for k, v in item.items() if k != '_pj'}
+                    for lista in registros_por_proc.values()
+                    for item in lista
+                ]
                 if not registros:
                     raise ValueError('Nenhum agendamento encontrado')
-                return list(registros.values())
+                return registros
             finally:
                 wb.close()
     except Exception as erro:

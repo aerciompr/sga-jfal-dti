@@ -25,8 +25,17 @@ function validarAgendamento(PDO $pdo, array $dados, string $data, ?int $ignorar 
     if ($nome === '' || mb_strlen($nome) > 100 || strlen($processo) > 50 || $perito === '' || mb_strlen($perito) > 100 || !validarCpf($cpf)) throw new DomainException('Confira nome, processo, perito e CPF.');
     if ($cpf !== '') $cpf = preg_replace('/^(\d{3})(\d{3})(\d{3})(\d{2})$/', '$1.$2.$3-$4', preg_replace('/\D/', '', $cpf));
     if ($processo !== '') {
-        $s = $pdo->prepare("SELECT id, processo, perito FROM atendimentos WHERE data_pauta = ? AND status <> 'cancelado' AND id <> ?"); $s->execute([$data, $ignorar ?? 0]);
-        foreach ($s as $item) if (simplifyName($item['processo'] ?? '') === simplifyName($processo) && simplifyNameWithSpaces($item['perito'] ?? '') === simplifyNameWithSpaces($perito)) throw new DomainException('Agendamento duplicado para este processo, data e perito.');
+        $s = $pdo->prepare("SELECT id, processo, perito, nome, cpf FROM atendimentos WHERE data_pauta = ? AND status <> 'cancelado' AND id <> ?"); $s->execute([$data, $ignorar ?? 0]);
+        $cpfLimpo = preg_replace('/\D/', '', $cpf);
+        $nomeSimplificado = simplifyName($nome);
+        foreach ($s as $item) {
+            if (simplifyName($item['processo'] ?? '') === simplifyName($processo) && simplifyNameWithSpaces($item['perito'] ?? '') === simplifyNameWithSpaces($perito)) {
+                $itemCpfLimpo = preg_replace('/\D/', '', $item['cpf'] ?? '');
+                $mesmoCpf = ($cpfLimpo !== '' && $itemCpfLimpo !== '' && $cpfLimpo === $itemCpfLimpo);
+                $mesmoNome = (simplifyName($item['nome'] ?? '') === $nomeSimplificado);
+                if ($mesmoCpf || $mesmoNome) throw new DomainException('Agendamento duplicado para este periciado, processo, data e perito.');
+            }
+        }
     }
     return [$nome, $processo ?: null, $perito, $cpf ?: null, peritoId($pdo, $perito)];
 }

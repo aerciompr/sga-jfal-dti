@@ -59,6 +59,12 @@ $importado=['processo'=>'00000010020264058000','perito'=>'Perito Teste A','cpf_p
 $r=importarRegistros($pdo,[$importado]);check($r['novos']===0 && $r['atualizados']===0,'Máscaras não duplicam nem alteram importação equivalente');
 $mascarado['processo']='00000010020264058000';
 rejeita(fn()=>operarPauta($pdo,'agendar_unico',$mascarado,$dataMascara),'Duplicidade manual independe da máscara do processo');
+$coautor=['nome'=>'Pessoa Coautora','processo'=>'00000010020264058000','perito'=>'Perito Teste A','cpf'=>'08041416497'];
+operarPauta($pdo,'agendar_unico',$coautor,$dataMascara);
+$coautorId=(int)$pdo->query('SELECT MAX(id) FROM atendimentos')->fetchColumn();
+check(item($pdo,$coautorId)['nome']==='Pessoa Coautora','Permite coautor com CPF distinto no mesmo processo');
+$importadoCoautor=['processo'=>'00000010020264058000','perito'=>'Perito Teste A','cpf_perito'=>'','cpf'=>'080.414.164-97','periciado'=>'Pessoa Coautora','data_pericia'=>$dataMascara];
+$r=importarRegistros($pdo,[$importado,$importadoCoautor]);check($r['novos']===0 && $r['atualizados']===0,'Reimportação com múltiplos autores é idempotente');
 rejeita(fn()=>operarUsuario($pdo,['action'=>'editar','id'=>$ids['admin-test'],'username'=>'admin-test','role'=>'recepcao','nome'=>'Teste','password'=>'']),'Preserva último administrador');
 $antes=$pdo->query('SELECT session_version FROM usuarios WHERE id='.$ids['perito-a'])->fetchColumn();
 operarUsuario($pdo,['action'=>'editar','id'=>$ids['perito-a'],'username'=>'perito-a','role'=>'perito','nome'=>'Perito Teste A','password'=>'Nova-senha-teste-2026!']);

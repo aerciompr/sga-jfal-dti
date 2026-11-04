@@ -12,7 +12,7 @@ $checks=[
     'Senhas duplicadas no mesmo dia' => "SELECT COUNT(*) FROM (SELECT data_pauta,senha FROM atendimentos WHERE senha REGEXP '^PE-[0-9]+$' AND status<>'cancelado' GROUP BY data_pauta,senha HAVING COUNT(*)>1) conflitos",
 ];
 foreach($checks as $nome=>$sql) { $n=(int)$pdo->query($sql)->fetchColumn(); echo ($n?'REVISAR':'OK').": $nome: $n\n"; if($n)$falhas++; }
-$duplicados=$pdo->query("SELECT processo,data_pauta,perito FROM atendimentos WHERE status<>'cancelado' AND processo IS NOT NULL AND processo<>'' GROUP BY processo,data_pauta,perito HAVING COUNT(*)>1")->fetchAll();
+$duplicados=$pdo->query("SELECT processo,data_pauta,perito,COALESCE(NULLIF(cpf,''),nome) AS periciado FROM atendimentos WHERE status<>'cancelado' AND processo IS NOT NULL AND processo<>'' GROUP BY processo,data_pauta,perito,periciado HAVING COUNT(*)>1")->fetchAll();
 echo ($duplicados?'REVISAR':'OK').': Grupos duplicados: '.count($duplicados)."\n";if($duplicados)$falhas++;
 echo "Nenhum dado foi alterado.\n";
 exit($falhas?1:0);

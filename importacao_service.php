@@ -29,9 +29,30 @@ function importarRegistros(PDO $pdo, array $registros): array {
             if (!dataValida($r['data_pericia']) || $r['data_pericia'] < date('Y-m-d')) throw new DomainException('Prévia expirada ou data inválida. Reimporte o arquivo.');
             $nome = $r['periciado'] ?: '(Nome pendente — conferir documento)';
             $buscar->execute([simplifyName($r['processo']), $r['data_pericia'], $r['perito']]); $existentes = $buscar->fetchAll();
-            if (count($existentes) > 1) throw new DomainException('Há agendamentos duplicados no banco para um registro. Revise a pauta antes de importar.');
-            if ($existentes) {
-                $item = $existentes[0];
+            $cpfLimpo = preg_replace('/\D/', '', $r['cpf'] ?? '');
+            $nomeSimplificado = simplifyName($nome);
+            $correspondentes = [];
+            if ($cpfLimpo !== '') {
+                foreach ($existentes as $c) {
+                    $cCpf = preg_replace('/\D/', '', $c['cpf'] ?? '');
+                    if ($cCpf !== '' && $cCpf === $cpfLimpo) {
+                        $correspondentes[] = $c;
+                    }
+                }
+            }
+            if (!$correspondentes) {
+                foreach ($existentes as $c) {
+                    if (simplifyName($c['nome'] ?? '') === $nomeSimplificado) {
+                        $correspondentes[] = $c;
+                    }
+                }
+            }
+            if (!$correspondentes && count($existentes) === 1 && empty($existentes[0]['cpf']) && ($existentes[0]['nome'] === '(Nome pendente — conferir documento)' || $nome === '(Nome pendente — conferir documento)')) {
+                $correspondentes[] = $existentes[0];
+            }
+            if (count($correspondentes) > 1) throw new DomainException('Há agendamentos duplicados no banco para um registro. Revise a pauta antes de importar.');
+            if ($correspondentes) {
+                $item = $correspondentes[0];
                 $atendimentoId = (int)$item['id'];
                 if ($item['status'] !== 'agendado') { $preservados++; continue; }
                 if ($item['nome'] !== $nome || ($item['cpf'] ?? '') !== $r['cpf']) {

@@ -58,8 +58,20 @@ class ImportacaoTest(unittest.TestCase):
         self.assertEqual('2030-11-01', registros[0]['data_pericia'])
         self.assertEqual('LEGADO-123', registros[0]['processo'])
 
-    def test_conflito(self):
-        self.assertIn('error', self.planilha([['TESTE', '', 'Perito', '01/11/2026', 'Pessoa A'], ['TESTE', '', 'Perito', '01/11/2026', 'Pessoa B']])[0])
+    def test_multiplos_autores_mesmo_processo(self):
+        registros = self.planilha([
+            ['0043417-72.2026.4.05.8000', '002.762.744-66', 'Perito Teste', '10/11/2026', 'Giovanni Fernandes Aquino'],
+            ['0043417-72.2026.4.05.8000', '082.448.054-63', 'Perito Teste', '10/11/2026', 'Mariana Fernandes Leal'],
+        ])
+        self.assertEqual(2, len(registros))
+        self.assertEqual('002.762.744-66', registros[0]['cpf'])
+        self.assertEqual('082.448.054-63', registros[1]['cpf'])
+
+    def test_conflito_mesmo_cpf_nome_divergente(self):
+        self.assertIn('error', self.planilha([
+            ['TESTE', '529.982.247-25', 'Perito', '01/11/2026', 'Pessoa A'],
+            ['TESTE', '529.982.247-25', 'Perito', '01/11/2026', 'Pessoa B'],
+        ])[0])
 
     def test_sem_data_nao_presume_hoje(self):
         self.assertIn('error', self.planilha([['TESTE', '', 'Perito', '', 'Pessoa']])[0])
