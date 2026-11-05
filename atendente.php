@@ -174,6 +174,8 @@ $fila_espera = $cont_aguardando;
     <script src="tema.js"></script>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
+    <!-- Container de Toasts de Notificação do Perito -->
+    <div id="toast-container-perito" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none *:pointer-events-auto"></div>
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md shrink-0">
         <div class="flex items-center space-x-3">
@@ -206,6 +208,9 @@ $fila_espera = $cont_aguardando;
             <?php endif; ?>
 
             <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($user_name) ?></strong></span>
+            <button id="btn-toggle-som-perito" type="button" class="text-xs px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-900 text-emerald-400 hover:bg-gray-800 transition flex items-center gap-1.5" title="Ativar ou silenciar alerta sonoro na chegada de periciados">
+                <span id="icone-som">🔊</span> <span id="texto-som">Som Ativo</span>
+            </button>
             <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
@@ -378,6 +383,9 @@ $fila_espera = $cont_aguardando;
                             </form>
                         <?php endif; ?>
                     </div>
+                    <a href="declaracao_comparecimento.php?id=<?= (int)$atendimento_atual['id'] ?>&print=1" target="_blank" class="w-full max-w-xl bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 font-semibold py-2.5 px-3 rounded-xl text-xs transition inline-flex items-center justify-center gap-1.5 mt-3">
+                        🖨️ Emitir Declaração de Comparecimento
+                    </a>
                 <?php else: ?>
                     <div class="text-2xl font-bold text-gray-500 my-8">Nenhum atendimento em andamento</div>
                 <?php endif; ?>
@@ -399,6 +407,24 @@ $fila_espera = $cont_aguardando;
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
                     <h3 class="text-sm font-semibold uppercase text-gray-400 tracking-wider">Sua Pauta e Fila de Hoje</h3>
                     <a href="atendente.php" class="sga-neutral text-xs">Atualizar</a>
+                </div>
+
+                <!-- Seletor de Critério de Atendimento Sincronizado com a Recepção -->
+                <div class="flex items-center justify-between flex-wrap gap-2 bg-gray-950/80 border border-gray-800 p-2.5 rounded-xl mb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="text-[11px] uppercase font-bold text-gray-400 tracking-wider">Critério da Fila:</span>
+                        <div class="inline-flex rounded-lg border border-gray-750 bg-gray-900 p-0.5" id="grupo-criterio-fila">
+                            <button type="button" id="btn-crit-chegada" class="px-3 py-1 text-xs font-bold rounded-md bg-blue-600 text-white transition">
+                                🏃 Ordem de Chegada (Padrão)
+                            </button>
+                            <button type="button" id="btn-crit-horario" class="px-3 py-1 text-xs font-medium rounded-md text-gray-400 hover:text-white transition">
+                                🕒 Horário PJe
+                            </button>
+                        </div>
+                    </div>
+                    <div id="criterio-aviso-sync" class="text-[11px] text-gray-400 flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> Fila sincronizada com a recepção
+                    </div>
                 </div>
 
                 <!-- Barra de Busca Instantânea e Filtros por Situação -->
@@ -471,18 +497,162 @@ $fila_espera = $cont_aguardando;
     let filtroAtual = 'presente';
     let buscaTexto = '';
     let dadosCache = null;
+    let anteriorTotalAguardando = null;
+    let filaIdsConhecidos = new Set();
     const salaConfirmada = <?= json_encode($sala_confirmada) ?>;
+    const peritoNome = <?= json_encode($perito_selecionado) ?>;
 
     const elContador = document.getElementById('contador-fila');
     const elCorpoFila = document.getElementById('corpo-fila-espera');
     const inputBusca = document.getElementById('filtro-busca-perito');
     const chipsFiltro = document.querySelectorAll('.chip-status');
+    const btnCritChegada = document.getElementById('btn-crit-chegada');
+    const btnCritHorario = document.getElementById('btn-crit-horario');
+    const btnToggleSom = document.getElementById('btn-toggle-som-perito');
+    const iconeSom = document.getElementById('icone-som');
+    const textoSom = document.getElementById('texto-som');
+    const toastContainer = document.getElementById('toast-container-perito');
 
     function escaparHtml(texto) {
         const div = document.createElement('div');
         div.textContent = texto || '';
         return div.innerHTML;
     }
+
+    // Configuração de Som (Web Audio API)
+    let somHabilitado = localStorage.getItem('sga_som_perito') !== '0';
+    function atualizarUiSom() {
+        if (somHabilitado) {
+            iconeSom.textContent = '🔊';
+            textoSom.textContent = 'Som Ativo';
+            btnToggleSom.classList.remove('text-gray-400', 'border-gray-800');
+            btnToggleSom.classList.add('text-emerald-400', 'border-gray-700');
+        } else {
+            iconeSom.textContent = '🔇';
+            textoSom.textContent = 'Silencioso';
+            btnToggleSom.classList.remove('text-emerald-400', 'border-gray-700');
+            btnToggleSom.classList.add('text-gray-400', 'border-gray-800');
+        }
+    }
+    atualizarUiSom();
+
+    if (btnToggleSom) {
+        btnToggleSom.addEventListener('click', function() {
+            somHabilitado = !somHabilitado;
+            localStorage.setItem('sga_som_perito', somHabilitado ? '1' : '0');
+            atualizarUiSom();
+            if (somHabilitado) {
+                tocarChimeChegada();
+            }
+        });
+    }
+
+    function tocarChimeChegada() {
+        if (!somHabilitado) return;
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = new AudioCtx();
+            if (ctx.state === 'suspended') ctx.resume();
+            const now = ctx.currentTime;
+
+            // Tom 1: C5 (523.25 Hz)
+            const osc1 = ctx.createOscillator();
+            const gain1 = ctx.createGain();
+            osc1.type = 'sine';
+            osc1.frequency.setValueAtTime(523.25, now);
+            gain1.gain.setValueAtTime(0.001, now);
+            gain1.gain.exponentialRampToValueAtTime(0.2, now + 0.04);
+            gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+            osc1.connect(gain1);
+            gain1.connect(ctx.destination);
+            osc1.start(now);
+            osc1.stop(now + 0.35);
+
+            // Tom 2: G5 (783.99 Hz)
+            const osc2 = ctx.createOscillator();
+            const gain2 = ctx.createGain();
+            osc2.type = 'sine';
+            osc2.frequency.setValueAtTime(783.99, now + 0.15);
+            gain2.gain.setValueAtTime(0.001, now + 0.15);
+            gain2.gain.exponentialRampToValueAtTime(0.25, now + 0.19);
+            gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.65);
+            osc2.connect(gain2);
+            gain2.connect(ctx.destination);
+            osc2.start(now + 0.15);
+            osc2.stop(now + 0.65);
+        } catch (e) {
+            // Ignora bloqueio de reprodução do navegador
+        }
+    }
+
+    function exibirToastChegada(nome, senha, horaAgendada) {
+        if (!toastContainer) return;
+        const toast = document.createElement('div');
+        toast.className = 'bg-gray-900 border-2 border-emerald-500 text-white shadow-2xl rounded-2xl p-4 flex items-start gap-3 transition-all duration-300 transform translate-x-full max-w-sm w-full';
+        toast.innerHTML = `
+            <div class="text-2xl mt-0.5">🔔</div>
+            <div class="flex-1 min-w-0">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block">Novo Periciado na Recepção</span>
+                <div class="text-sm font-bold truncate text-white mt-0.5">${escaparHtml(nome)}</div>
+                <div class="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
+                    <span class="font-mono text-blue-400 font-semibold">${escaparHtml(senha)}</span>
+                    ${horaAgendada ? `<span class="bg-gray-800 text-gray-300 px-1.5 py-0.2 rounded text-[10px]">🕒 ${escaparHtml(horaAgendada)}</span>` : ''}
+                </div>
+            </div>
+            <button type="button" class="text-gray-400 hover:text-white text-base leading-none">&times;</button>
+        `;
+        toast.querySelector('button').addEventListener('click', () => {
+            toast.classList.add('translate-x-full', 'opacity-0');
+            setTimeout(() => toast.remove(), 300);
+        });
+        toastContainer.appendChild(toast);
+        setTimeout(() => toast.classList.remove('translate-x-full'), 20);
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.classList.add('translate-x-full', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }
+        }, 7000);
+    }
+
+    // Configuração do alternador de critério
+    async function alternarCriterioFila(novoCriterio) {
+        const csrfToken = document.querySelector('input[name="csrf"]')?.value || '';
+        try {
+            const formData = new FormData();
+            formData.append('csrf', csrfToken);
+            formData.append('action', 'alternar_criterio_fila');
+            formData.append('criterio_fila', novoCriterio);
+
+            await fetch('atendente.php', {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            atualizarUiCriterio(novoCriterio);
+            atualizarFilaPerito();
+        } catch (e) {
+            // Silencioso
+        }
+    }
+
+    function atualizarUiCriterio(criterio) {
+        if (criterio === 'horario') {
+            btnCritHorario.classList.remove('text-gray-400');
+            btnCritHorario.classList.add('bg-blue-600', 'text-white', 'font-bold');
+            btnCritChegada.classList.remove('bg-blue-600', 'text-white', 'font-bold');
+            btnCritChegada.classList.add('text-gray-400');
+        } else {
+            btnCritChegada.classList.remove('text-gray-400');
+            btnCritChegada.classList.add('bg-blue-600', 'text-white', 'font-bold');
+            btnCritHorario.classList.remove('bg-blue-600', 'text-white', 'font-bold');
+            btnCritHorario.classList.add('text-gray-400');
+        }
+    }
+
+    if (btnCritChegada) btnCritChegada.addEventListener('click', () => alternarCriterioFila('chegada'));
+    if (btnCritHorario) btnCritHorario.addEventListener('click', () => alternarCriterioFila('horario'));
 
     // Configuração dos chips de filtro
     chipsFiltro.forEach(chip => {
@@ -561,20 +731,39 @@ $fila_espera = $cont_aguardando;
                     </form>
                 `;
             } else if (p.status === 'agendado') {
-                statusBadge = '<span class="bg-gray-800 text-gray-400 text-[10px] px-2 py-0.5 rounded-full">⚪ Ainda na recepção</span>';
-                acaoBotao = '<span class="text-[10px] text-gray-500">Aguardando check-in</span>';
+                statusBadge = '<span class="bg-gray-800 text-gray-400 text-[10px] px-2 py-0.5 rounded-full">⚪ Aguardando Recepção</span>';
+                acaoBotao = '<button disabled class="bg-gray-800/60 text-gray-500 cursor-not-allowed text-[10px] font-semibold px-2 py-1 rounded border border-gray-750" title="Apenas periciados com chegada confirmada na recepção podem ser chamados">⏳ Não chegou</button>';
             } else if (p.status === 'concluido') {
                 statusBadge = '<span class="bg-gray-850 text-emerald-400/80 text-[10px] px-2 py-0.5 rounded-full">✓ Perícia Concluída</span>';
-                acaoBotao = '<span class="text-[10px] text-gray-500 font-mono">' + escaparHtml(p.concluido) + '</span>';
+                acaoBotao = `
+                    <div class="inline-flex items-center gap-1">
+                        <span class="text-[10px] text-gray-500 font-mono">${escaparHtml(p.concluido)}</span>
+                        <a href="declaracao_comparecimento.php?id=${p.id}&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="text-[10px] bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 px-2 py-0.5 rounded transition">🖨️</a>
+                    </div>
+                `;
             } else if (p.status === 'desistente') {
                 statusBadge = '<span class="bg-rose-950/60 text-rose-400 border border-rose-900/40 text-[10px] px-2 py-0.5 rounded-full">🚫 Desistente</span>';
                 acaoBotao = '<span class="text-[10px] text-gray-500">Foi embora</span>';
             } else if (p.status === 'chamada' || p.status === 'atendimento') {
                 statusBadge = `<span class="bg-blue-950 text-blue-400 border border-blue-900/50 text-[10px] px-2 py-0.5 rounded-full animate-pulse">🔔 Em atendimento (${escaparHtml(p.sala)})</span>`;
-                acaoBotao = '<span class="text-[10px] text-blue-400 font-bold">Em curso</span>';
+                acaoBotao = `
+                    <div class="inline-flex items-center gap-1">
+                        <span class="text-[10px] text-blue-400 font-bold">Em curso</span>
+                        <a href="declaracao_comparecimento.php?id=${p.id}&print=1" target="_blank" title="Imprimir Declaração" class="text-[10px] bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 px-2 py-0.5 rounded transition">🖨️</a>
+                    </div>
+                `;
             }
 
-            const horario = p.chegada !== '--:--:--' ? p.chegada : (p.chamado !== '--:--:--' ? p.chamado : '--:--:--');
+            // Exibição do Horário Agendado e Horário de Chegada
+            let horarioHtml = '';
+            if (p.hora_pericia) {
+                horarioHtml += `<span class="bg-blue-950/70 border border-blue-900 text-blue-300 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded block w-max mb-0.5">🕒 ${escaparHtml(p.hora_pericia)}</span>`;
+            }
+            if (p.chegada !== '--:--:--') {
+                horarioHtml += `<span class="text-[10px] text-gray-400 font-mono">Entrada: ${escaparHtml(p.chegada)}</span>`;
+            } else {
+                horarioHtml += `<span class="text-[10px] text-gray-600 font-mono">Aguardando</span>`;
+            }
 
             html += `
             <tr class="hover:bg-gray-800/30 transition">
@@ -586,7 +775,7 @@ $fila_espera = $cont_aguardando;
                         ${p.cpf ? `<span class="text-blue-400/80 ml-1">| CPF: ${escaparHtml(p.cpf)}</span>` : ''}
                     </div>
                 </td>
-                <td class="py-3 text-xs text-gray-400 font-mono">${escaparHtml(horario)}</td>
+                <td class="py-3">${horarioHtml}</td>
                 <td class="py-3">${statusBadge}</td>
                 <td class="py-3 text-right">${acaoBotao}</td>
             </tr>`;
@@ -602,7 +791,26 @@ $fila_espera = $cont_aguardando;
             const data = await resp.json();
             if (!data || !data.success) return;
 
+            // Notificação sonora e toast se houver novos periciados que chegaram
+            const novoTotalAguardando = data.totais?.aguardando || 0;
+            if (anteriorTotalAguardando !== null && novoTotalAguardando > anteriorTotalAguardando) {
+                const novos = (data.fila || []).filter(f => !filaIdsConhecidos.has(f.id));
+                const pacienteNovo = novos[0] || (data.fila || [])[(data.fila || []).length - 1];
+                if (pacienteNovo) {
+                    tocarChimeChegada();
+                    exibirToastChegada(pacienteNovo.nome, pacienteNovo.senha, pacienteNovo.hora_pericia);
+                }
+            }
+
+            anteriorTotalAguardando = novoTotalAguardando;
+            filaIdsConhecidos = new Set((data.fila || []).map(f => f.id));
+
             dadosCache = data;
+
+            // Sincronizar UI do alternador de critério
+            if (data.criterio_fila) {
+                atualizarUiCriterio(data.criterio_fila);
+            }
 
             // 1. Atualizar o contador da fila
             if (elContador && elContador.textContent.trim() != data.total_aguardando) {

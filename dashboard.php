@@ -13,6 +13,56 @@ if ($_SESSION['usuario_role'] === 'perito') {
 }
 
 $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
+
+$dataBusca = (string)($_GET['data_busca'] ?? date('Y-m-d'));
+if (!dataValida($dataBusca)) {
+    $dataBusca = date('Y-m-d');
+}
+
+// Exportação do Relatório Executivo em CSV para a Diretoria / Coordenação
+if (isset($_GET['exportar']) && $_GET['exportar'] === 'metricas_csv' && in_array($_SESSION['usuario_role'], ['admin', 'supervisor'], true)) {
+    $rel = obterMetricasDia($pdo, $dataBusca);
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="relatorio_produtividade_' . $dataBusca . '.csv"');
+    $out = fopen('php://output', 'w');
+    fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
+    fputcsv($out, ['RELATORIO DE PRODUTIVIDADE E ATENDIMENTOS — JUSTICA FEDERAL EM ALAGOAS'], ';');
+    fputcsv($out, ['Data de Referencia', date('d/m/Y', strtotime($dataBusca))], ';');
+    fputcsv($out, ['Emitido em', date('d/m/Y H:i:s')], ';');
+    fputcsv($out, ['Emitido por', $_SESSION['usuario_name']], ';');
+    fputcsv($out, [], ';');
+    fputcsv($out, ['INDICADOR GERAL', 'VALOR'], ';');
+    fputcsv($out, ['Total Agendados na Pauta', $rel['totais']['agendados']], ';');
+    fputcsv($out, ['Presentes (Check-in Realizado)', $rel['totais']['presentes']], ';');
+    fputcsv($out, ['Pericias Concluidas', $rel['totais']['concluidos']], ';');
+    fputcsv($out, ['Em Atendimento no Momento', $rel['totais']['em_atendimento']], ';');
+    fputcsv($out, ['Aguardando na Fila', $rel['totais']['aguardando']], ';');
+    fputcsv($out, ['Ausentes / Nao Compareceu / Desistentes', $rel['totais']['ausentes']], ';');
+    fputcsv($out, ['Taxa de Absenteismo (%)', number_format($rel['totais']['taxa_absenteismo'], 1, ',', '') . '%'], ';');
+    fputcsv($out, ['Taxa de Comparecimento (%)', number_format($rel['totais']['taxa_comparecimento'], 1, ',', '') . '%'], ';');
+    fputcsv($out, ['Tempo Medio de Espera (min)', $rel['totais']['media_espera_min'] . ' minutos'], ';');
+    fputcsv($out, ['Tempo Medio de Pericia (min)', $rel['totais']['media_pericia_min'] . ' minutos'], ';');
+    fputcsv($out, [], ';');
+    fputcsv($out, ['DETALHAMENTO POR MEDICO PERITO'], ';');
+    fputcsv($out, ['Perito Judicial', 'Sala em Uso', 'Agendados', 'Presentes', 'Concluidos', 'Aguardando', 'Ausentes', 'Tempo Medio (min)'], ';');
+    foreach ($rel['peritos'] as $p) {
+        fputcsv($out, [
+            $p['perito'],
+            $p['sala'],
+            $p['agendados'],
+            $p['presentes'],
+            $p['concluidos'],
+            $p['aguardando'],
+            $p['ausentes'],
+            $p['tempo_medio_min'] !== null ? $p['tempo_medio_min'] : '---'
+        ], ';');
+    }
+    fclose($out);
+    exit;
+}
+
+$isAdminOuSupervisor = in_array($_SESSION['usuario_role'], ['admin', 'supervisor'], true);
+$metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -45,13 +95,113 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
     </header>
 
     <!-- Main Central Hub -->
-    <main class="flex-1 max-w-5xl w-full mx-auto p-8 flex flex-col justify-center">
-        <div class="text-center mb-10 flex flex-col items-center">
-            <div class="mb-4 transition-transform duration-300 hover:scale-105 inline-block">
-                <img src="assets/catavento-jfal.png" alt="JFAL" class="h-16 w-auto object-contain">
-            </div>
-            <h2 class="text-3xl font-black text-white leading-tight">Painel Principal</h2>
-            <p class="text-sm text-gray-400 mt-2">Selecione o subsistema que deseja acessar abaixo</p>
+    <main class="flex-1 max-w-6xl w-full mx-auto p-6 space-y-8">
+        <?php if ($isAdminOuSupervisor && $metricas): ?>
+            <!-- Seção de Indicadores Executivos do Dia -->
+            <section class="bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-2xl space-y-6">
+                <!-- Cabeçalho de Métricas com Seletor de Data e Exportação -->
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-gray-800">
+                    <div>
+                        <h2 class="text-lg font-black text-white flex items-center gap-2">
+                            <span>📊</span> Produtividade & Métricas Diárias das Perícias
+                        </h2>
+                        <p class="text-xs text-gray-400 mt-0.5">Visão consolidada em tempo real da Seção Judiciária</p>
+                    </div>
+
+                    <form method="GET" class="flex flex-wrap items-center gap-2">
+                        <input type="date" name="data_busca" value="<?= htmlspecialchars($dataBusca, ENT_QUOTES, 'UTF-8') ?>" class="bg-gray-950 border border-gray-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono">
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition">
+                            Filtrar
+                        </button>
+                        <a href="dashboard.php?exportar=metricas_csv&data_busca=<?= urlencode($dataBusca) ?>" class="bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/80 text-emerald-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-sm">
+                            📥 Exportar Relatório (.CSV)
+                        </a>
+                    </form>
+                </div>
+
+                <!-- 4 Cards de Topo (KPIs) -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Total Agendados & Presentes -->
+                    <div class="bg-gray-950 p-4 rounded-2xl border border-gray-800">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Pauta & Comparecimento</span>
+                        <div class="text-2xl font-black text-white mt-1"><?= $metricas['totais']['presentes'] ?> <span class="text-sm font-normal text-gray-400">/ <?= $metricas['totais']['agendados'] ?></span></div>
+                        <div class="text-[11px] text-emerald-400 mt-1 font-semibold flex items-center gap-1">
+                            <span>🟢 <?= $metricas['totais']['taxa_comparecimento'] ?>% de presença</span>
+                        </div>
+                    </div>
+
+                    <!-- Perícias Concluídas -->
+                    <div class="bg-gray-950 p-4 rounded-2xl border border-gray-800">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Perícias Realizadas</span>
+                        <div class="text-2xl font-black text-emerald-400 mt-1"><?= $metricas['totais']['concluidos'] ?></div>
+                        <div class="text-[11px] text-gray-400 mt-1 flex items-center gap-2">
+                            <span>Aguardando: <strong class="text-white"><?= $metricas['totais']['aguardando'] ?></strong></span>
+                            <span>•</span>
+                            <span>Em curso: <strong class="text-blue-400"><?= $metricas['totais']['em_atendimento'] ?></strong></span>
+                        </div>
+                    </div>
+
+                    <!-- Tempo Médio de Espera -->
+                    <div class="bg-gray-950 p-4 rounded-2xl border border-gray-800">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Tempo Médio de Espera</span>
+                        <div class="text-2xl font-black text-amber-400 mt-1"><?= $metricas['totais']['media_espera_min'] ?> <span class="text-xs font-normal text-gray-400">minutos</span></div>
+                        <span class="text-[10px] text-gray-400 mt-1 block">Chegada até 1ª chamada</span>
+                    </div>
+
+                    <!-- Tempo Médio de Perícia / Absenteísmo -->
+                    <div class="bg-gray-950 p-4 rounded-2xl border border-gray-800">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Média de Perícia & Falta</span>
+                        <div class="text-2xl font-black text-blue-400 mt-1"><?= $metricas['totais']['media_pericia_min'] ?> <span class="text-xs font-normal text-gray-400">min</span></div>
+                        <div class="text-[11px] text-rose-400 mt-1 font-medium">
+                            <span>Absenteísmo: <?= $metricas['totais']['taxa_absenteismo'] ?>% (<?= $metricas['totais']['ausentes'] ?> faltas)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detalhamento por Médico Perito -->
+                <?php if (!empty($metricas['peritos'])): ?>
+                <div>
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Produtividade por Médico Perito</h3>
+                    <div class="overflow-x-auto rounded-xl border border-gray-800">
+                        <table class="w-full text-left text-xs text-gray-300">
+                            <thead class="bg-gray-950 text-gray-400 uppercase font-bold border-b border-gray-800">
+                                <tr>
+                                    <th class="py-2.5 px-3">Médico Perito</th>
+                                    <th class="py-2.5 px-3">Sala</th>
+                                    <th class="py-2.5 px-3 text-center">Agendados</th>
+                                    <th class="py-2.5 px-3 text-center">Presentes</th>
+                                    <th class="py-2.5 px-3 text-center">Concluídos</th>
+                                    <th class="py-2.5 px-3 text-center">Na Fila</th>
+                                    <th class="py-2.5 px-3 text-center">Ausentes</th>
+                                    <th class="py-2.5 px-3 text-right">Tempo Médio</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-800/60 bg-gray-950/40">
+                                <?php foreach ($metricas['peritos'] as $mp): ?>
+                                <tr class="hover:bg-gray-800/30">
+                                    <td class="py-2.5 px-3 font-semibold text-white"><?= htmlspecialchars((string)$mp['perito'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td class="py-2.5 px-3 text-gray-400 font-mono"><?= htmlspecialchars((string)$mp['sala'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td class="py-2.5 px-3 text-center font-bold text-white"><?= (int)$mp['agendados'] ?></td>
+                                    <td class="py-2.5 px-3 text-center text-emerald-400 font-bold"><?= (int)$mp['presentes'] ?></td>
+                                    <td class="py-2.5 px-3 text-center text-blue-400 font-bold"><?= (int)$mp['concluidos'] ?></td>
+                                    <td class="py-2.5 px-3 text-center text-amber-400 font-bold"><?= (int)$mp['aguardando'] ?></td>
+                                    <td class="py-2.5 px-3 text-center text-rose-400 font-bold"><?= (int)$mp['ausentes'] ?></td>
+                                    <td class="py-2.5 px-3 text-right font-mono text-gray-300">
+                                        <?= $mp['tempo_medio_min'] !== null ? $mp['tempo_medio_min'] . ' min' : '---' ?>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <?php endif; ?>
+            </section>
+        <?php endif; ?>
+
+        <div class="text-center flex flex-col items-center">
+            <h2 class="text-xl font-black text-white leading-tight">Módulos do Sistema</h2>
+            <p class="text-xs text-gray-400 mt-1">Selecione o subsistema que deseja acessar</p>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

@@ -166,8 +166,14 @@ function importarRegistros(PDO $pdo, array $registros, array $datasEscopo = [], 
         $processadosIds = [];
 
         $buscar = $pdo->prepare("SELECT * FROM atendimentos WHERE LOWER(REPLACE(REPLACE(REPLACE(REPLACE(processo, '.', ''), '-', ''), '/', ''), ' ', '')) = ? AND data_pauta = ? AND perito = ? AND status <> 'cancelado' FOR UPDATE");
-        $inserir = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, status, data_pauta, cpf) VALUES (?, ?, ?, 'agendado', ?, ?)");
-        $atualizar = $pdo->prepare("UPDATE atendimentos SET nome = ?, cpf = ? WHERE id = ? AND status = 'agendado'");
+        $temColunaHora = colunaExiste($pdo, 'atendimentos', 'hora_pericia');
+        if ($temColunaHora) {
+            $inserir = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, status, data_pauta, cpf, hora_pericia) VALUES (?, ?, ?, 'agendado', ?, ?, ?)");
+            $atualizar = $pdo->prepare("UPDATE atendimentos SET nome = ?, cpf = ?, hora_pericia = COALESCE(?, hora_pericia) WHERE id = ? AND status = 'agendado'");
+        } else {
+            $inserir = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, status, data_pauta, cpf) VALUES (?, ?, ?, 'agendado', ?, ?)");
+            $atualizar = $pdo->prepare("UPDATE atendimentos SET nome = ?, cpf = ? WHERE id = ? AND status = 'agendado'");
+        }
         $vincularAtendimento = $pdo->prepare("UPDATE atendimentos SET perito_id = ? WHERE id = ? AND status = 'agendado'");
         $buscarUsuarioCpf = $pdo->prepare("SELECT id, nome, role, cpf FROM usuarios WHERE username = ? OR REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = ? FOR UPDATE");
         $inserirUsuarioPerito = $pdo->prepare("INSERT INTO usuarios (username, password, role, nome, cpf, must_change_password) VALUES (?, ?, 'perito', ?, ?, 1)");
@@ -189,13 +195,23 @@ function importarRegistros(PDO $pdo, array $registros, array $datasEscopo = [], 
                     $preservados++;
                     continue;
                 }
-                if ($item['nome'] !== $nome || ($item['cpf'] ?? '') !== $r['cpf']) {
-                    $atualizar->execute([$nome, $r['cpf'] ?: null, $item['id']]);
+                $hora = !empty($r['hora_pericia']) ? $r['hora_pericia'] : null;
+                if ($item['nome'] !== $nome || ($item['cpf'] ?? '') !== $r['cpf'] || ($temColunaHora && !empty($hora) && ($item['hora_pericia'] ?? null) !== $hora)) {
+                    if ($temColunaHora) {
+                        $atualizar->execute([$nome, $r['cpf'] ?: null, $hora, $item['id']]);
+                    } else {
+                        $atualizar->execute([$nome, $r['cpf'] ?: null, $item['id']]);
+                    }
                     registrarLog($pdo, 'Atualizar Importação', json_encode(['antes' => $item, 'depois' => $r], JSON_UNESCAPED_UNICODE), $item['id']);
                     $atualizados++;
                 }
             } else {
-                $inserir->execute([$nome, $r['processo'], $r['perito'], $r['data_pericia'], $r['cpf'] ?: null]);
+                $hora = !empty($r['hora_pericia']) ? $r['hora_pericia'] : null;
+                if ($temColunaHora) {
+                    $inserir->execute([$nome, $r['processo'], $r['perito'], $r['data_pericia'], $r['cpf'] ?: null, $hora]);
+                } else {
+                    $inserir->execute([$nome, $r['processo'], $r['perito'], $r['data_pericia'], $r['cpf'] ?: null]);
+                }
                 $atendimentoId = (int)$pdo->lastInsertId();
                 $processadosIds[$atendimentoId] = true;
                 registrarLog($pdo, 'Importar Agendamento', json_encode($r, JSON_UNESCAPED_UNICODE), $atendimentoId);

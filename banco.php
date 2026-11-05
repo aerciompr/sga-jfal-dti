@@ -23,6 +23,20 @@ $pdo = new PDO('mysql:host=' . DB_HOST . ';port=' . DB_PORT . ';dbname=' . DB_NA
 $pdo->exec("SET time_zone = '-03:00'");
 protegerRequisicao($pdo);
 
+if (!function_exists('colunaExiste')) {
+    function colunaExiste(PDO $pdo, string $tabela, string $coluna): bool {
+        static $cache = [];
+        $key = "$tabela.$coluna";
+        if (!isset($cache[$key])) {
+            $s = $pdo->prepare('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?');
+            $s->execute([$tabela, $coluna]);
+            $cache[$key] = (bool)$s->fetchColumn();
+        }
+        return $cache[$key];
+    }
+}
+
+
 function simplifyName($name) {
     $name = mb_strtolower($name, 'UTF-8');
     // Mapeamento de caracteres acentuados para suas versões limpas

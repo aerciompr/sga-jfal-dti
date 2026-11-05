@@ -85,6 +85,8 @@ try {
         ['atendimentos','primeira_chamada_em','TIMESTAMP NULL DEFAULT NULL'],
         ['logs_auditoria','ip','VARCHAR(45) NULL'],
         ['logs_auditoria','request_id','VARCHAR(32) NULL'],
+        ['atendimentos','hora_pericia','TIME NULL DEFAULT NULL'],
+        ['salas_peritos','criterio_fila',"VARCHAR(20) NOT NULL DEFAULT 'chegada'"],
     ];
     foreach ($add as [$table, $column, $definition]) {
         if (!colunaExiste($pdo, $table, $column)) $pdo->exec("ALTER TABLE $table ADD COLUMN $column $definition");

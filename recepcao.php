@@ -359,6 +359,9 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                 <div>
                                     <div class="font-bold text-white text-xs truncate max-w-[170px]" title="<?= escapar($rp['perito']) ?>"><?= escapar($rp['perito']) ?></div>
                                     <span class="text-[10px] text-gray-400 font-medium mt-0.5 block">🚪 <?= escapar($rp['sala']) ?></span>
+                                    <span class="text-[9px] font-semibold block mt-0.5 <?= ($rp['criterio_fila'] ?? 'chegada') === 'horario' ? 'text-amber-400' : 'text-emerald-400' ?>">
+                                        <?= ($rp['criterio_fila'] ?? 'chegada') === 'horario' ? '🕒 Fila: Horário PJe' : '🏃 Fila: Ordem de Chegada' ?>
+                                    </span>
                                 </div>
                                 <span class="bg-blue-950/70 border border-blue-900/60 text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
                                     Fila: <?= count($rp['fila']) ?>
@@ -498,6 +501,9 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                         </td>
                                         <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
                                             <td class="py-3 text-right flex items-center justify-end gap-1.5">
+                                                <a href="declaracao_comparecimento.php?id=<?= $item['id'] ?>&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 text-xs px-2 py-1 rounded transition flex items-center gap-1">
+                                                    🖨️ Declaração
+                                                </a>
                                                 <?php if ((int)$item['chamadas_count'] === 0): ?><button type="button" onclick="removerIndividual(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['status']) ?>)" class="bg-gray-800 hover:bg-gray-750 text-gray-400 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
                                                     Desfazer presença
                                                 </button><?php endif; ?>
@@ -944,6 +950,9 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
             if (boxFila) {
                 if (dados.posicao_perito && Number(dados.posicao_perito) > 0) {
                     const naFrente = Number(dados.pessoas_na_frente || 0);
+                    const criterioTexto = dados.criterio_fila === 'horario' 
+                        ? '🕒 Fila do médico organizada por Horário Agendado (PJe)' 
+                        : '🏃 Fila do médico organizada por Ordem de Chegada';
                     const fraseFrente = naFrente === 0 
                         ? '🟢 Próximo a ser chamado (0 pessoas na frente)' 
                         : `📍 ${naFrente} pessoa(s) na frente dele(a)`;
@@ -955,7 +964,8 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                             <div>
                                 <span class="block text-[10px] uppercase font-bold text-blue-400 tracking-wider">Posição na Fila do Médico</span>
                                 <div class="text-base font-black text-white mt-0.5">${dados.posicao_perito}º lugar da fila</div>
-                                <span class="text-xs text-gray-300 block mt-0.5">${fraseFrente}</span>
+                                <span class="text-xs text-gray-200 block mt-0.5 font-medium">${fraseFrente}</span>
+                                <span class="text-[10px] text-gray-400 block mt-0.5 italic">${criterioTexto}</span>
                             </div>
                             <div>${jaChamadoBadge}</div>
                         </div>
@@ -964,6 +974,16 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 } else {
                     boxFila.classList.add('hidden');
                     boxFila.innerHTML = '';
+                }
+            }
+
+            const btnDecl = document.getElementById('modal-btn-declaracao');
+            if (btnDecl) {
+                if (dados.id && (dados.chegada_em || ['presente','chamada','atendimento','concluido'].includes(dados.status))) {
+                    btnDecl.href = `declaracao_comparecimento.php?id=${dados.id}&print=1`;
+                    btnDecl.classList.remove('hidden');
+                } else {
+                    btnDecl.classList.add('hidden');
                 }
             }
 
@@ -1083,7 +1103,10 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                     </div>
                 </div>
             </div>
-            <div class="p-4 border-t border-gray-800 bg-gray-950/40 flex justify-end">
+            <div class="p-4 border-t border-gray-800 bg-gray-950/40 flex justify-between items-center">
+                <a id="modal-btn-declaracao" href="#" target="_blank" class="hidden bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/80 text-indigo-300 text-xs font-semibold px-4 py-2 rounded-xl transition flex items-center gap-1.5">
+                    🖨️ Declaração de Comparecimento
+                </a>
                 <button type="button" onclick="fecharModalDetalhes()" class="bg-gray-850 hover:bg-gray-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition border border-gray-750">
                     Fechar Detalhes
                 </button>

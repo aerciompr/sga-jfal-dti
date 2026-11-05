@@ -39,8 +39,8 @@ function eventoChamada(PDO $pdo, int $id): void {
 function obterSalasOcupadasHoje(PDO $pdo, ?string $ignorarPerito = null): array {
     $ocupadas = [];
     
-    // 1. Peritos que confirmaram/travaram sala hoje
-    $stmt = $pdo->query("SELECT perito, sala, atualizado_em FROM salas_peritos WHERE DATE(atualizado_em) = CURRENT_DATE()");
+    // 1. Peritos que confirmaram/travaram sala hoje (com expiração de inatividade de 4h)
+    $stmt = $pdo->query("SELECT perito, sala, atualizado_em FROM salas_peritos WHERE DATE(atualizado_em) = CURRENT_DATE() AND atualizado_em >= (NOW() - INTERVAL 4 HOUR)");
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         if ($ignorarPerito !== null && trim($row['perito']) === trim($ignorarPerito)) continue;
         $ocupadas[$row['sala']] = [
@@ -84,17 +84,44 @@ function travarSalaPerito(PDO $pdo, string $perito, string $sala): void {
 /**
  * Libera a sala que estava travada pelo perito.
  */
-function liberarSalaPerito(PDO $pdo, string $perito, string $sala): void {
+function liberarSalaPerito(PDO $pdo, string $perito, ?string $sala = null): void {
     $perito = trim($perito);
-    $sala = trim($sala);
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND sala = ? AND perito = ? AND status IN ('chamada', 'atendimento')");
-    $stmt->execute([$sala, $perito]);
-    if ((int)$stmt->fetchColumn() > 0) {
-        throw new DomainException('Não é possível liberar a sala com perícia em andamento. Conclua o atendimento antes.');
+    if ($perito === '') return;
+    
+    if ($sala === null || $sala === '') {
+        $stmtSala = $pdo->prepare("SELECT sala FROM salas_peritos WHERE perito = ?");
+        $stmtSala->execute([$perito]);
+        $sala = (string)$stmtSala->fetchColumn();
+    }
+    
+    if ($sala !== '') {
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND sala = ? AND perito = ? AND status IN ('chamada', 'atendimento')");
+        $stmt->execute([$sala, $perito]);
+        if ((int)$stmt->fetchColumn() > 0) {
+            throw new DomainException('Não é possível liberar a sala com perícia em andamento. Conclua o atendimento antes.');
+        }
     }
     $stmtDel = $pdo->prepare("DELETE FROM salas_peritos WHERE perito = ?");
     $stmtDel->execute([$perito]);
     registrarLog($pdo, 'Liberar Sala', "Perito: $perito; Sala: $sala");
+}
+
+function obterCriterioFilaPerito(PDO $pdo, string $perito): string {
+    $temCriterio = colunaExiste($pdo, 'salas_peritos', 'criterio_fila');
+    if (!$temCriterio) return 'chegada';
+    $stmt = $pdo->prepare("SELECT criterio_fila FROM salas_peritos WHERE perito = ?");
+    $stmt->execute([$perito]);
+    $crit = (string)$stmt->fetchColumn();
+    return in_array($crit, ['horario', 'chegada'], true) ? $crit : 'chegada';
+}
+
+function salvarCriterioFilaPerito(PDO $pdo, string $perito, string $criterio): void {
+    $criterio = in_array($criterio, ['horario', 'chegada'], true) ? $criterio : 'chegada';
+    $temCriterio = colunaExiste($pdo, 'salas_peritos', 'criterio_fila');
+    if (!$temCriterio) return;
+    $stmt = $pdo->prepare("INSERT INTO salas_peritos (perito, sala, criterio_fila, atualizado_em) VALUES (?, 'A definir', ?, CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE criterio_fila = VALUES(criterio_fila), atualizado_em = CURRENT_TIMESTAMP");
+    $stmt->execute([$perito, $criterio]);
+    registrarLog($pdo, 'Alterar Critério de Fila', "Perito: $perito; Critério: $criterio");
 }
 
 function agirAtendimento(PDO $pdo, string $acao, string $perito, string $sala, array $dados): string {
@@ -109,6 +136,11 @@ function agirAtendimento(PDO $pdo, string $acao, string $perito, string $sala, a
     if ($acao === 'liberar_sala') {
         liberarSalaPerito($pdo, $perito, $sala);
         return "Sala {$sala} liberada com sucesso.";
+    }
+    if ($acao === 'alternar_criterio_fila') {
+        $criterio = (string)($dados['criterio_fila'] ?? 'chegada');
+        salvarCriterioFilaPerito($pdo, $perito, $criterio);
+        return $criterio === 'horario' ? 'Fila alternada para ordenação por Horário Agendado (PJe).' : 'Fila alternada para ordenação por Ordem de Chegada.';
     }
 
     $pdo->beginTransaction();
@@ -142,7 +174,10 @@ function agirAtendimento(PDO $pdo, string $acao, string $perito, string $sala, a
                 if (($_SESSION['usuario_role'] ?? '') === 'perito') { $sql .= ' AND perito_id = ?'; $params = [$profissionalId]; }
                 else { $sql .= ' AND perito = ?'; $params = [$perito]; }
                 if ($acao === 'chamar_especifico') { $sql .= ' AND id = ?'; $params[] = (int)($dados['id'] ?? 0); }
-                $stmt = $pdo->prepare($sql . ' ORDER BY fila_em, id LIMIT 1 FOR UPDATE'); $stmt->execute($params); $item = $stmt->fetch();
+                $critPerito = obterCriterioFilaPerito($pdo, $perito);
+                $temHora = colunaExiste($pdo, 'atendimentos', 'hora_pericia');
+                $orderProximo = ($critPerito === 'horario' && $temHora) ? "ORDER BY COALESCE(hora_pericia, '23:59:59') ASC, fila_em ASC, id ASC" : "ORDER BY fila_em ASC, id ASC";
+                $stmt = $pdo->prepare($sql . ' ' . $orderProximo . ' LIMIT 1 FOR UPDATE'); $stmt->execute($params); $item = $stmt->fetch();
                 if (!$item) throw new DomainException('Não há paciente elegível na fila deste perito.');
                 $id = (int)$item['id'];
                 $stmt = $pdo->prepare("UPDATE atendimentos SET status = 'chamada', sala = ?, chamado_em = CURRENT_TIMESTAMP, primeira_chamada_em = COALESCE(primeira_chamada_em, CURRENT_TIMESTAMP), chamadas_count = chamadas_count + 1 WHERE id = ? AND status = 'presente'");
@@ -225,9 +260,20 @@ function obterResumoFilasPeritos(PDO $pdo, string $data): array {
     $stmtPeritos->execute([$data]);
     $peritos = $stmtPeritos->fetchAll(PDO::FETCH_ASSOC);
 
-    // Mapeamento de salas vinculadas
-    $salasMap = $pdo->query("SELECT perito, sala FROM salas_peritos")->fetchAll(PDO::FETCH_KEY_PAIR);
+    $temCriterio = colunaExiste($pdo, 'salas_peritos', 'criterio_fila');
+    $salasMap = [];
+    $criteriosMap = [];
+    if ($temCriterio) {
+        $stmtSalas = $pdo->query("SELECT perito, sala, criterio_fila FROM salas_peritos");
+        while ($r = $stmtSalas->fetch(PDO::FETCH_ASSOC)) {
+            $salasMap[$r['perito']] = $r['sala'];
+            $criteriosMap[$r['perito']] = $r['criterio_fila'];
+        }
+    } else {
+        $salasMap = $pdo->query("SELECT perito, sala FROM salas_peritos")->fetchAll(PDO::FETCH_KEY_PAIR);
+    }
 
+    $temHora = colunaExiste($pdo, 'atendimentos', 'hora_pericia');
     $resultado = [];
 
     foreach ($peritos as $p) {
@@ -235,6 +281,7 @@ function obterResumoFilasPeritos(PDO $pdo, string $data): array {
         $peritoId = !empty($p['perito_id']) ? (int)$p['perito_id'] : null;
 
         $sala = $salasMap[$peritoNome] ?? 'A definir';
+        $criterioFila = $criteriosMap[$peritoNome] ?? 'chegada';
 
         // Paciente em atendimento ou chamada ativa
         $stmtAtivo = $pdo->prepare("
@@ -267,13 +314,18 @@ function obterResumoFilasPeritos(PDO $pdo, string $data): array {
         $totDesistentes = (int)($contagens['desistente'] ?? 0);
         $totEmAtendimento = (int)($contagens['chamada'] ?? 0) + (int)($contagens['atendimento'] ?? 0);
 
-        // Fila ordenada de espera
+        // Fila ordenada de espera conforme o critério ativo do perito
+        $orderFila = ($criterioFila === 'horario' && $temHora)
+            ? "COALESCE(hora_pericia, '23:59:59') ASC, fila_em ASC, id ASC"
+            : "fila_em ASC, id ASC";
+
+        $colsHora = $temHora ? ", hora_pericia" : "";
         $stmtFila = $pdo->prepare("
-            SELECT id, nome, processo, cpf, senha, status, chegada_em, fila_em, chamadas_count
+            SELECT id, nome, processo, cpf, senha, status, chegada_em, fila_em, chamadas_count $colsHora
             FROM atendimentos
             WHERE data_pauta = ? AND status = 'presente'
               AND (perito_id = ? OR (? IS NULL AND perito = ?))
-            ORDER BY fila_em ASC, id ASC
+            ORDER BY $orderFila
         ");
         $stmtFila->execute([$data, $peritoId, $peritoId, $peritoNome]);
         $filaRaw = $stmtFila->fetchAll(PDO::FETCH_ASSOC);
@@ -282,6 +334,7 @@ function obterResumoFilasPeritos(PDO $pdo, string $data): array {
         $pos = 1;
         foreach ($filaRaw as $f) {
             $fCount = (int)$f['chamadas_count'];
+            $horaFormatada = (!empty($f['hora_pericia'])) ? date('H:i', strtotime($f['hora_pericia'])) : null;
             $fila[] = [
                 'id' => (int)$f['id'],
                 'posicao' => $pos,
@@ -291,6 +344,7 @@ function obterResumoFilasPeritos(PDO $pdo, string $data): array {
                 'cpf' => (string)($f['cpf'] ?? ''),
                 'senha' => (string)$f['senha'],
                 'chegada_em' => !empty($f['chegada_em']) ? date('H:i:s', strtotime($f['chegada_em'])) : '--:--:--',
+                'hora_pericia' => $horaFormatada,
                 'chamadas_count' => $fCount,
                 'ja_chamado' => $fCount > 0,
             ];
@@ -301,27 +355,96 @@ function obterResumoFilasPeritos(PDO $pdo, string $data): array {
             'perito' => $peritoNome,
             'perito_id' => $peritoId,
             'sala' => $sala,
-            'em_atendimento' => $ativo ? [
-                'id' => (int)$ativo['id'],
-                'nome' => (string)$ativo['nome'],
-                'processo' => (string)$ativo['processo'],
-                'senha' => (string)$ativo['senha'],
-                'sala' => (string)$ativo['sala'],
-                'status' => (string)$ativo['status'],
-                'chamadas_count' => (int)$ativo['chamadas_count'],
-                'chamado_em' => !empty($ativo['chamado_em']) ? date('H:i:s', strtotime($ativo['chamado_em'])) : '--:--:--',
-            ] : null,
+            'criterio_fila' => $criterioFila,
             'totais' => [
                 'agendados' => $totAgendados,
                 'presentes' => $totPresentes,
-                'em_atendimento' => $totEmAtendimento,
                 'concluidos' => $totConcluidos,
                 'desistentes' => $totDesistentes,
-                'total' => $totAgendados + $totPresentes + $totEmAtendimento + $totConcluidos + $totDesistentes,
+                'em_atendimento' => $totEmAtendimento,
+                'total' => $totAgendados + $totPresentes + $totConcluidos + $totDesistentes + $totEmAtendimento
             ],
+            'atendimento_ativo' => $ativo,
             'fila' => $fila,
         ];
     }
 
     return $resultado;
+}
+
+/**
+ * Consulta indicadores executivos e detalhamento de produtividade por médico para o Dashboard.
+ */
+function obterMetricasDia(PDO $pdo, string $data): array {
+    $stmtGeral = $pdo->prepare("
+        SELECT
+            COUNT(*) as total_agendados,
+            SUM(CASE WHEN chegada_em IS NOT NULL THEN 1 ELSE 0 END) as presentes,
+            SUM(CASE WHEN status = 'concluido' THEN 1 ELSE 0 END) as concluidos,
+            SUM(CASE WHEN status IN ('chamada', 'atendimento') THEN 1 ELSE 0 END) as em_atendimento,
+            SUM(CASE WHEN status = 'presente' THEN 1 ELSE 0 END) as aguardando,
+            SUM(CASE WHEN status IN ('nao_compareceu', 'desistente') THEN 1 ELSE 0 END) as ausentes,
+            AVG(CASE WHEN chegada_em IS NOT NULL AND (primeira_chamada_em IS NOT NULL OR iniciado_em IS NOT NULL) 
+                     THEN TIMESTAMPDIFF(MINUTE, chegada_em, COALESCE(primeira_chamada_em, iniciado_em)) END) as media_espera_min,
+            AVG(CASE WHEN iniciado_em IS NOT NULL AND finalizado_em IS NOT NULL 
+                     THEN TIMESTAMPDIFF(MINUTE, iniciado_em, finalizado_em) END) as media_pericia_min
+        FROM atendimentos
+        WHERE data_pauta = ? AND status <> 'cancelado'
+    ");
+    $stmtGeral->execute([$data]);
+    $geral = $stmtGeral->fetch(PDO::FETCH_ASSOC) ?: [];
+    
+    $totalAgendados = (int)($geral['total_agendados'] ?? 0);
+    $presentes = (int)($geral['presentes'] ?? 0);
+    $concluidos = (int)($geral['concluidos'] ?? 0);
+    $emAtendimento = (int)($geral['em_atendimento'] ?? 0);
+    $aguardando = (int)($geral['aguardando'] ?? 0);
+    $ausentes = (int)($geral['ausentes'] ?? 0);
+    $mediaEspera = round((float)($geral['media_espera_min'] ?? 0), 0);
+    $mediaPericia = round((float)($geral['media_pericia_min'] ?? 0), 0);
+    
+    $taxaAbsenteismo = $totalAgendados > 0 ? round(($ausentes / $totalAgendados) * 100, 1) : 0.0;
+    $taxaComparecimento = $totalAgendados > 0 ? round(($presentes / $totalAgendados) * 100, 1) : 0.0;
+    
+    $stmtPeritos = $pdo->prepare("
+        SELECT
+            perito,
+            COUNT(*) as agendados,
+            SUM(CASE WHEN chegada_em IS NOT NULL THEN 1 ELSE 0 END) as presentes,
+            SUM(CASE WHEN status = 'concluido' THEN 1 ELSE 0 END) as concluidos,
+            SUM(CASE WHEN status IN ('chamada', 'atendimento') THEN 1 ELSE 0 END) as em_atendimento,
+            SUM(CASE WHEN status = 'presente' THEN 1 ELSE 0 END) as aguardando,
+            SUM(CASE WHEN status IN ('nao_compareceu', 'desistente') THEN 1 ELSE 0 END) as ausentes,
+            ROUND(AVG(CASE WHEN iniciado_em IS NOT NULL AND finalizado_em IS NOT NULL 
+                           THEN TIMESTAMPDIFF(MINUTE, iniciado_em, finalizado_em) END), 0) as tempo_medio_min
+        FROM atendimentos
+        WHERE data_pauta = ? AND status <> 'cancelado' AND perito IS NOT NULL AND perito <> ''
+        GROUP BY perito
+        ORDER BY perito ASC
+    ");
+    $stmtPeritos->execute([$data]);
+    $peritos = $stmtPeritos->fetchAll(PDO::FETCH_ASSOC);
+    
+    $salasMap = $pdo->query("SELECT perito, sala FROM salas_peritos")->fetchAll(PDO::FETCH_KEY_PAIR);
+    foreach ($peritos as &$p) {
+        $p['sala'] = $salasMap[$p['perito']] ?? 'Não definida';
+    }
+    unset($p);
+    
+    return [
+        'data' => $data,
+        'totais' => [
+            'agendados' => $totalAgendados,
+            'presentes' => $presentes,
+            'concluidos' => $concluidos,
+            'em_atendimento' => $emAtendimento,
+            'aguardando' => $aguardando,
+            'ausentes' => $ausentes,
+            'taxa_absenteismo' => $taxaAbsenteismo,
+            'taxa_comparecimento' => $taxaComparecimento,
+            'media_espera_min' => $mediaEspera,
+            'media_pericia_min' => $mediaPericia,
+        ],
+        'peritos' => $peritos,
+    ];
 }

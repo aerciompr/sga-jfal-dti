@@ -35,12 +35,24 @@ def clean_cpf(valor):
 
 
 def data_pericia(valor):
-    if isinstance(valor, (dt.datetime, dt.date)):
-        return valor.strftime('%Y-%m-%d')
+    if isinstance(valor, dt.datetime):
+        hora = valor.strftime('%H:%M:%S')
+        if valor.hour == 0 and valor.minute == 0 and valor.second == 0:
+            hora = None
+        return valor.strftime('%Y-%m-%d'), hora
+    if isinstance(valor, dt.date):
+        return valor.strftime('%Y-%m-%d'), None
     texto = str(valor or '').strip()
-    for formato in ('%Y-%m-%d', '%d/%m/%Y', '%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S'):
+    for formato in ('%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S', '%Y-%m-%d %H:%M', '%d/%m/%Y %H:%M'):
         try:
-            return dt.datetime.strptime(texto, formato).strftime('%Y-%m-%d')
+            d = dt.datetime.strptime(texto, formato)
+            return d.strftime('%Y-%m-%d'), d.strftime('%H:%M:%S')
+        except ValueError:
+            pass
+    for formato in ('%Y-%m-%d', '%d/%m/%Y'):
+        try:
+            d = dt.datetime.strptime(texto, formato)
+            return d.strftime('%Y-%m-%d'), None
         except ValueError:
             pass
     raise ValueError('Data da perícia ausente ou inválida')
@@ -84,7 +96,7 @@ def parse_excel(caminho):
                         perito = ' '.join(str(row[imed] or '').split())
                         if not processo or len(processo) > 50 or not perito or len(perito) > 100:
                             raise ValueError('Processo ou nome do perito ausente/inválido')
-                        data = data_pericia(row[idata])
+                        data, hora = data_pericia(row[idata])
                         documento = str(row[idoc] or '')
                         tipo_str = str(row[itipo] or '').strip().upper() if itipo is not None else ''
                         nome_bruto = str(row[inome] or '').strip() if inome is not None else ''
@@ -110,7 +122,7 @@ def parse_excel(caminho):
                                     if not item['cpf_perito']:
                                         item['cpf_perito'] = cpf_perito
                             if not lista:
-                                lista.append(dict(processo=processo, perito=perito, cpf_perito=cpf_perito, cpf='', periciado='', data_pericia=data, _pj=True))
+                                lista.append(dict(processo=processo, perito=perito, cpf_perito=cpf_perito, cpf='', periciado='', data_pericia=data, hora_pericia=hora, _pj=True))
                             continue
 
                         if len(lista) == 1 and lista[0].get('_pj'):
@@ -136,8 +148,9 @@ def parse_excel(caminho):
                             correspondente['cpf'] = correspondente['cpf'] or cpf
                             correspondente['periciado'] = correspondente['periciado'] or nome
                             correspondente['cpf_perito'] = correspondente['cpf_perito'] or cpf_perito
+                            correspondente['hora_pericia'] = correspondente.get('hora_pericia') or hora
                         else:
-                            lista.append(dict(processo=processo, perito=perito, cpf_perito=cpf_perito, cpf=cpf, periciado=nome, data_pericia=data))
+                            lista.append(dict(processo=processo, perito=perito, cpf_perito=cpf_perito, cpf=cpf, periciado=nome, data_pericia=data, hora_pericia=hora))
                     except (ValueError, IndexError) as erro:
                         raise ValueError(f'Linha {numero}: {erro}') from erro
                 registros = [
