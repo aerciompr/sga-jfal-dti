@@ -28,15 +28,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $file = $_FILES['arquivo_excel'] ?? $_FILES['arquivo_pdf'] ?? [];
             $janela = (string)($_POST['janela_importacao'] ?? 'dia');
             $sincronizar = isset($_POST['sincronizar_pauta']) ? (bool)$_POST['sincronizar_pauta'] : true;
-            $dadosPrevia = prepararImportacao($file, $janela);
-            $_SESSION['importacao_previa'] = [
-                'criada' => time(),
-                'registros' => $dadosPrevia['registros'],
-                'janela' => $dadosPrevia['janela'],
-                'datas_escopo' => $dadosPrevia['datas_escopo'],
-                'sincronizar' => $sincronizar,
-            ];
-            header('Location: preview_importacao.php', true, 303); exit;
+            $dados = prepararImportacao($file, $janela);
+            $resultado = importarRegistros($pdo, $dados['registros'], $dados['datas_escopo'], $sincronizar);
+            $partes = [$resultado['novos'] . ' novos incluídos'];
+            if (!empty($resultado['atualizados'])) $partes[] = $resultado['atualizados'] . ' atualizados';
+            if (!empty($resultado['cancelados'])) $partes[] = $resultado['cancelados'] . ' cancelados da pauta';
+            if (!empty($resultado['preservados'])) $partes[] = $resultado['preservados'] . ' preservados em andamento';
+            if (!empty($resultado['usuarios'])) $partes[] = $resultado['usuarios'] . ' novos peritos pré-cadastrados';
+            $message = 'Importação e sincronização concluídas: ' . implode('; ', $partes) . '.';
+            $message_type = 'success';
+            $_SESSION['flash_pauta'] = [$message, $message_type];
+            $filtrosRetorno = array_intersect_key($_GET, array_flip(['filtro_tipo','data_busca','mes_busca']));
+            header('Location: gerenciar_pauta.php' . ($filtrosRetorno ? '?' . http_build_query($filtrosRetorno) : ''), true, 303); exit;
         } elseif (in_array($action, ['confirmar_chegada','confirmar_multiplos','confirmar_chegada_lote'], true)) {
             $ids = isset($_POST['id']) ? [(int)$_POST['id']] : (array)($_POST['selecionados'] ?? []);
             $count = confirmarPresencas($pdo,$ids,$_SESSION['usuario_role']);
@@ -154,7 +157,7 @@ try {
             <!-- Importar Planilha Card -->
             <div class="bg-gray-900 p-5 rounded-2xl border border-gray-800 shadow-xl">
                 <h2 class="text-xs font-semibold uppercase text-blue-400 tracking-wider mb-3">Importar Planilha (Excel)</h2>
-                <form method="POST" enctype="multipart/form-data" class="space-y-4"><?= csrfCampo() ?>
+                <form method="POST" enctype="multipart/form-data" class="space-y-4" onsubmit="var btn=this.querySelector('button[type=submit]'); if(btn){btn.disabled=true;btn.textContent='Importando e sincronizando...';}"><?= csrfCampo() ?>
                     <input type="hidden" name="action" value="importar_excel">
                     
                     <div>

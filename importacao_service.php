@@ -5,6 +5,7 @@ function encontrarAtendimentoCorrespondente(array $existentes, array $r, string 
     $cpfLimpo = preg_replace('/\D/', '', $r['cpf'] ?? '');
     $nomeSimplificado = simplifyName($nome);
     $correspondentes = [];
+
     if ($cpfLimpo !== '') {
         foreach ($existentes as $c) {
             $cCpf = preg_replace('/\D/', '', $c['cpf'] ?? '');
@@ -13,6 +14,7 @@ function encontrarAtendimentoCorrespondente(array $existentes, array $r, string 
             }
         }
     }
+
     if (!$correspondentes) {
         foreach ($existentes as $c) {
             if (simplifyName($c['nome'] ?? '') === $nomeSimplificado) {
@@ -20,12 +22,11 @@ function encontrarAtendimentoCorrespondente(array $existentes, array $r, string 
             }
         }
     }
+
     if (!$correspondentes && count($existentes) === 1 && empty($existentes[0]['cpf']) && ($existentes[0]['nome'] === '(Nome pendente — conferir documento)' || $nome === '(Nome pendente — conferir documento)')) {
         $correspondentes[] = $existentes[0];
     }
-    if (count($correspondentes) > 1) {
-        throw new DomainException('Há agendamentos duplicados no banco para um registro. Revise a pauta antes de importar.');
-    }
+
     return $correspondentes[0] ?? null;
 }
 
@@ -167,15 +168,15 @@ function importarRegistros(PDO $pdo, array $registros, array $datasEscopo = [], 
         $buscar = $pdo->prepare("SELECT * FROM atendimentos WHERE LOWER(REPLACE(REPLACE(REPLACE(REPLACE(processo, '.', ''), '-', ''), '/', ''), ' ', '')) = ? AND data_pauta = ? AND perito = ? AND status <> 'cancelado' FOR UPDATE");
         $inserir = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, status, data_pauta, cpf) VALUES (?, ?, ?, 'agendado', ?, ?)");
         $atualizar = $pdo->prepare("UPDATE atendimentos SET nome = ?, cpf = ? WHERE id = ? AND status = 'agendado'");
-        $vincularAtendimento = $pdo->prepare("UPDATE atendimentos SET perito_id = ? WHERE id = ? AND status = 'agendado' AND (perito_id IS NULL OR perito_id = ?)");
-        $buscarUsuarioCpf = $pdo->prepare("SELECT id, nome, role FROM usuarios WHERE username = ? OR REPLACE(REPLACE(cpf, '.', ''), '-', '') = ? FOR UPDATE");
+        $vincularAtendimento = $pdo->prepare("UPDATE atendimentos SET perito_id = ? WHERE id = ? AND status = 'agendado'");
+        $buscarUsuarioCpf = $pdo->prepare("SELECT id, nome, role, cpf FROM usuarios WHERE username = ? OR REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = ? FOR UPDATE");
         $inserirUsuarioPerito = $pdo->prepare("INSERT INTO usuarios (username, password, role, nome, cpf, must_change_password) VALUES (?, ?, 'perito', ?, ?, 1)");
         $atualizarCpfUsuario = $pdo->prepare("UPDATE usuarios SET cpf = ? WHERE id = ? AND (cpf IS NULL OR cpf = '')");
         $cachePeritos = [];
 
         foreach ($registros as $r) {
             $item = null;
-            if (!dataValida($r['data_pericia']) || $r['data_pericia'] < date('Y-m-d')) throw new DomainException('Prévia expirada ou data inválida. Reimporte o arquivo.');
+            if (!dataValida($r['data_pericia']) || $r['data_pericia'] < date('Y-m-d')) throw new DomainException('Data inválida no agendamento. Reimporte o arquivo.');
             $nome = $r['periciado'] ?: '(Nome pendente — conferir documento)';
             $buscar->execute([simplifyName($r['processo']), $r['data_pericia'], $r['perito']]);
             $existentes = $buscar->fetchAll();
@@ -201,30 +202,69 @@ function importarRegistros(PDO $pdo, array $registros, array $datasEscopo = [], 
                 $novos++;
             }
 
-            $chavePerito = $r['perito'] . '|' . ($r['cpf_perito'] ?? '');
+            // Gerenciamento e vínculo com o Perito
+            $chavePerito = trim((string)$r['perito']) . '|' . ($r['cpf_perito'] ?? '');
             if (!array_key_exists($chavePerito, $cachePeritos)) {
-                $vinculo = peritoId($pdo, $r['perito']);
-                if (!empty($r['cpf_perito'])) {
-                    $cpf = preg_replace('/\D/', '', $r['cpf_perito']);
-                    $buscarUsuarioCpf->execute([$cpf, $cpf]); $existe = $buscarUsuarioCpf->fetchAll();
-                    if (count($existe) > 1 || ($existe && ($existe[0]['role'] !== 'perito' || simplifyNameWithSpaces($existe[0]['nome'] ?? '') !== simplifyNameWithSpaces($r['perito'])))) throw new DomainException('CPF de perito associado a cadastro divergente. Revise o cadastro.');
-                    if ($existe) $vinculo = (int)$existe[0]['id'];
-                    elseif ($vinculo !== null) {
-                        $atualizarCpfUsuario->execute([$r['cpf_perito'], $vinculo]);
-                    } else {
-                        // Sem senha conhecida até um administrador atribuir credencial individual.
-                        $inserirUsuarioPerito->execute([$cpf, password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT), $r['perito'], $r['cpf_perito']]);
-                        $vinculo = (int)$pdo->lastInsertId();
-                        registrarLog($pdo, 'Pré-cadastrar Perito', 'Conta requer ativação individual pelo administrador.'); $usuarios++;
+                $vinculo = null;
+                $cpfLimpo = !empty($r['cpf_perito']) ? preg_replace('/\D/', '', $r['cpf_perito']) : '';
+
+                // 1. Tentar por CPF ou username do perito
+                if ($cpfLimpo !== '') {
+                    $buscarUsuarioCpf->execute([$cpfLimpo, $cpfLimpo]);
+                    $usuariosEncontrados = $buscarUsuarioCpf->fetchAll();
+                    if (!empty($usuariosEncontrados)) {
+                        $peritoUsuario = null;
+                        foreach ($usuariosEncontrados as $u) {
+                            if ($u['role'] === 'perito') {
+                                $peritoUsuario = $u;
+                                break;
+                            }
+                        }
+                        if (!$peritoUsuario) {
+                            $peritoUsuario = $usuariosEncontrados[0];
+                        }
+                        $vinculo = (int)$peritoUsuario['id'];
+                        if (empty($peritoUsuario['cpf']) && !empty($r['cpf_perito'])) {
+                            $atualizarCpfUsuario->execute([$r['cpf_perito'], $vinculo]);
+                        }
                     }
                 }
+
+                // 2. Se não achou por CPF, tentar por Nome Exato
+                if ($vinculo === null) {
+                    $vinculo = peritoId($pdo, $r['perito']);
+                    if ($vinculo !== null && $cpfLimpo !== '') {
+                        $atualizarCpfUsuario->execute([$r['cpf_perito'], $vinculo]);
+                    }
+                }
+
+                // 3. Se não existe e tem CPF válido, pré-cadastrar automaticamente
+                if ($vinculo === null && $cpfLimpo !== '') {
+                    try {
+                        $inserirUsuarioPerito->execute([
+                            $cpfLimpo,
+                            password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT),
+                            $r['perito'],
+                            $r['cpf_perito']
+                        ]);
+                        $vinculo = (int)$pdo->lastInsertId();
+                        registrarLog($pdo, 'Pré-cadastrar Perito', "Perito pré-cadastrado via importação: {$r['perito']}", $atendimentoId);
+                        $usuarios++;
+                    } catch (PDOException $e) {
+                        $buscarUsuarioCpf->execute([$cpfLimpo, $cpfLimpo]);
+                        $uRec = $buscarUsuarioCpf->fetch();
+                        if ($uRec) {
+                            $vinculo = (int)$uRec['id'];
+                        }
+                    }
+                }
+
                 $cachePeritos[$chavePerito] = $vinculo;
             }
             $vinculo = $cachePeritos[$chavePerito];
 
             if ($vinculo !== null) {
-                $vincularAtendimento->execute([$vinculo, $atendimentoId, $vinculo]);
-                if ($item !== null && $item['perito_id'] !== null && (int)$item['perito_id'] !== $vinculo) throw new DomainException('Agendamento já vinculado a outro profissional. Revise a pauta.');
+                $vincularAtendimento->execute([$vinculo, $atendimentoId]);
             }
         }
 
