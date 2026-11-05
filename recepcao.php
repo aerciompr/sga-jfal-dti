@@ -46,7 +46,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             if (!in_array($_SESSION['usuario_role'], ['admin','supervisor'], true)) throw new DomainException('Acesso negado.');
             require_once __DIR__ . '/importacao_service.php';
             $file = $_FILES['arquivo_excel'] ?? $_FILES['arquivo_pdf'] ?? [];
-            $_SESSION['importacao_previa'] = ['criada'=>time(), 'registros'=>prepararImportacao($file)];
+            $janela = (string)($_POST['janela_importacao'] ?? 'dia');
+            $sincronizar = isset($_POST['sincronizar_pauta']) ? (bool)$_POST['sincronizar_pauta'] : true;
+            $dadosPrevia = prepararImportacao($file, $janela);
+            $_SESSION['importacao_previa'] = [
+                'criada' => time(),
+                'registros' => $dadosPrevia['registros'],
+                'janela' => $dadosPrevia['janela'],
+                'datas_escopo' => $dadosPrevia['datas_escopo'],
+                'sincronizar' => $sincronizar,
+            ];
             header('Location: preview_importacao.php', true, 303); exit;
         } elseif (in_array($action, ['confirmar_chegada','confirmar_multiplos','confirmar_chegada_lote'], true)) {
             $ids = isset($_POST['id']) ? [(int)$_POST['id']] : (array)($_POST['selecionados'] ?? []);
@@ -489,6 +498,22 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                     <div>
                         <label class="block text-xs text-gray-400 mb-1">Selecione o arquivo da Pauta (Excel .xlsx)</label>
                         <input type="file" name="arquivo_pdf" accept=".xlsx" required class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white file:bg-gray-700 file:border-0 file:text-white file:text-xs file:font-semibold file:px-2.5 file:py-1 file:rounded file:mr-2 file:hover:bg-gray-600">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Janela da Pauta</label>
+                        <select name="janela_importacao" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500">
+                            <option value="dia" selected>📅 Apenas a pauta de hoje (1 dia)</option>
+                            <option value="3dias">📅 Hoje e próximos 2 dias (Máximo 3 dias)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="flex items-start gap-2 cursor-pointer">
+                            <input type="checkbox" name="sincronizar_pauta" value="1" checked class="mt-0.5 rounded bg-gray-800 border-gray-700 text-blue-600 focus:ring-0">
+                            <div>
+                                <span class="text-xs text-gray-200 font-medium block">Sincronizar pauta diária</span>
+                                <span class="text-[10px] text-gray-400 block leading-tight">Cancela agendamentos que saíram da planilha. Presenças já confirmadas hoje são preservadas.</span>
+                            </div>
+                        </label>
                     </div>
                     <button type="submit" id="btn-importar" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2">
                         <span id="btn-importar-texto">Importar Dados</span>

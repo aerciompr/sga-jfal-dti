@@ -85,5 +85,70 @@ try {
     try { operarPauta($pdo,'agendar_unico',$dados,date('Y-m-d')); } catch (PDOException $e) {}
     check((int)$pdo->query("SELECT COUNT(*) FROM atendimentos WHERE processo='DEVE-REVERTER'")->fetchColumn()===0,'Falha de auditoria reverte agendamento');
 } finally { $pdo->exec('DROP TRIGGER teste_log_falha'); }
+// Testes de Janela e Sincronização de Importação da Pauta
+$dataSinc = (new DateTimeImmutable('+20 days'))->format('Y-m-d');
+$ag1 = ['nome'=>'Pessoa Hoje 1','processo'=>'SINC-001','perito'=>'Perito Teste A','cpf'=>'','perito_id'=>$ids['perito-a'],'data_pauta'=>$dataSinc,'status'=>'agendado'];
+$ag2 = ['nome'=>'Pessoa Hoje 2','processo'=>'SINC-002','perito'=>'Perito Teste A','cpf'=>'','perito_id'=>$ids['perito-a'],'data_pauta'=>$dataSinc,'status'=>'agendado'];
+$ag3 = ['nome'=>'Pessoa Hoje 3 (Chegou)','processo'=>'SINC-003','perito'=>'Perito Teste A','cpf'=>'','perito_id'=>$ids['perito-a'],'data_pauta'=>$dataSinc,'status'=>'presente','senha'=>'PE-099'];
+foreach ([$ag1, $ag2, $ag3] as $itemAg) {
+    $ins = $pdo->prepare('INSERT INTO atendimentos (nome,processo,perito,cpf,perito_id,data_pauta,status,senha) VALUES (?,?,?,?,?,?,?,?)');
+    $ins->execute([$itemAg['nome'],$itemAg['processo'],$itemAg['perito'],$itemAg['cpf'],$itemAg['perito_id'],$itemAg['data_pauta'],$itemAg['status'],$itemAg['senha'] ?? '---']);
+}
+$idAg1 = (int)$pdo->query("SELECT id FROM atendimentos WHERE processo='SINC-001'")->fetchColumn();
+$idAg2 = (int)$pdo->query("SELECT id FROM atendimentos WHERE processo='SINC-002'")->fetchColumn();
+$idAg3 = (int)$pdo->query("SELECT id FROM atendimentos WHERE processo='SINC-003'")->fetchColumn();
+
+$planilhaNovaSinc = [
+    ['processo'=>'SINC-001','perito'=>'Perito Teste A','cpf_perito'=>'','cpf'=>'','periciado'=>'Pessoa Hoje 1','data_pericia'=>$dataSinc],
+    ['processo'=>'SINC-004','perito'=>'Perito Teste A','cpf_perito'=>'','cpf'=>'','periciado'=>'Pessoa Nova 4','data_pericia'=>$dataSinc],
+];
+
+$resumoPrevia = calcularResumoPrevia($pdo, $planilhaNovaSinc, [$dataSinc], true);
+check($resumoPrevia['novos'] === 1, 'Resumo prévia: 1 novo a incluir');
+check($resumoPrevia['mantidos'] === 1, 'Resumo prévia: 1 mantido');
+check($resumoPrevia['total_cancelar'] === 1, 'Resumo prévia: 1 a cancelar (SINC-002)');
+check((int)$resumoPrevia['cancelar'][0]['id'] === $idAg2, 'Resumo prévia aponta id correto para cancelamento');
+check($resumoPrevia['preservados_andamento'] === 1, 'Resumo prévia: 1 preservado em andamento (SINC-003)');
+
+$resImp = importarRegistros($pdo, $planilhaNovaSinc, [$dataSinc], true);
+check($resImp['novos'] === 1, 'Importação inseriu 1 novo');
+check($resImp['cancelados'] === 1, 'Importação cancelou 1 omitido da pauta');
+check(item($pdo, $idAg2)['status'] === 'cancelado', 'SINC-002 foi marcado como cancelado');
+check(item($pdo, $idAg3)['status'] === 'presente', 'Imunidade operacional: SINC-003 presente foi preservado');
+
+$logCancel = $pdo->query("SELECT * FROM logs_auditoria WHERE atendimento_id = $idAg2 AND acao = 'Cancelar por Atualização de Pauta'")->fetch();
+check(!empty($logCancel), 'Auditoria registrada para cancelamento por sincronização');
+
+$resReimp = importarRegistros($pdo, $planilhaNovaSinc, [$dataSinc], true);
+check($resReimp['novos'] === 0 && $resReimp['cancelados'] === 0, 'Reimportação sincronizada é idempotente');
+
+$ag5 = ['nome'=>'Pessoa 5','processo'=>'SINC-005','perito'=>'Perito Teste A','cpf'=>'','data_pauta'=>$dataSinc];
+$pdo->prepare('INSERT INTO atendimentos (nome,processo,perito,cpf,data_pauta,status) VALUES (?,?,?,?,?,"agendado")')->execute([$ag5['nome'],$ag5['processo'],$ag5['perito'],$ag5['cpf'],$ag5['data_pauta']]);
+$idAg5 = (int)$pdo->query("SELECT id FROM atendimentos WHERE processo='SINC-005'")->fetchColumn();
+
+$resSemSinc = importarRegistros($pdo, [$planilhaNovaSinc[0]], [$dataSinc], false);
+check($resSemSinc['cancelados'] === 0, 'Sincronização desligada não cancela');
+check(item($pdo, $idAg5)['status'] === 'agendado', 'SINC-005 mantido agendado com sincronização desligada');
+
+// Testes de janela com planilha real/sintética
+$tmpXlsx = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'teste_janela_' . bin2hex(random_bytes(4)) . '.xlsx';
+$hHoje = date('Y-m-d');
+$hAmanha = (new DateTimeImmutable('+1 day'))->format('Y-m-d');
+$hDia3 = (new DateTimeImmutable('+2 days'))->format('Y-m-d');
+$hDia4 = (new DateTimeImmutable('+3 days'))->format('Y-m-d');
+$hDia30 = (new DateTimeImmutable('+30 days'))->format('Y-m-d');
+$cmd = "python -c \"import openpyxl; wb = openpyxl.Workbook(); ws = wb.active; ws.append(['Processo', 'Documento', 'Nome Perito', 'Data perícia', 'Nome Parte']); ws.append(['PROC-HOJE', '', 'Perito Teste', '$hHoje', 'Parte Hoje']); ws.append(['PROC-AMANHA', '', 'Perito Teste', '$hAmanha', 'Parte Amanha']); ws.append(['PROC-DIA3', '', 'Perito Teste', '$hDia3', 'Parte Dia 3']); ws.append(['PROC-DIA4', '', 'Perito Teste', '$hDia4', 'Parte Dia 4']); ws.append(['PROC-DIA30', '', 'Perito Teste', '$hDia30', 'Parte Dia 30']); wb.save('" . addslashes($tmpXlsx) . "')\"";
+exec($cmd);
+$fileTeste = ['name' => 'teste.xlsx', 'tmp_name' => $tmpXlsx, 'size' => filesize($tmpXlsx), 'error' => UPLOAD_ERR_OK];
+
+$resDia = prepararImportacao($fileTeste, 'dia');
+check(count($resDia['registros']) === 1 && $resDia['registros'][0]['processo'] === 'PROC-HOJE', 'Janela dia filtra apenas hoje');
+
+$res3 = prepararImportacao($fileTeste, '3dias');
+check(count($res3['registros']) === 3, 'Janela 3 dias filtra hoje ate d+2');
+
+$res30 = prepararImportacao($fileTeste, '30dias');
+check(count($res30['registros']) === 1, 'Tentativa de 30 dias sanitiza para dia');
+@unlink($tmpXlsx);
 for ($n=0;$n<510;$n++) registrarLog($pdo,'Teste de paginação','Registro fictício de teste.');
 echo "$checks verificações passaram.\n";
