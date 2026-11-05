@@ -163,7 +163,7 @@ if (!Number.isSafeInteger(cursor) || cursor < 0) cursor = Number(window.initialC
 let processando = false;
 const esperar = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-function falarSenha(nome, sala) {
+function falarSenha(nome, sala, count = 1) {
     return new Promise(resolve => {
         if (!audioAtivado || !window.speechSynthesis) { esperar(6000).then(() => resolve(false)); return; }
         const playerAnuncio=ytPlayer;
@@ -177,7 +177,8 @@ function falarSenha(nome, sala) {
         } catch (_) { /* Vídeo indisponível não impede o anúncio. */ }
         playChime();
         setTimeout(() => {
-            const fala = new SpeechSynthesisUtterance(`Atenção: ${nome || 'Atendimento'}. Dirija-se à ${sala}`);
+            const prefixo = Number(count) > 1 ? `${count}ª chamada: ` : 'Atenção: ';
+            const fala = new SpeechSynthesisUtterance(`${prefixo}${nome || 'Atendimento'}. Dirija-se à ${sala}`);
             fala.lang = 'pt-BR'; fala.rate = 0.95;
             const voz = speechSynthesis.getVoices().find(v => v.lang.startsWith('pt-'));
             if (voz) fala.voice = voz;
@@ -224,11 +225,16 @@ async function verificarNovaSenha() {
         }
         for (const evento of dados.eventos) {
             if (Number(evento.id) <= cursor) continue;
+            const count = Number(evento.chamadas_count || 1);
             const overlay = document.getElementById('chamada-overlay');
+            const elTitulo = document.getElementById('overlay-titulo');
+            if (elTitulo) {
+                elTitulo.textContent = count > 1 ? `🔔 Atenção! ${count}ª Chamada...` : '🔔 Atenção! Chamando...';
+            }
             document.getElementById('overlay-nome').textContent = evento.nome || 'Atendimento';
             document.getElementById('overlay-sala').textContent = evento.sala;
             overlay.classList.remove('hidden');
-            const falou = await falarSenha(evento.nome, evento.sala);
+            const falou = await falarSenha(evento.nome, evento.sala, count);
             if (!falou && audioAtivado) await esperar(5000);
             await esperar(1000); overlay.classList.add('hidden');
             cursor = Number(evento.id);

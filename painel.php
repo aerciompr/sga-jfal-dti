@@ -10,7 +10,19 @@
 
 require_once __DIR__ . '/banco.php';
 
-$recentes = $pdo->query('SELECT nome, sala, criado_em AS chamado_em FROM eventos_chamada WHERE data_pauta = CURRENT_DATE() ORDER BY id DESC LIMIT 4')->fetchAll();
+$recentes = $pdo->query('
+    SELECT ec.nome, ec.sala, ec.criado_em AS chamado_em, COALESCE(a.chamadas_count, 1) AS chamadas_count
+    FROM eventos_chamada ec
+    INNER JOIN (
+        SELECT MAX(id) AS max_id
+        FROM eventos_chamada
+        WHERE data_pauta = CURRENT_DATE()
+        GROUP BY atendimento_id
+    ) ultimos ON ec.id = ultimos.max_id
+    LEFT JOIN atendimentos a ON a.id = ec.atendimento_id
+    ORDER BY ec.id DESC
+    LIMIT 4
+')->fetchAll();
 $ultima = $recentes[0] ?? null;
 $nome = $ultima['nome'] ?? 'Aguardando Atendimento';
 $sala = $ultima['sala'] ?? '---';
@@ -115,7 +127,7 @@ $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_cham
                 <div class="absolute inset-x-0 top-0 h-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-t-3xl"></div>
                 <div class="flex flex-col items-center mb-6">
                     <img src="assets/catavento-jfal.png" alt="JFAL" class="h-12 w-auto object-contain mb-3">
-                    <div class="text-blue-500 font-extrabold text-sm uppercase tracking-widest">🔔 Atenção! Chamando...</div>
+                    <div id="overlay-titulo" class="text-blue-500 font-extrabold text-sm uppercase tracking-widest">🔔 Atenção! Chamando...</div>
                 </div>
                 
                 <!-- Nome do Paciente Chamado -->
@@ -147,11 +159,17 @@ $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_cham
                     <?php 
                     $item = $recentes[$i] ?? null;
                     if ($item):
+                        $count = (int)($item['chamadas_count'] ?? 1);
                     ?>
                         <div class="bg-gray-950/60 border border-gray-800/50 rounded-xl py-2.5 px-4 flex justify-between items-center <?= $i === 0 ? 'border-blue-500/30 bg-blue-950/20' : '' ?>">
                             <div class="text-left truncate flex-1">
                                 <div class="text-sm font-black text-white truncate"><?= escapar($item['nome'] ?: 'Sem Nome') ?></div>
-                                <div class="text-[10px] text-emerald-400 font-semibold truncate mt-0.5"><?= escapar($item['sala']) ?></div>
+                                <div class="flex items-center gap-1.5 mt-0.5">
+                                    <span class="text-[10px] text-emerald-400 font-semibold truncate"><?= escapar($item['sala']) ?></span>
+                                    <?php if ($count > 1): ?>
+                                        <span class="text-[9px] font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-1.5 py-0.2 rounded"><?= $count ?>ª chamada</span>
+                                    <?php endif; ?>
+                                </div>
                             </div>
                         </div>
                     <?php else: ?>

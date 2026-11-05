@@ -4,15 +4,17 @@
  * 
  * atendente.php: Interface utilizada pelos peritos médicos do Tribunal para chamar pacientes.
  * Funcionalidades:
- * - Acesso autenticado, com autorização pelo identificador do profissional.
- * - Escolha de nome próprio (filtrado apenas pelos peritos escalados no dia).
- * - Definição da sala de atendimento (salva na sessão do navegador).
- * - Ações de controle da chamada: Chamar Próximo (FIFO), Chamar Novamente (Repetir voz) e Concluir.
- * - Fila de espera detalhada do perito e histórico dos últimos atendimentos daquela sala.
+ * - Acesso autenticado com autorização do profissional.
+ * - Confirmação e trava obrigatória de sala de atendimento no primeiro uso do dia (anti-conflito).
+ * - Ações de controle da chamada: Chamar Próximo, Chamar Novamente, Iniciar, Concluir.
+ * - Tolerância inteligente: Paciente ausente desce 2 posições na fila.
+ * - Registro expresso de desistência (periciado que foi embora).
+ * - Busca instantânea e filtros por situação na pauta (Aguardando, Pendentes, Concluídos, Desistentes, Todos).
+ * - Atualização em tempo real da fila via polling assíncrono.
  */
 
-
 require_once __DIR__ . '/banco.php';
+require_once __DIR__ . '/atendimento_service.php';
 
 // Proteção de Acesso: Apenas peritos e administradores podem acessar o painel do perito
 if (!isset($_SESSION['usuario_id']) || !in_array($_SESSION['usuario_role'], ['admin', 'perito'])) {
@@ -30,43 +32,13 @@ $ownerAdmin = $user_role === 'admin' ? 1 : 0;
 if ($user_role === 'perito') {
     $nome_cadastro = $_SESSION['usuario_nome'] ?? $_SESSION['usuario_name'];
     $perito_selecionado = $nome_cadastro;
-    
     $_SESSION['perito_selecionado'] = $perito_selecionado;
-    
-    // Auto-carrega a sala salva para este perito se não estiver na sessão
-    if (!isset($_SESSION['sala']) && $perito_selecionado) {
-        $stmt = $pdo->prepare("SELECT sala FROM salas_peritos WHERE perito = ?");
-        $stmt->execute([$perito_selecionado]);
-        $saved_sala = $stmt->fetchColumn();
-        if ($saved_sala) {
-            $_SESSION['sala'] = $saved_sala;
-        }
-    }
 } else {
     $perito_selecionado = $_SESSION['perito_selecionado'] ?? '';
     if (isset($_POST['set_perito'])) {
         $perito_selecionado = trim($_POST['perito_selecionado'] ?? '');
         $_SESSION['perito_selecionado'] = $perito_selecionado;
-        
-        // Se selecionou um perito, carrega a última sala vinculada a ele no banco de dados
-        if ($perito_selecionado) {
-            $stmt = $pdo->prepare("SELECT sala FROM salas_peritos WHERE perito = ?");
-            $stmt->execute([$perito_selecionado]);
-            $saved_sala = $stmt->fetchColumn();
-            if ($saved_sala) {
-                $_SESSION['sala'] = $saved_sala;
-            }
-        }
-    }
-}
-
-// Verifica se o nome completo do perito logado existe na pauta de hoje
-$nome_nao_encontrado_pauta = false;
-if ($user_role === 'perito' && $perito_selecionado) {
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?))");
-    $stmt->execute([$ownerId, $ownerAdmin, $perito_selecionado]);
-    if ($stmt->fetchColumn() == 0) {
-        $nome_nao_encontrado_pauta = true;
+        unset($_SESSION['sala']); // Limpa sala ao trocar perito
     }
 }
 
@@ -76,33 +48,61 @@ if (empty($salas_lista)) {
     $salas_lista = ['Sala 1', 'Sala 2', 'Sala 3', 'Sala 4'];
 }
 
-// Carrega ou altera a sala ativa do perito
+// Verifica se este perito já confirmou/travou sala hoje
+$sala_confirmada = false;
 $sala = $_SESSION['sala'] ?? '';
-if (!in_array($sala, $salas_lista)) {
-    $sala = $salas_lista[0];
-    $_SESSION['sala'] = $sala;
-}
-
-if (isset($_POST['set_sala'])) {
-    $sala_post = trim($_POST['sala'] ?? '');
-    if (in_array($sala_post, $salas_lista)) {
-        $sala = $sala_post;
+if ($perito_selecionado) {
+    $stmtSalaConf = $pdo->prepare("SELECT sala FROM salas_peritos WHERE perito = ? AND DATE(atualizado_em) = CURRENT_DATE()");
+    $stmtSalaConf->execute([$perito_selecionado]);
+    $salaSalvaHoje = $stmtSalaConf->fetchColumn();
+    if ($salaSalvaHoje) {
+        $sala = (string)$salaSalvaHoje;
         $_SESSION['sala'] = $sala;
-        
-        // Salva a associação da sala com o perito no banco de dados
-        if ($perito_selecionado) {
-            $stmt = $pdo->prepare("INSERT INTO salas_peritos (perito, sala) VALUES (?, ?) ON DUPLICATE KEY UPDATE sala = ?, atualizado_em = CURRENT_TIMESTAMP");
-            $stmt->execute([$perito_selecionado, $sala, $sala]);
-        }
+        $sala_confirmada = true;
     }
 }
+if (!$sala || !in_array($sala, $salas_lista, true)) {
+    $sala = $salas_lista[0];
+}
 
-$message = '';
-$message_type = '';
+// Ações de Trava e Liberação de Sala
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['set_sala_trava'])) {
+    try {
+        $sala_post = trim($_POST['sala'] ?? '');
+        if (!in_array($sala_post, $salas_lista, true)) throw new DomainException('Sala inválida.');
+        travarSalaPerito($pdo, $perito_selecionado, $sala_post);
+        $_SESSION['sala'] = $sala_post;
+        $_SESSION['flash_atendimento'] = ["Sala {$sala_post} confirmada e travada com sucesso para seus atendimentos hoje.", 'success'];
+    } catch (DomainException $e) {
+        $_SESSION['flash_atendimento'] = [$e->getMessage(), 'error'];
+    } catch (Throwable $e) {
+        $_SESSION['flash_atendimento'] = [erroPublico($e), 'error'];
+    }
+    header('Location: atendente.php', true, 303); exit;
+}
 
-// Toda transição é autorizada e serializada no serviço.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['liberar_sala'])) {
+    try {
+        liberarSalaPerito($pdo, $perito_selecionado, $sala);
+        unset($_SESSION['sala']);
+        $_SESSION['flash_atendimento'] = ["Sala {$sala} liberada. Selecione uma nova sala para continuar.", 'info'];
+    } catch (DomainException $e) {
+        $_SESSION['flash_atendimento'] = [$e->getMessage(), 'error'];
+    } catch (Throwable $e) {
+        $_SESSION['flash_atendimento'] = [erroPublico($e), 'error'];
+    }
+    header('Location: atendente.php', true, 303); exit;
+}
+
+// Consulta salas ocupadas hoje por outros médicos
+$salas_ocupadas = obterSalasOcupadasHoje($pdo, $perito_selecionado);
+
+// Ações de Chamada e Fluxo do Atendimento
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     try {
+        if (!$sala_confirmada && in_array($_POST['action'], ['chamar_proximo', 'chamar_especifico', 'chamar_avulsa'], true)) {
+            throw new DomainException('Por favor, confirme e trave sua sala de atendimento antes de chamar o primeiro paciente.');
+        }
         $message = agirAtendimento($pdo, (string)$_POST['action'], $perito_selecionado, $sala, $_POST);
         $message_type = 'success';
     } catch (DomainException $e) {
@@ -113,46 +113,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $_SESSION['flash_atendimento'] = [$message, $message_type];
     header('Location: atendente.php', true, 303); exit;
 }
+
 [$message, $message_type] = $_SESSION['flash_atendimento'] ?? ['', ''];
 unset($_SESSION['flash_atendimento']);
 
-// Consulta todos os peritos escalados para trabalhar HOJE (vinculados à pauta importada)
+// Consulta se o perito possui agendamentos hoje
+$nome_nao_encontrado_pauta = false;
+if ($user_role === 'perito' && $perito_selecionado) {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?))");
+    $stmt->execute([$ownerId, $ownerAdmin, $perito_selecionado]);
+    if ($stmt->fetchColumn() == 0) {
+        $nome_nao_encontrado_pauta = true;
+    }
+}
+
+// Consulta peritos escalados hoje
 $peritos_lista = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE perito IS NOT NULL AND perito != '' AND data_pauta = CURRENT_DATE() ORDER BY perito ASC")->fetchAll(PDO::FETCH_COLUMN);
 
-// Consulta o paciente que está sendo atendido ou chamado nesta sala de perícia no momento
+// Atendimento atual nesta sala/médico
 $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status IN ('chamada', 'atendimento') AND sala = ? AND data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?)) ORDER BY chamado_em DESC LIMIT 1");
 $stmt->execute([$sala, $ownerId, $ownerAdmin, $perito_selecionado]);
 $atendimento_atual = $stmt->fetch();
 
-// Calcula a contagem de fila de espera
-$fila_espera = 0;
+// Contadores e Pauta completa do perito hoje
+$todos_agendamentos = [];
+$cont_aguardando = 0;
+$cont_pendentes = 0;
+$cont_concluidos = 0;
+$cont_desistentes = 0;
+
 if ($perito_selecionado) {
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM atendimentos WHERE status = 'presente' AND data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?))");
-    $stmt->execute([$ownerId, $ownerAdmin, $perito_selecionado]);
-    $fila_espera = $stmt->fetchColumn();
-} else {
-    $fila_espera = $pdo->query("SELECT COUNT(*) FROM atendimentos WHERE status = 'presente' AND data_pauta = CURRENT_DATE()")->fetchColumn();
+    $stmtTodos = $pdo->prepare("
+        SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count 
+        FROM atendimentos 
+        WHERE data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?))
+        ORDER BY CASE WHEN status = 'presente' THEN 1 WHEN status IN ('chamada','atendimento') THEN 2 WHEN status = 'agendado' THEN 3 WHEN status = 'concluido' THEN 4 ELSE 5 END, fila_em ASC, id ASC
+    ");
+    $stmtTodos->execute([$ownerId, $ownerAdmin, $perito_selecionado]);
+    $todos_agendamentos = $stmtTodos->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($todos_agendamentos as $it) {
+        if ($it['status'] === 'presente') $cont_aguardando++;
+        elseif ($it['status'] === 'agendado') $cont_pendentes++;
+        elseif ($it['status'] === 'concluido') $cont_concluidos++;
+        elseif ($it['status'] === 'desistente') $cont_desistentes++;
+    }
 }
 
-// Obtém a lista dos pacientes agendados para este perito que já chegaram (aguardando)
-$presentes_perito = [];
-if ($perito_selecionado) {
-    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'presente' AND data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?)) ORDER BY fila_em ASC, id ASC");
-    $stmt->execute([$ownerId, $ownerAdmin, $perito_selecionado]);
-    $presentes_perito = $stmt->fetchAll();
-}
-
-// Lista os últimos atendimentos chamados por esta sala de perícia hoje (histórico local)
-$stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE sala = ? AND data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?)) ORDER BY id DESC LIMIT 5");
-$stmt->execute([$sala, $ownerId, $ownerAdmin, $perito_selecionado]);
-$history = $stmt->fetchAll();
+$fila_espera = $cont_aguardando;
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=device-width, initial-scale=1.0">
-    <title>Painel do Perito - <?= escapar(SYS_NAME) ?></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel do Perito - <?= escapar(defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal') ?></title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
     <link rel="stylesheet" href="assets/tailwind.css">
     <link rel="stylesheet" href="assets/usabilidade.css">
@@ -170,40 +185,35 @@ $history = $stmt->fetchAll();
                 </div>
             </a>
             <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
-                <?= escapar(ucfirst($_SESSION['usuario_role'])) ?>
+                <?= escapar(ucfirst($user_role)) ?>
             </span>
         </div>
         <div class="flex items-center space-x-3">
             <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/30 px-3 py-1.5 rounded-lg transition">Painel Principal</a>
             
-            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
+            <?php if (in_array($user_role, ['admin', 'supervisor', 'recepcao'])): ?>
                 <a href="recepcao.php" class="text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-900/60 bg-emerald-950/30 px-3 py-1.5 rounded-lg transition">Recepção</a>
             <?php endif; ?>
 
-            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
+            <?php if (in_array($user_role, ['admin', 'perito'])): ?>
                 <a href="atendente.php" class="text-xs text-blue-400 hover:text-blue-300 border border-blue-900/60 bg-blue-950/30 px-3 py-1.5 rounded-lg transition">Atendimento</a>
             <?php endif; ?>
 
-            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
+            <?php if (in_array($user_role, ['admin', 'supervisor'])): ?>
                 <a href="gerenciar_pauta.php" class="text-xs text-sky-400 hover:text-sky-300 border border-sky-900/60 bg-sky-950/30 px-3 py-1.5 rounded-lg transition">Pautas</a>
                 <a href="salas.php" class="text-xs text-pink-400 hover:text-pink-300 border border-pink-900/60 bg-pink-950/30 px-3 py-1.5 rounded-lg transition">Salas</a>
                 <a href="auditoria.php" class="text-xs text-teal-400 hover:text-teal-300 border border-teal-900/60 bg-teal-950/30 px-3 py-1.5 rounded-lg transition">Auditoria</a>
             <?php endif; ?>
 
-            <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
-                <a href="usuarios.php" class="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-900/60 bg-indigo-950/30 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
-            <?php endif; ?>
-
-            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
-            <a href="alterar_senha_obrigatorio.php" class="text-sm underline">Minha senha</a>
+            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($user_name) ?></strong></span>
             <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
 
-    <main class="flex-1 max-w-5xl w-full mx-auto p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-        <!-- Controles Lateral (Identificação e Escolha de Sala) -->
+    <main class="flex-1 max-w-6xl w-full mx-auto p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Controles Lateral (Identificação, Trava de Sala e Contadores) -->
         <div class="space-y-6">
-            <!-- Seleção de Nome do Perito (Dropdown dinâmico de hoje) -->
+            <!-- Seleção de Nome do Perito -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
                 <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider mb-4">Identificação do Perito</h2>
                 <?php if ($user_role === 'perito'): ?>
@@ -230,37 +240,85 @@ $history = $stmt->fetchAll();
                 <?php endif; ?>
             </div>
 
-            <!-- Seleção e Edição do Número da Sala -->
+            <!-- Seleção e Trava de Sala Obrigatória (Anti-Conflito) -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
-                <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider mb-4">Sala de Atendimento</h2>
-                <form method="POST" class="space-y-3"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
-                    <input type="hidden" name="set_sala" value="1">
-                    <div>
-                        <label class="block text-xs text-gray-400 mb-1">Escolha a Sala</label>
-                        <select name="sala" onchange="this.form.submit()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
-                            <?php foreach ($salas_lista as $s_nome): ?>
-                                <option value="<?= escapar($s_nome) ?>" <?= $sala === $s_nome ? 'selected' : '' ?>>
-                                    <?= escapar($s_nome) ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider flex items-center gap-1.5">
+                        <span>🚪</span> Sala de Atendimento
+                    </h2>
+                    <?php if ($sala_confirmada): ?>
+                        <span class="bg-emerald-950 text-emerald-400 border border-emerald-900/60 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                            🔒 Travada
+                        </span>
+                    <?php else: ?>
+                        <span class="bg-amber-950 text-amber-400 border border-amber-900/60 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                            ⚠️ Não confirmada
+                        </span>
+                    <?php endif; ?>
+                </div>
+
+                <?php if ($sala_confirmada): ?>
+                    <div class="bg-gray-950 p-4 rounded-xl border border-emerald-900/40 mb-4">
+                        <span class="text-xs text-gray-400 block font-medium">Sua sala de perícia hoje:</span>
+                        <div class="text-2xl font-black text-emerald-400 mt-1"><?= escapar($sala) ?></div>
+                        <p class="text-[10px] text-gray-500 mt-1">Sala bloqueada para outros médicos enquanto você estiver atendendo.</p>
                     </div>
-                </form>
+
+                    <form method="POST" onsubmit="return confirm('Deseja liberar a <?= escapar($sala) ?> para trocar de sala? Certifique-se de não haver perícia em andamento.');">
+                        <?= csrfCampo() ?>
+                        <input type="hidden" name="liberar_sala" value="1">
+                        <button type="submit" class="w-full bg-gray-800 hover:bg-gray-750 text-gray-300 border border-gray-700 text-xs font-semibold py-2 rounded-lg transition">
+                            🔄 Liberar / Trocar de Sala
+                        </button>
+                    </form>
+                <?php else: ?>
+                    <form method="POST" class="space-y-3">
+                        <?= csrfCampo() ?>
+                        <input type="hidden" name="set_sala_trava" value="1">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1 font-semibold">Escolha uma Sala Disponível</label>
+                            <select name="sala" required class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                                <?php foreach ($salas_lista as $s_nome): ?>
+                                    <?php 
+                                    $ocupada = isset($salas_ocupadas[$s_nome]);
+                                    $ocupante = $ocupada ? $salas_ocupadas[$s_nome]['perito'] : '';
+                                    ?>
+                                    <option value="<?= escapar($s_nome) ?>" <?= $ocupada ? 'disabled class="text-gray-500 bg-gray-900"' : '' ?> <?= $sala === $s_nome ? 'selected' : '' ?>>
+                                        <?= escapar($s_nome) ?> <?= $ocupada ? " (🔒 Ocupada por {$ocupante})" : ' (Livre)' ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-lg transition shadow-md">
+                            🔒 Confirmar e Travar Sala
+                        </button>
+                    </form>
+                <?php endif; ?>
             </div>
 
             <!-- Contador da fila de espera -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl text-center">
-                <h2 class="text-xs uppercase font-bold text-gray-400 tracking-widest mb-2">Seus Pacientes Aguardando</h2>
+                <h2 class="text-xs uppercase font-bold text-gray-400 tracking-widest mb-2">Pacientes Aguardando</h2>
                 <div class="text-5xl font-black text-amber-500 my-4" id="contador-fila"><?= $fila_espera ?></div>
-                <p class="text-xs text-gray-400">pacientes confirmados na recepção</p>
+                <p class="text-xs text-gray-400">confirmados na recepção prontos para chamada</p>
             </div>
         </div>
 
         <!-- Área Central (Paciente Ativo, Ações de Chamada e Fila) -->
         <div class="md:col-span-2 space-y-6">
+            <?php if (!$sala_confirmada): ?>
+                <div class="bg-amber-950/40 border border-amber-900/80 text-amber-300 p-4 rounded-2xl text-xs leading-relaxed flex items-center gap-3">
+                    <span class="text-2xl">⚠️</span>
+                    <div>
+                        <strong class="block font-bold text-amber-400 uppercase tracking-wide">Confirmação Obrigatória da Sala</strong>
+                        Por favor, selecione e confirme sua sala ao lado para iniciar os atendimentos de hoje. As chamadas estão temporariamente bloqueadas para evitar conflitos de sala com outros médicos.
+                    </div>
+                </div>
+            <?php endif; ?>
+
             <?php if ($nome_nao_encontrado_pauta): ?>
-                <div class="bg-yellow-950/40 border border-yellow-900/80 text-yellow-300 p-4 rounded-xl text-xs leading-normal mb-6">
-                    ⚠️ <strong>Aviso:</strong> O seu Nome Completo cadastrado (<strong><?= escapar($perito_selecionado) ?></strong>) não foi localizado em nenhum atendimento da pauta de hoje. Solicite à supervisão a conferência do vínculo do profissional na pauta do dia.
+                <div class="bg-yellow-950/40 border border-yellow-900/80 text-yellow-300 p-4 rounded-xl text-xs leading-normal">
+                    ⚠️ <strong>Aviso:</strong> O seu Nome Completo cadastrado (<strong><?= escapar($perito_selecionado) ?></strong>) não foi localizado em nenhum atendimento da pauta de hoje.
                 </div>
             <?php endif; ?>
 
@@ -280,30 +338,39 @@ $history = $stmt->fetchAll();
                     <div class="text-xl font-bold text-blue-400 font-mono mb-2">Senha: <?= escapar($atendimento_atual['senha']) ?></div>
                     <div class="text-xs text-gray-400 mb-6 font-mono">Processo: <?= escapar($atendimento_atual['processo'] ?: 'Sem processo') ?></div>
                     
-                    <div class="flex flex-col sm:flex-row gap-3 w-full max-w-xl">
+                    <div class="flex flex-col sm:flex-row flex-wrap gap-2.5 w-full max-w-xl">
                         <?php if ($atendimento_atual['status'] === 'chamada'): ?>
-                            <!-- Paciente chamado, aguardando entrada na sala -->
-                            <form method="POST" class="flex-1"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
+                            <!-- Chamar Novamente -->
+                            <form method="POST" class="flex-1 min-w-[140px]"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
                                 <input type="hidden" name="action" value="chamar_novamente">
                                 <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 px-3 rounded-xl text-xs transition">
                                     📢 Chamar Novamente (<?= $atendimento_atual['chamadas_count'] ?>)
                                 </button>
                             </form>
-                            <form method="POST" class="flex-1"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
-                                <input type="hidden" name="action" value="nao_compareceu">
-                                <button type="submit" onclick="return confirm('Marcar este paciente como ausente (não compareceu)? Ele voltará para a sua fila de espera.');" class="w-full bg-rose-700 hover:bg-rose-800 text-white font-semibold py-3 px-3 rounded-xl text-xs transition">
-                                    ❌ Não Compareceu
-                                </button>
-                            </form>
-                            <form method="POST" class="flex-1"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
+                            <!-- Iniciar Perícia -->
+                            <form method="POST" class="flex-1 min-w-[140px]"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
                                 <input type="hidden" name="action" value="iniciar_atendimento">
                                 <button type="submit" class="w-full bg-blue-600 hover:bg-blue-750 text-white font-semibold py-3 px-3 rounded-xl text-xs transition font-bold">
                                     🚀 Iniciar Perícia
                                 </button>
                             </form>
+                            <!-- Ausente (Descer 2 posições na fila) -->
+                            <form method="POST" class="flex-1 min-w-[140px]"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
+                                <input type="hidden" name="action" value="nao_compareceu">
+                                <button type="submit" onclick="return confirm('Marcar como ausente temporário? O periciado descerá 2 posições na fila para você chamar os próximos.');" class="w-full bg-amber-850 hover:bg-amber-900 border border-amber-700/60 text-amber-200 font-semibold py-3 px-2 rounded-xl text-xs transition" title="Dá tolerância reposicionando 2 posições abaixo na fila">
+                                    ⏳ Ausente (Descer 2 na fila)
+                                </button>
+                            </form>
+                            <!-- Desistência (Foi embora) -->
+                            <form method="POST" class="flex-1 min-w-[140px]"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
+                                <input type="hidden" name="action" value="marcar_desistencia">
+                                <button type="submit" onclick="return confirm('Confirmar desistência? O paciente será finalizado como desistente e sairá definitivamente da fila.');" class="w-full bg-rose-800 hover:bg-rose-900 text-white font-semibold py-3 px-2 rounded-xl text-xs transition">
+                                    🚫 Desistência (Foi embora)
+                                </button>
+                            </form>
                         <?php else: ?>
                             <!-- Paciente em perícia (status 'atendimento') -->
-                            <form method="POST" class="flex-1 sm:col-span-2"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
+                            <form method="POST" class="flex-1"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
                                 <input type="hidden" name="action" value="concluir">
                                 <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-xl text-xs transition">
                                     ✓ Concluir Perícia
@@ -321,104 +388,74 @@ $history = $stmt->fetchAll();
                 <!-- Botão Principal: Chamar o próximo da fila de espera -->
                 <form method="POST" class="w-full max-w-sm"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
                     <input type="hidden" name="action" value="chamar_proximo">
-                    <button type="submit" <?= $atendimento_atual ? 'disabled aria-describedby="orientacao-atendimento"' : '' ?> class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-2xl text-base shadow-lg hover:shadow-blue-500/20 transition transform hover:-translate-y-0.5">
+                    <button type="submit" <?= ($atendimento_atual || !$sala_confirmada) ? 'disabled aria-describedby="orientacao-atendimento"' : '' ?> class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-2xl text-base shadow-lg hover:shadow-blue-500/20 transition transform hover:-translate-y-0.5">
                         🔊 Chamar Próximo da Fila
                     </button>
                 </form>
             </div>
 
-            <!-- Fila de Espera Detalhada deste Médico hoje -->
+            <!-- Fila de Espera Detalhada deste Médico hoje com Busca e Filtros -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
-                <div class="sga-toolbar mb-4"><h3 class="text-sm font-semibold uppercase text-gray-400 tracking-wider">Sua fila de espera</h3><a href="atendente.php" class="sga-neutral">Atualizar fila</a></div>
-                <div class="overflow-x-auto max-h-[200px] overflow-y-auto">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                    <h3 class="text-sm font-semibold uppercase text-gray-400 tracking-wider">Sua Pauta e Fila de Hoje</h3>
+                    <a href="atendente.php" class="sga-neutral text-xs">Atualizar</a>
+                </div>
+
+                <!-- Barra de Busca Instantânea e Filtros por Situação -->
+                <div class="space-y-3 mb-4">
+                    <div>
+                        <label for="filtro-busca-perito" class="sr-only">Buscar periciado</label>
+                        <input type="search" id="filtro-busca-perito" autocomplete="off" placeholder="Buscar por nome, processo, CPF ou senha..." class="w-full bg-gray-950 border border-gray-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    
+                    <div class="flex flex-wrap gap-1.5" id="chips-filtro-status">
+                        <button type="button" data-filtro="presente" class="chip-status bg-blue-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition">
+                            🟢 Aguardando (<span id="cont-aguardando"><?= $cont_aguardando ?></span>)
+                        </button>
+                        <button type="button" data-filtro="agendado" class="chip-status bg-gray-800 hover:bg-gray-750 text-gray-300 text-[11px] font-medium px-3 py-1.5 rounded-lg transition">
+                            🟡 Pendentes (<span id="cont-pendentes"><?= $cont_pendentes ?></span>)
+                        </button>
+                        <button type="button" data-filtro="concluido" class="chip-status bg-gray-800 hover:bg-gray-750 text-gray-300 text-[11px] font-medium px-3 py-1.5 rounded-lg transition">
+                            ✓ Atendidos (<span id="cont-atendidos"><?= $cont_concluidos ?></span>)
+                        </button>
+                        <button type="button" data-filtro="desistente" class="chip-status bg-gray-800 hover:bg-gray-750 text-gray-300 text-[11px] font-medium px-3 py-1.5 rounded-lg transition">
+                            🚫 Desistências (<span id="cont-desistentes"><?= $cont_desistentes ?></span>)
+                        </button>
+                        <button type="button" data-filtro="todos" class="chip-status bg-gray-800 hover:bg-gray-750 text-gray-300 text-[11px] font-medium px-3 py-1.5 rounded-lg transition">
+                            📋 Todos (<span id="cont-todos"><?= count($todos_agendamentos) ?></span>)
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto max-h-[350px] overflow-y-auto">
                     <table class="w-full text-left text-sm text-gray-300">
                         <thead>
                             <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">
-                                <th class="pb-2">Senha</th>
-                                <th class="pb-2">Nome / Processo</th>
-                                <th class="pb-2">Chegada</th>
+                                <th class="pb-2 w-16">Senha</th>
+                                <th class="pb-2">Nome / Processo / CPF</th>
+                                <th class="pb-2">Horário</th>
+                                <th class="pb-2">Situação</th>
                                 <th class="pb-2 text-right">Ação</th>
                             </tr>
                         </thead>
                         <tbody id="corpo-fila-espera" class="divide-y divide-gray-800/50">
-                            <?php if (empty($presentes_perito)): ?>
-                                <tr>
-                                    <td colspan="4" class="py-4 text-center text-xs text-gray-500">Nenhum paciente seu na fila de espera.</td>
-                                </tr>
-                            <?php else: ?>
-                                <?php foreach ($presentes_perito as $p): ?>
-                                    <tr>
-                                        <td class="py-3 font-mono font-bold text-blue-400"><?= escapar($p['senha']) ?></td>
-                                        <td class="py-3">
-                                            <div class="font-semibold text-white"><?= escapar($p['nome']) ?></div>
-                                            <div class="text-[10px] text-gray-500 font-mono"><?= escapar($p['processo']) ?></div>
-                                        </td>
-                                        <td class="py-3 text-xs text-gray-400"><?= date('H:i:s', strtotime($p['chegada_em'])) ?></td>
-                                        <td class="py-3 text-right">
-                                            <form method="POST" class="inline" onsubmit="return confirm('Chamar este periciado fora da fila?');"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
-                                                <input type="hidden" name="action" value="chamar_especifico">
-                                                <input type="hidden" name="id" value="<?= $p['id'] ?>">
-                                                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold px-2.5 py-1 rounded transition">
-                                                    Chamar
-                                                </button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
+                            <!-- Injetado dinamicamente via JavaScript com base no filtro e na busca -->
                         </tbody>
                     </table>
                 </div>
             </div>
 
-            <!-- Chamada Manual/Avulsa em caso de emergência ou desvio de fila -->
+            <!-- Chamada Manual/Avulsa -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
                 <h3 class="text-sm font-semibold uppercase text-gray-400 tracking-wider mb-4">Chamada Manual / Avulsa</h3>
                 <form method="POST" class="grid grid-cols-1 sm:grid-cols-3 gap-3"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
                     <input type="hidden" name="action" value="chamar_avulsa">
-                    <input type="text" value="Gerada automaticamente" disabled aria-label="Senha gerada automaticamente" placeholder="Senha (ex: M-101)" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    <input type="text" value="Gerada automaticamente" disabled aria-label="Senha gerada automaticamente" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
                     <input type="text" name="nome_avulso" required maxlength="100" placeholder="Nome completo do periciado" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 font-medium">
-                    <button type="submit" class="bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 text-xs font-semibold py-2 rounded-lg transition">
+                    <button type="submit" <?= !$sala_confirmada ? 'disabled' : '' ?> class="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-gray-200 border border-gray-700 text-xs font-semibold py-2 rounded-lg transition">
                         Chamar Manual
                     </button>
                 </form>
-            </div>
-
-            <!-- Histórico Local dos últimos atendimentos desta sala -->
-            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
-                <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider mb-4">Seus Últimos Atendimentos</h2>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left text-sm text-gray-300">
-                        <thead>
-                            <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">
-                                <th class="pb-2">Senha</th>
-                                <th class="pb-2">Nome</th>
-                                <th class="pb-2">Status</th>
-                                <th class="pb-2 text-right">Chamado às</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-800/50">
-                            <?php if (empty($history)): ?>
-                                <tr>
-                                    <td colspan="4" class="py-4 text-center text-xs text-gray-500">Nenhum atendimento realizado por esta sala hoje.</td>
-                                </tr>
-                            <?php else: ?>
-                                <?php foreach ($history as $h): ?>
-                                    <tr>
-                                        <td class="py-3 font-semibold text-blue-400"><?= escapar($h['senha']) ?></td>
-                                        <td class="py-3 text-white font-medium"><?= escapar($h['nome'] ?: 'Sem nome') ?></td>
-                                        <td class="py-3">
-                                            <span class="text-xs px-2.5 py-0.5 rounded-full font-semibold <?= $h['status'] === 'chamada' ? 'bg-blue-950 text-blue-400' : 'bg-gray-850 text-gray-400' ?>">
-                                                <?= ucfirst(escapar($h['status'])) ?>
-                                            </span>
-                                        </td>
-                                        <td class="py-3 text-right text-xs text-gray-500"><?= date('H:i:s', strtotime($h['chamado_em'])) ?></td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
             </div>
         </div>
     </main>
@@ -431,14 +468,131 @@ $history = $stmt->fetchAll();
 <script src="assets/usabilidade.js" defer></script>
 <script>
 (function() {
-    let ultimaFilaJson = '';
+    let filtroAtual = 'presente';
+    let buscaTexto = '';
+    let dadosCache = null;
+    const salaConfirmada = <?= json_encode($sala_confirmada) ?>;
+
     const elContador = document.getElementById('contador-fila');
     const elCorpoFila = document.getElementById('corpo-fila-espera');
+    const inputBusca = document.getElementById('filtro-busca-perito');
+    const chipsFiltro = document.querySelectorAll('.chip-status');
 
     function escaparHtml(texto) {
         const div = document.createElement('div');
         div.textContent = texto || '';
         return div.innerHTML;
+    }
+
+    // Configuração dos chips de filtro
+    chipsFiltro.forEach(chip => {
+        chip.addEventListener('click', function() {
+            filtroAtual = this.getAttribute('data-filtro') || 'todos';
+            chipsFiltro.forEach(c => {
+                c.classList.remove('bg-blue-600', 'text-white', 'font-bold');
+                c.classList.add('bg-gray-800', 'text-gray-300', 'font-medium');
+            });
+            this.classList.remove('bg-gray-800', 'text-gray-300', 'font-medium');
+            this.classList.add('bg-blue-600', 'text-white', 'font-bold');
+            renderizarTabela();
+        });
+    });
+
+    if (inputBusca) {
+        inputBusca.addEventListener('input', function() {
+            buscaTexto = this.value.toLowerCase().trim();
+            renderizarTabela();
+        });
+    }
+
+    function renderizarTabela() {
+        if (!dadosCache || !elCorpoFila) return;
+        
+        const registros = dadosCache.todos || [];
+        const csrfToken = document.querySelector('input[name="csrf"]')?.value || '';
+        const atendimentoAtualId = dadosCache.atendimento_atual_id || 0;
+
+        const filtrados = registros.filter(item => {
+            // Filtro por status
+            if (filtroAtual === 'presente' && item.status !== 'presente') return false;
+            if (filtroAtual === 'agendado' && item.status !== 'agendado') return false;
+            if (filtroAtual === 'concluido' && item.status !== 'concluido') return false;
+            if (filtroAtual === 'desistente' && item.status !== 'desistente') return false;
+
+            // Filtro por busca textual
+            if (buscaTexto) {
+                const termo = buscaTexto;
+                const nome = (item.nome || '').toLowerCase();
+                const processo = (item.processo || '').toLowerCase();
+                const cpf = (item.cpf || '').toLowerCase();
+                const senha = (item.senha || '').toLowerCase();
+                if (!nome.includes(termo) && !processo.includes(termo) && !cpf.includes(termo) && !senha.includes(termo)) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+
+        if (filtrados.length === 0) {
+            elCorpoFila.innerHTML = '<tr><td colspan="5" class="py-6 text-center text-xs text-gray-500">Nenhum periciado encontrado para este filtro.</td></tr>';
+            return;
+        }
+
+        let html = '';
+        filtrados.forEach(p => {
+            let statusBadge = '';
+            let acaoBotao = '';
+
+            if (p.status === 'presente') {
+                const pos = p.posicao_fila ? `${p.posicao_fila}º na fila` : 'Na fila';
+                const chamadoTag = p.chamadas_count > 0 ? `<span class="bg-amber-950/70 border border-amber-800/60 text-amber-400 text-[9px] px-1.5 py-0.2 rounded ml-1">Já chamado ${p.chamadas_count}x</span>` : '';
+                statusBadge = `<span class="bg-emerald-950/60 text-emerald-400 border border-emerald-900/50 text-[10px] font-semibold px-2 py-0.5 rounded-full">🟢 ${pos}</span>${chamadoTag}`;
+                
+                acaoBotao = `
+                    <form method="POST" class="inline" onsubmit="return confirm('Chamar este periciado para a sala?');">
+                        <input type="hidden" name="csrf" value="${csrfToken}">
+                        <input type="hidden" name="atendimento_id" value="${atendimentoAtualId}">
+                        <input type="hidden" name="action" value="chamar_especifico">
+                        <input type="hidden" name="id" value="${p.id}">
+                        <button type="submit" ${!salaConfirmada ? 'disabled title="Confirme a sala primeiro"' : ''} class="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-[10px] font-bold px-2.5 py-1 rounded transition">
+                            Chamar
+                        </button>
+                    </form>
+                `;
+            } else if (p.status === 'agendado') {
+                statusBadge = '<span class="bg-gray-800 text-gray-400 text-[10px] px-2 py-0.5 rounded-full">⚪ Ainda na recepção</span>';
+                acaoBotao = '<span class="text-[10px] text-gray-500">Aguardando check-in</span>';
+            } else if (p.status === 'concluido') {
+                statusBadge = '<span class="bg-gray-850 text-emerald-400/80 text-[10px] px-2 py-0.5 rounded-full">✓ Perícia Concluída</span>';
+                acaoBotao = '<span class="text-[10px] text-gray-500 font-mono">' + escaparHtml(p.concluido) + '</span>';
+            } else if (p.status === 'desistente') {
+                statusBadge = '<span class="bg-rose-950/60 text-rose-400 border border-rose-900/40 text-[10px] px-2 py-0.5 rounded-full">🚫 Desistente</span>';
+                acaoBotao = '<span class="text-[10px] text-gray-500">Foi embora</span>';
+            } else if (p.status === 'chamada' || p.status === 'atendimento') {
+                statusBadge = `<span class="bg-blue-950 text-blue-400 border border-blue-900/50 text-[10px] px-2 py-0.5 rounded-full animate-pulse">🔔 Em atendimento (${escaparHtml(p.sala)})</span>`;
+                acaoBotao = '<span class="text-[10px] text-blue-400 font-bold">Em curso</span>';
+            }
+
+            const horario = p.chegada !== '--:--:--' ? p.chegada : (p.chamado !== '--:--:--' ? p.chamado : '--:--:--');
+
+            html += `
+            <tr class="hover:bg-gray-800/30 transition">
+                <td class="py-3 font-mono font-bold text-blue-400 text-xs">${escaparHtml(p.senha)}</td>
+                <td class="py-3">
+                    <div class="font-semibold text-white text-xs">${escaparHtml(p.nome)}</div>
+                    <div class="text-[10px] text-gray-500 font-mono">
+                        ${escaparHtml(p.processo)}
+                        ${p.cpf ? `<span class="text-blue-400/80 ml-1">| CPF: ${escaparHtml(p.cpf)}</span>` : ''}
+                    </div>
+                </td>
+                <td class="py-3 text-xs text-gray-400 font-mono">${escaparHtml(horario)}</td>
+                <td class="py-3">${statusBadge}</td>
+                <td class="py-3 text-right">${acaoBotao}</td>
+            </tr>`;
+        });
+
+        elCorpoFila.innerHTML = html;
     }
 
     async function atualizarFilaPerito() {
@@ -447,6 +601,8 @@ $history = $stmt->fetchAll();
             if (!resp.ok) return;
             const data = await resp.json();
             if (!data || !data.success) return;
+
+            dadosCache = data;
 
             // 1. Atualizar o contador da fila
             if (elContador && elContador.textContent.trim() != data.total_aguardando) {
@@ -457,48 +613,24 @@ $history = $stmt->fetchAll();
                 }, 600);
             }
 
-            // 2. Atualizar tabela de pacientes aguardando em tempo real
-            const jsonAtual = JSON.stringify(data.fila);
-            if (elCorpoFila && jsonAtual !== ultimaFilaJson) {
-                ultimaFilaJson = jsonAtual;
-                if (!data.fila || data.fila.length === 0) {
-                    elCorpoFila.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-xs text-gray-500">Nenhum paciente seu na fila de espera.</td></tr>';
-                } else {
-                    const csrfToken = document.querySelector('input[name="csrf"]')?.value || '';
-                    const atendimentoAtualId = data.atendimento_atual_id || 0;
-                    
-                    let html = '';
-                    data.fila.forEach(p => {
-                        html += `
-                        <tr class="hover:bg-gray-800/30 transition">
-                            <td class="py-3 font-mono font-bold text-blue-400">${escaparHtml(p.senha)}</td>
-                            <td class="py-3">
-                                <div class="font-semibold text-white">${escaparHtml(p.nome)}</div>
-                                <div class="text-[10px] text-gray-500 font-mono">${escaparHtml(p.processo)}</div>
-                            </td>
-                            <td class="py-3 text-xs text-gray-400">${escaparHtml(p.chegada)}</td>
-                            <td class="py-3 text-right">
-                                <form method="POST" class="inline" onsubmit="return confirm('Chamar este periciado fora da fila?');">
-                                    <input type="hidden" name="csrf" value="${csrfToken}">
-                                    <input type="hidden" name="atendimento_id" value="${atendimentoAtualId}">
-                                    <input type="hidden" name="action" value="chamar_especifico">
-                                    <input type="hidden" name="id" value="${p.id}">
-                                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold px-2.5 py-1 rounded transition">
-                                        Chamar
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>`;
-                    });
-                    elCorpoFila.innerHTML = html;
-                }
+            // Atualizar contadores dos chips
+            if (data.totais) {
+                document.getElementById('cont-aguardando').textContent = data.totais.aguardando;
+                document.getElementById('cont-pendentes').textContent = data.totais.pendentes;
+                document.getElementById('cont-atendidos').textContent = data.totais.atendidos;
+                document.getElementById('cont-desistentes').textContent = data.totais.desistentes;
+                document.getElementById('cont-todos').textContent = data.totais.total;
             }
+
+            // Renderizar a tabela respeitando busca e filtros ativos
+            renderizarTabela();
         } catch (e) {
-            // Falha momentânea de rede ignorada silenciosamente
+            // Falha de rede momentânea silenciosa
         }
     }
 
-    // Consulta automática a cada 3 segundos (tempo real)
+    // Consulta inicial e polling a cada 3 segundos
+    atualizarFilaPerito();
     setInterval(atualizarFilaPerito, 3000);
 })();
 </script>

@@ -25,36 +25,83 @@ try {
     $sala = (string)($_SESSION['sala'] ?? 'Sala 1');
 
     // Atendimento atual (sendo chamado ou atendido agora nesta sala)
-    $stmtAtual = $pdo->prepare("SELECT id, nome, processo, senha, status, sala, chamado_em, chamadas_count FROM atendimentos WHERE status IN ('chamada', 'atendimento') AND sala = ? AND data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?)) ORDER BY chamado_em DESC LIMIT 1");
+    $stmtAtual = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chamado_em, chamadas_count FROM atendimentos WHERE status IN ('chamada', 'atendimento') AND sala = ? AND data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?)) ORDER BY chamado_em DESC LIMIT 1");
     $stmtAtual->execute([$sala, $ownerId, $ownerAdmin, $perito_selecionado]);
     $atendimentoAtual = $stmtAtual->fetch(PDO::FETCH_ASSOC);
 
-    // Fila de espera de pacientes que já chegaram hoje para este perito
+    // Consulta todos os agendamentos deste perito hoje
     if ($perito_selecionado !== '') {
-        $stmtFila = $pdo->prepare("SELECT id, nome, processo, senha, status, chegada_em, fila_em FROM atendimentos WHERE status = 'presente' AND data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?)) ORDER BY fila_em ASC, id ASC");
-        $stmtFila->execute([$ownerId, $ownerAdmin, $perito_selecionado]);
-        $presentes = $stmtFila->fetchAll(PDO::FETCH_ASSOC);
+        $stmtTodos = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?)) ORDER BY CASE WHEN status = 'presente' THEN 1 WHEN status IN ('chamada','atendimento') THEN 2 WHEN status = 'agendado' THEN 3 WHEN status = 'concluido' THEN 4 ELSE 5 END, fila_em ASC, id ASC");
+        $stmtTodos->execute([$ownerId, $ownerAdmin, $perito_selecionado]);
+        $todosRegistros = $stmtTodos->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        $stmtFila = $pdo->query("SELECT id, nome, processo, senha, status, chegada_em, fila_em FROM atendimentos WHERE status = 'presente' AND data_pauta = CURRENT_DATE() ORDER BY fila_em ASC, id ASC");
-        $presentes = $stmtFila->fetchAll(PDO::FETCH_ASSOC);
+        $stmtTodos = $pdo->query("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count FROM atendimentos WHERE data_pauta = CURRENT_DATE() ORDER BY CASE WHEN status = 'presente' THEN 1 WHEN status IN ('chamada','atendimento') THEN 2 WHEN status = 'agendado' THEN 3 WHEN status = 'concluido' THEN 4 ELSE 5 END, fila_em ASC, id ASC");
+        $todosRegistros = $stmtTodos->fetchAll(PDO::FETCH_ASSOC);
     }
 
     $filaFormatada = [];
-    foreach ($presentes as $p) {
-        $filaFormatada[] = [
+    $todosFormatados = [];
+    $contAguardando = 0;
+    $contPendentes = 0;
+    $contAtendidos = 0;
+    $contDesistentes = 0;
+
+    $posFila = 1;
+    foreach ($todosRegistros as $p) {
+        $st = (string)$p['status'];
+        if ($st === 'presente') $contAguardando++;
+        elseif ($st === 'agendado') $contPendentes++;
+        elseif ($st === 'concluido') $contAtendidos++;
+        elseif ($st === 'desistente') $contDesistentes++;
+
+        $posAtual = null;
+        if ($st === 'presente') {
+            $posAtual = $posFila;
+            $posFila++;
+        }
+
+        $itemFormatado = [
             'id' => (int)$p['id'],
-            'senha' => (string)$p['senha'],
+            'senha' => (string)($p['senha'] ?: '---'),
             'nome' => (string)($p['nome'] ?: 'Sem Nome'),
             'processo' => (string)($p['processo'] ?: 'Sem processo'),
+            'cpf' => (string)($p['cpf'] ?? ''),
+            'status' => $st,
+            'sala' => (string)($p['sala'] ?? ''),
+            'posicao_fila' => $posAtual,
+            'chamadas_count' => (int)$p['chamadas_count'],
             'chegada' => !empty($p['chegada_em']) ? date('H:i:s', strtotime($p['chegada_em'])) : '--:--:--',
+            'chamado' => !empty($p['chamado_em']) ? date('H:i:s', strtotime($p['chamado_em'])) : '--:--:--',
+            'concluido' => !empty($p['finalizado_em']) ? date('H:i:s', strtotime($p['finalizado_em'])) : '--:--:--',
         ];
+
+        $todosFormatados[] = $itemFormatado;
+        if ($st === 'presente') {
+            $filaFormatada[] = $itemFormatado;
+        }
     }
 
     echo json_encode([
         'success' => true,
-        'total_aguardando' => count($filaFormatada),
+        'total_aguardando' => $contAguardando,
+        'totais' => [
+            'aguardando' => $contAguardando,
+            'pendentes' => $contPendentes,
+            'atendidos' => $contAtendidos,
+            'desistentes' => $contDesistentes,
+            'total' => count($todosFormatados),
+        ],
         'fila' => $filaFormatada,
+        'todos' => $todosFormatados,
         'atendimento_atual_id' => $atendimentoAtual ? (int)$atendimentoAtual['id'] : 0,
+        'atendimento_atual' => $atendimentoAtual ? [
+            'id' => (int)$atendimentoAtual['id'],
+            'nome' => (string)$atendimentoAtual['nome'],
+            'processo' => (string)$atendimentoAtual['processo'],
+            'senha' => (string)$atendimentoAtual['senha'],
+            'status' => (string)$atendimentoAtual['status'],
+            'chamadas_count' => (int)$atendimentoAtual['chamadas_count'],
+        ] : null,
     ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {
     http_response_code(500);

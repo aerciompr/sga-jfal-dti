@@ -37,6 +37,7 @@ $dataFiltro = $_GET['data_filtro'] ?? date('Y-m-d');
  */
 
 require_once __DIR__ . '/pauta_service.php';
+require_once __DIR__ . '/atendimento_service.php';
 [$message, $message_type] = $_SESSION['flash_recepcao'] ?? ['', ''];
 unset($_SESSION['flash_recepcao']);
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
@@ -100,17 +101,37 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
     $stmt->execute([$dataFiltro]);
     $agendados = $stmt->fetchAll();
 
-    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'presente' AND data_pauta = ? ORDER BY chegada_em ASC");
+    // Ordenação alinhada estritamente com o painel do perito: fila_em ASC, id ASC
+    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'presente' AND data_pauta = ? ORDER BY fila_em ASC, id ASC");
     $stmt->execute([$dataFiltro]);
     $presentes = $stmt->fetchAll();
+
+    // Calcula posição ordinal de cada periciado na fila do seu respectivo médico e quantas pessoas tem na frente
+    $posicoesPorPerito = [];
+    foreach ($presentes as &$p) {
+        $medico = (string)($p['perito'] ?: 'Sem Perito');
+        if (!isset($posicoesPorPerito[$medico])) {
+            $posicoesPorPerito[$medico] = 0;
+        }
+        $posicoesPorPerito[$medico]++;
+        $p['posicao_perito'] = $posicoesPorPerito[$medico];
+        $p['pessoas_na_frente'] = $posicoesPorPerito[$medico] - 1;
+    }
+    unset($p);
 
     $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status IN ('chamada','atendimento') AND data_pauta = ? ORDER BY chamado_em DESC");
     $stmt->execute([$dataFiltro]);
     $chamados = $stmt->fetchAll();
 
-    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'concluido' AND data_pauta = ? ORDER BY chamado_em DESC");
+    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'concluido' AND data_pauta = ? ORDER BY finalizado_em DESC, chamado_em DESC");
     $stmt->execute([$dataFiltro]);
     $concluidos = $stmt->fetchAll();
+
+    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'desistente' AND data_pauta = ? ORDER BY finalizado_em DESC");
+    $stmt->execute([$dataFiltro]);
+    $desistentes = $stmt->fetchAll();
+
+    $resumoPeritos = obterResumoFilasPeritos($pdo, $dataFiltro);
 }
 ?>
 <!DOCTYPE html>
@@ -321,6 +342,73 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 </form>
             </div>
 
+            <!-- Visão das Salas e Filas por Perito -->
+            <?php if (!empty($resumoPeritos)): ?>
+            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-sm font-semibold uppercase text-blue-400 tracking-wider flex items-center gap-2">
+                        <span>🧑‍⚕️</span> Salas & Filas dos Peritos
+                    </h2>
+                    <span class="text-xs text-gray-500 font-medium">Tempo real</span>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="cards-peritos-container">
+                    <?php foreach ($resumoPeritos as $rp): ?>
+                        <div class="bg-gray-950 p-4 rounded-xl border border-gray-800 space-y-3 card-perito" data-perito="<?= escapar($rp['perito']) ?>">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <div class="font-bold text-white text-xs truncate max-w-[170px]" title="<?= escapar($rp['perito']) ?>"><?= escapar($rp['perito']) ?></div>
+                                    <span class="text-[10px] text-gray-400 font-medium mt-0.5 block">🚪 <?= escapar($rp['sala']) ?></span>
+                                </div>
+                                <span class="bg-blue-950/70 border border-blue-900/60 text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                    Fila: <?= count($rp['fila']) ?>
+                                </span>
+                            </div>
+
+                            <!-- Situação da Sala -->
+                            <div class="text-[11px] p-2.5 rounded-lg border <?= $rp['em_atendimento'] ? 'bg-blue-950/30 border-blue-900/40 text-blue-300' : 'bg-gray-900/40 border-gray-800/60 text-gray-400' ?>">
+                                <?php if ($rp['em_atendimento']): ?>
+                                    <div class="font-bold text-blue-400 flex items-center justify-between">
+                                        <span>🟢 Em Exame: <?= escapar($rp['em_atendimento']['senha']) ?></span>
+                                        <span class="text-[9px] text-gray-400"><?= $rp['em_atendimento']['chamado_em'] ?></span>
+                                    </div>
+                                    <div class="truncate text-white text-[11px] font-medium mt-0.5"><?= escapar($rp['em_atendimento']['nome']) ?></div>
+                                <?php else: ?>
+                                    <div class="flex items-center gap-1.5 text-gray-500">
+                                        <span>⚪</span> Sala livre / aguardando próximo
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+
+                            <!-- Próximos da fila deste médico -->
+                            <div class="space-y-1">
+                                <span class="text-[9px] uppercase font-bold text-gray-500 tracking-wider">Próximos a Chamar:</span>
+                                <?php if (empty($rp['fila'])): ?>
+                                    <p class="text-[10px] text-gray-600 italic">Sem pacientes na fila</p>
+                                <?php else: ?>
+                                    <?php foreach (array_slice($rp['fila'], 0, 2) as $fp): ?>
+                                        <div class="flex items-center justify-between text-[11px] bg-gray-900/60 px-2 py-1 rounded border border-gray-800/40">
+                                            <span class="font-mono font-bold text-blue-400"><?= $fp['posicao'] ?>º <?= escapar($fp['senha']) ?></span>
+                                            <span class="truncate text-gray-300 max-w-[120px] text-[10px]"><?= escapar($fp['nome']) ?></span>
+                                        </div>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </div>
+
+                            <!-- Totais do médico -->
+                            <div class="pt-2 border-t border-gray-800/60 flex justify-between text-[10px] text-gray-400">
+                                <span>Agendados: <strong><?= $rp['totais']['agendados'] ?></strong></span>
+                                <span>Atendidos: <strong><?= $rp['totais']['concluidos'] ?></strong></span>
+                                <?php if ($rp['totais']['desistentes'] > 0): ?>
+                                    <span class="text-rose-400">Desistências: <strong><?= $rp['totais']['desistentes'] ?></strong></span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <!-- 2. Presentes (Fila de espera ativa para chamada do perito) -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
                 <h2 class="text-sm font-semibold uppercase text-emerald-400 tracking-wider mb-4 flex justify-between items-center">
@@ -334,62 +422,93 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                     <?php endif; ?>
                 </h2>
 
-                    <div class="overflow-x-auto max-h-[300px] overflow-y-auto">
-                        <table class="w-full text-left text-sm text-gray-300">
-                            <thead>
-                                <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">
-                                    <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                                        <th class="pb-2 w-8">
-                                            <input type="checkbox" id="chk-select-all-presentes" aria-label="Selecionar pessoas na fila" class="rounded bg-gray-800 border-gray-700 text-emerald-500 focus:ring-0 focus:ring-offset-0">
-                                        </th>
-                                    <?php endif; ?>
-                                    <th class="pb-2">Senha</th>
-                                    <th class="pb-2">Nome / Processo</th>
-                                    <th class="pb-2">Perito</th>
-                                    <th class="pb-2">Chegada</th>
-                                    <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                                        <th class="pb-2 text-right">Ação</th>
-                                    <?php endif; ?>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-800/50">
-                                <?php if (empty($presentes)): ?>
-                                    <tr>
-                                        <td colspan="<?= in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) ? 6 : 4 ?>" class="py-4 text-center text-xs text-gray-500">Ninguém aguardando no momento.</td>
-                                    </tr>
-                                <?php else: ?>
-                                    <?php foreach ($presentes as $item): ?>
-                                        <tr data-nome="<?= escapar($item['nome']) ?>" onclick="if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'BUTTON' && !event.target.closest('button') && !event.target.closest('a')) mostrarModalDetalhes({ nome: <?= jsValor($item['nome']) ?>, cpf: <?= jsValor($item['cpf'] ?? '---') ?>, processo: <?= jsValor($item['processo']) ?>, perito: <?= jsValor($item['perito']) ?>, data_pauta: '<?= date('d/m/Y', strtotime($item['data_pauta'])) ?>', status: <?= jsValor($item['status']) ?>, chegada_em: '<?= $item['chegada_em'] ? date('H:i:s', strtotime($item['chegada_em'])) : '---' ?>' })" class="cursor-pointer hover:bg-gray-850/40 transition">
-                                            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                                                <td class="py-3">
-                                                    <input type="checkbox" name="selecionados[]" value="<?= $item['id'] ?>" aria-label="Selecionar <?= escapar($item['nome']) ?> na fila" class="chk-presente-item rounded bg-gray-800 border-gray-700 text-emerald-500 focus:ring-0 focus:ring-offset-0">
-                                                </td>
-                                            <?php endif; ?>
-                                            <td class="py-3 font-mono font-bold text-blue-400"><?= escapar($item['senha']) ?></td>
-                                            <td class="py-3">
-                                                <div class="font-semibold text-white truncate max-w-[200px]"><?= escapar($item['nome']) ?></div>
-                                                <div class="text-[10px] text-gray-500 font-mono">
-                                                    <?= escapar($item['processo'] ?: 'Sem processo') ?>
-                                                    <?php if (!empty($item['cpf'])): ?>
-                                                        <span class="text-emerald-400 ml-1.5">| CPF: <?= escapar($item['cpf']) ?></span>
-                                                    <?php endif; ?>
-                                                </div>
-                                            </td>
-                                            <td class="py-3 text-xs text-gray-300 truncate max-w-[120px]"><?= escapar($item['perito'] ?: 'Não associado') ?></td>
-                                            <td class="py-3 text-xs text-gray-400"><?= date('H:i:s', strtotime($item['chegada_em'])) ?></td>
-                                            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                                                <td class="py-3 text-right flex items-center justify-end gap-1.5">
-                                                    <?php if ((int)$item['chamadas_count'] === 0): ?><button type="button" onclick="removerIndividual(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['status']) ?>)" class="bg-gray-800 hover:bg-gray-750 text-gray-400 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
-                                                        Desfazer presença
-                                                    </button><?php endif; ?>
-                                                </td>
-                                            <?php endif; ?>
-                                        </tr>
-                                    <?php endforeach; ?>
+                <?php if (!empty($posicoesPorPerito)): ?>
+                <!-- Filtro rápido por perito na fila de espera -->
+                <div class="flex flex-wrap items-center gap-1.5 mb-4">
+                    <span class="text-[10px] uppercase font-bold text-gray-400 mr-1">Filtrar por Médico:</span>
+                    <button type="button" onclick="filtrarFilaPerito('')" id="chip-perito-todos" class="chip-perito-fila bg-blue-600 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg transition">
+                        Todos (<?= count($presentes) ?>)
+                    </button>
+                    <?php foreach ($posicoesPorPerito as $medicoNome => $qtd): ?>
+                        <button type="button" onclick="filtrarFilaPerito(<?= jsValor($medicoNome) ?>)" class="chip-perito-fila bg-gray-800 hover:bg-gray-750 text-gray-300 text-[11px] font-medium px-2.5 py-1 rounded-lg transition" data-medico="<?= escapar($medicoNome) ?>">
+                            🧑‍⚕️ <?= escapar($medicoNome) ?> (<?= $qtd ?>)
+                        </button>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+
+                <div class="overflow-x-auto max-h-[300px] overflow-y-auto">
+                    <table class="w-full text-left text-sm text-gray-300">
+                        <thead>
+                            <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">
+                                <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
+                                    <th class="pb-2 w-8">
+                                        <input type="checkbox" id="chk-select-all-presentes" aria-label="Selecionar pessoas na fila" class="rounded bg-gray-800 border-gray-700 text-emerald-500 focus:ring-0 focus:ring-offset-0">
+                                    </th>
                                 <?php endif; ?>
-                            </tbody>
-                        </table>
-                    </div>
+                                <th class="pb-2 w-28">Posição na Fila</th>
+                                <th class="pb-2">Senha</th>
+                                <th class="pb-2">Nome / Processo</th>
+                                <th class="pb-2">Perito</th>
+                                <th class="pb-2">Chegada / Chamada</th>
+                                <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
+                                    <th class="pb-2 text-right">Ação</th>
+                                <?php endif; ?>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-800/50">
+                            <?php if (empty($presentes)): ?>
+                                <tr>
+                                    <td colspan="<?= in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) ? 7 : 5 ?>" class="py-4 text-center text-xs text-gray-500">Ninguém aguardando no momento.</td>
+                                </tr>
+                            <?php else: ?>
+                                <?php foreach ($presentes as $item): ?>
+                                    <tr data-nome="<?= escapar($item['nome']) ?>" data-perito="<?= escapar($item['perito']) ?>" onclick="if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'BUTTON' && !event.target.closest('button') && !event.target.closest('a')) mostrarModalDetalhes({ nome: <?= jsValor($item['nome']) ?>, cpf: <?= jsValor($item['cpf'] ?? '---') ?>, processo: <?= jsValor($item['processo']) ?>, perito: <?= jsValor($item['perito']) ?>, data_pauta: '<?= date('d/m/Y', strtotime($item['data_pauta'])) ?>', status: <?= jsValor($item['status']) ?>, chegada_em: '<?= $item['chegada_em'] ? date('H:i:s', strtotime($item['chegada_em'])) : '---' ?>', posicao_perito: <?= (int)($item['posicao_perito'] ?? 0) ?>, pessoas_na_frente: <?= (int)($item['pessoas_na_frente'] ?? 0) ?>, chamadas_count: <?= (int)($item['chamadas_count'] ?? 0) ?> })" class="row-presente cursor-pointer hover:bg-gray-850/40 transition">
+                                        <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
+                                            <td class="py-3">
+                                                <input type="checkbox" name="selecionados[]" value="<?= $item['id'] ?>" aria-label="Selecionar <?= escapar($item['nome']) ?> na fila" class="chk-presente-item rounded bg-gray-800 border-gray-700 text-emerald-500 focus:ring-0 focus:ring-offset-0">
+                                            </td>
+                                        <?php endif; ?>
+                                        <td class="py-3 text-xs">
+                                            <div class="font-bold text-white"><?= (int)($item['posicao_perito'] ?? 1) ?>º lugar</div>
+                                            <div class="text-[10px]">
+                                                <?= (int)($item['pessoas_na_frente'] ?? 0) === 0 
+                                                    ? '<span class="text-emerald-400 font-semibold">Próximo (0 na frente)</span>' 
+                                                    : "<span class=\"text-gray-400\">{$item['pessoas_na_frente']} na frente</span>" ?>
+                                            </div>
+                                        </td>
+                                        <td class="py-3 font-mono font-bold text-blue-400"><?= escapar($item['senha']) ?></td>
+                                        <td class="py-3">
+                                            <div class="font-semibold text-white truncate max-w-[200px]"><?= escapar($item['nome']) ?></div>
+                                            <div class="text-[10px] text-gray-500 font-mono">
+                                                <?= escapar($item['processo'] ?: 'Sem processo') ?>
+                                                <?php if (!empty($item['cpf'])): ?>
+                                                    <span class="text-emerald-400 ml-1.5">| CPF: <?= escapar($item['cpf']) ?></span>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
+                                        <td class="py-3 text-xs text-gray-300 truncate max-w-[120px]"><?= escapar($item['perito'] ?: 'Não associado') ?></td>
+                                        <td class="py-3 text-xs text-gray-400">
+                                            <div><?= date('H:i:s', strtotime($item['chegada_em'])) ?></div>
+                                            <?php if ((int)$item['chamadas_count'] > 0): ?>
+                                                <span class="bg-amber-950/70 border border-amber-800/60 text-amber-300 text-[9px] font-bold px-1.5 py-0.2 rounded mt-0.5 inline-block">
+                                                    ⚠️ Já chamado <?= $item['chamadas_count'] ?>x
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
+                                            <td class="py-3 text-right flex items-center justify-end gap-1.5">
+                                                <?php if ((int)$item['chamadas_count'] === 0): ?><button type="button" onclick="removerIndividual(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['status']) ?>)" class="bg-gray-800 hover:bg-gray-750 text-gray-400 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
+                                                    Desfazer presença
+                                                </button><?php endif; ?>
+                                            </td>
+                                        <?php endif; ?>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
                 </form>
             </div>
 
@@ -814,10 +933,39 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 badge = '<span class="bg-amber-950/40 text-amber-400 text-[10px] px-2.5 py-0.5 rounded-full border border-amber-900/40 uppercase font-bold">Chamado</span>';
             } else if (st === 'presente' || st === 'fila') {
                 badge = '<span class="bg-emerald-950 text-emerald-400 text-[10px] px-2.5 py-0.5 rounded-full border border-emerald-900/50 uppercase font-bold">Aguardando</span>';
+            } else if (st === 'desistente') {
+                badge = '<span class="bg-rose-950 text-rose-400 text-[10px] px-2.5 py-0.5 rounded-full border border-rose-900/50 uppercase font-bold">Desistente</span>';
             } else {
                 badge = '<span class="bg-gray-900 text-gray-500 text-[10px] px-2.5 py-0.5 rounded-full border border-gray-800 uppercase font-bold">Agendado</span>';
             }
             statusEl.innerHTML = badge;
+
+            const boxFila = document.getElementById('modal-fila-destaque');
+            if (boxFila) {
+                if (dados.posicao_perito && Number(dados.posicao_perito) > 0) {
+                    const naFrente = Number(dados.pessoas_na_frente || 0);
+                    const fraseFrente = naFrente === 0 
+                        ? '🟢 Próximo a ser chamado (0 pessoas na frente)' 
+                        : `📍 ${naFrente} pessoa(s) na frente dele(a)`;
+                    const jaChamadoBadge = Number(dados.chamadas_count || 0) > 0 
+                        ? `<span class="bg-amber-950 border border-amber-800 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded">⚠️ Já chamado ${dados.chamadas_count}x</span>` 
+                        : '';
+                    boxFila.innerHTML = `
+                        <div class="bg-blue-950/40 border border-blue-900/60 p-3.5 rounded-2xl flex items-center justify-between">
+                            <div>
+                                <span class="block text-[10px] uppercase font-bold text-blue-400 tracking-wider">Posição na Fila do Médico</span>
+                                <div class="text-base font-black text-white mt-0.5">${dados.posicao_perito}º lugar da fila</div>
+                                <span class="text-xs text-gray-300 block mt-0.5">${fraseFrente}</span>
+                            </div>
+                            <div>${jaChamadoBadge}</div>
+                        </div>
+                    `;
+                    boxFila.classList.remove('hidden');
+                } else {
+                    boxFila.classList.add('hidden');
+                    boxFila.innerHTML = '';
+                }
+            }
 
             const modal = document.getElementById('modal-detalhes');
             modal.classList.remove('hidden');
@@ -844,6 +992,53 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 input.form.submit();
             }
         }
+
+        // Filtra a fila de espera da recepção por médico
+        function filtrarFilaPerito(medico) {
+            const rows = document.querySelectorAll('.row-presente');
+            const chips = document.querySelectorAll('.chip-perito-fila');
+            chips.forEach(c => {
+                c.classList.remove('bg-blue-600', 'text-white', 'font-bold');
+                c.classList.add('bg-gray-800', 'text-gray-300', 'font-medium');
+            });
+            if (!medico) {
+                const btnTodos = document.getElementById('chip-perito-todos');
+                if (btnTodos) {
+                    btnTodos.classList.add('bg-blue-600', 'text-white', 'font-bold');
+                    btnTodos.classList.remove('bg-gray-800', 'text-gray-300', 'font-medium');
+                }
+                rows.forEach(r => r.style.display = '');
+            } else {
+                const chipAtivo = document.querySelector(`.chip-perito-fila[data-medico="${medico}"]`);
+                if (chipAtivo) {
+                    chipAtivo.classList.add('bg-blue-600', 'text-white', 'font-bold');
+                    chipAtivo.classList.remove('bg-gray-800', 'text-gray-300', 'font-medium');
+                }
+                rows.forEach(r => {
+                    r.style.display = (r.getAttribute('data-perito') === medico) ? '' : 'none';
+                });
+            }
+        }
+
+        // Polling em tempo real para sincronizar os dados dos peritos e salas
+        async function sincronizarPeritosRecepcao() {
+            try {
+                const resp = await fetch(`api_recepcao_peritos.php?data=<?= urlencode($dataFiltro) ?>`, { cache: 'no-store' });
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (!data || !data.success || !data.peritos) return;
+                const container = document.getElementById('cards-peritos-container');
+                if (!container) return;
+                data.peritos.forEach(rp => {
+                    const card = container.querySelector(`.card-perito[data-perito="${rp.perito}"]`);
+                    if (card) {
+                        const badgeFila = card.querySelector('.bg-blue-950\/70');
+                        if (badgeFila) badgeFila.textContent = `Fila: ${rp.fila.length}`;
+                    }
+                });
+            } catch (_) {}
+        }
+        setInterval(sincronizarPeritosRecepcao, 4000);
     </script>
 
     <!-- Modal de Detalhes do Periciado -->
@@ -857,6 +1052,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
             </div>
             <div class="p-6 space-y-4 text-sm text-gray-300">
                 <div class="grid grid-cols-2 gap-4">
+                    <div id="modal-fila-destaque" class="col-span-2 hidden"></div>
                     <div class="col-span-2">
                         <span class="block text-[10px] uppercase font-bold text-gray-500 tracking-wider">Nome do Periciado</span>
                         <strong id="modal-nome" class="text-base text-white font-black block mt-0.5">---</strong>

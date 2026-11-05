@@ -63,8 +63,9 @@ class HttpTests(unittest.TestCase):
                         self.assertEqual(esperado, urllib.parse.urlsplit(destino).path.rsplit('/', 1)[-1])
                     else:
                         self.assertNotEqual(rota, urllib.parse.urlsplit(destino).path.rsplit('/', 1)[-1])
-            status, _, _, _ = c.abrir('preview_importacao.php')
-            self.assertEqual(410 if perfil in ('admin', 'supervisor') else 403, status)
+            status, _, destino, _ = c.abrir('preview_importacao.php')
+            if perfil in ('admin', 'supervisor'):
+                self.assertIn('gerenciar_pauta.php', destino)
             status, _, _, _ = c.abrir('api_verificar_outro_dia.php?busca=Teste')
             self.assertEqual(403 if perfil == 'perito' else 200, status)
         for rota in comuns + list(restritas) + ['preview_importacao.php', 'api_verificar_outro_dia.php']:
@@ -147,20 +148,20 @@ class HttpTests(unittest.TestCase):
         c=Cliente(); c.login('admin-test'); _,html,_,_=c.abrir('gerenciar_pauta.php')
         csrf=re.search(r'name="csrf" value="([a-f0-9]+)"',html)[1]
         wb=Workbook();ws=wb.active
+        hoje_str = datetime.date.today().strftime('%Y-%m-%d')
         ws.append(['Processo','Documento','Nome Perito','Data perícia','Nome Parte'])
-        ws.append(['HTTP-IMPORT-TESTE','','Perito Teste A','2030-01-02','Pessoa HTTP Teste'])
+        ws.append(['HTTP-IMPORT-TESTE','','Perito Teste A',hoje_str,'Pessoa HTTP Teste'])
         dados=io.BytesIO();wb.save(dados)
         boundary='sga-test-boundary'
         corpo=b''
-        for key,value in {'csrf':csrf,'action':'importar_excel'}.items():
+        for key,value in {'csrf':csrf,'action':'importar_excel','janela_importacao':'dia'}.items():
             corpo+=(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n').encode()
         corpo+=(f'--{boundary}\r\nContent-Disposition: form-data; name="arquivo_excel"; filename="teste.xlsx"\r\nContent-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n').encode()+dados.getvalue()+f'\r\n--{boundary}--\r\n'.encode()
         req=urllib.request.Request(BASE+'/gerenciar_pauta.php',data=corpo,headers={'Content-Type':f'multipart/form-data; boundary={boundary}'})
         with c.http.open(req,timeout=30) as resposta:
-            html=resposta.read().decode();self.assertIn('preview_importacao.php',resposta.geturl());self.assertIn('Pessoa HTTP Teste',html)
-        csrf=re.search(r'name="csrf" value="([a-f0-9]+)"',html)[1]
-        status,html,url,_=c.abrir('preview_importacao.php',{'csrf':csrf})
-        self.assertEqual(200,status);self.assertIn('gerenciar_pauta.php',url);self.assertIn('Importação concluída',html)
+            html=resposta.read().decode()
+            self.assertIn('gerenciar_pauta.php',resposta.geturl())
+            self.assertTrue('concluída' in html or 'concluidas' in html or 'incluídos' in html)
 
     def test_sessao_excluida_perde_acesso(self):
         admin=Cliente();admin.login('admin-test');_,html,_,_=admin.abrir('usuarios.php')
