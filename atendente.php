@@ -251,7 +251,7 @@ $history = $stmt->fetchAll();
             <!-- Contador da fila de espera -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl text-center">
                 <h2 class="text-xs uppercase font-bold text-gray-400 tracking-widest mb-2">Seus Pacientes Aguardando</h2>
-                <div class="text-5xl font-black text-amber-500 my-4"><?= $fila_espera ?></div>
+                <div class="text-5xl font-black text-amber-500 my-4" id="contador-fila"><?= $fila_espera ?></div>
                 <p class="text-xs text-gray-400">pacientes confirmados na recepção</p>
             </div>
         </div>
@@ -340,7 +340,7 @@ $history = $stmt->fetchAll();
                                 <th class="pb-2 text-right">Ação</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-800/50">
+                        <tbody id="corpo-fila-espera" class="divide-y divide-gray-800/50">
                             <?php if (empty($presentes_perito)): ?>
                                 <tr>
                                     <td colspan="4" class="py-4 text-center text-xs text-gray-500">Nenhum paciente seu na fila de espera.</td>
@@ -429,5 +429,78 @@ $history = $stmt->fetchAll();
     </footer>
 <script src="assets/acessibilidade.js" defer></script>
 <script src="assets/usabilidade.js" defer></script>
+<script>
+(function() {
+    let ultimaFilaJson = '';
+    const elContador = document.getElementById('contador-fila');
+    const elCorpoFila = document.getElementById('corpo-fila-espera');
+
+    function escaparHtml(texto) {
+        const div = document.createElement('div');
+        div.textContent = texto || '';
+        return div.innerHTML;
+    }
+
+    async function atualizarFilaPerito() {
+        try {
+            const resp = await fetch('api_perito_fila.php', { cache: 'no-store' });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (!data || !data.success) return;
+
+            // 1. Atualizar o contador da fila
+            if (elContador && elContador.textContent.trim() != data.total_aguardando) {
+                elContador.textContent = data.total_aguardando;
+                elContador.classList.add('scale-110', 'text-amber-400');
+                setTimeout(() => {
+                    elContador.classList.remove('scale-110', 'text-amber-400');
+                }, 600);
+            }
+
+            // 2. Atualizar tabela de pacientes aguardando em tempo real
+            const jsonAtual = JSON.stringify(data.fila);
+            if (elCorpoFila && jsonAtual !== ultimaFilaJson) {
+                ultimaFilaJson = jsonAtual;
+                if (!data.fila || data.fila.length === 0) {
+                    elCorpoFila.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-xs text-gray-500">Nenhum paciente seu na fila de espera.</td></tr>';
+                } else {
+                    const csrfToken = document.querySelector('input[name="csrf"]')?.value || '';
+                    const atendimentoAtualId = data.atendimento_atual_id || 0;
+                    
+                    let html = '';
+                    data.fila.forEach(p => {
+                        html += `
+                        <tr class="hover:bg-gray-800/30 transition">
+                            <td class="py-3 font-mono font-bold text-blue-400">${escaparHtml(p.senha)}</td>
+                            <td class="py-3">
+                                <div class="font-semibold text-white">${escaparHtml(p.nome)}</div>
+                                <div class="text-[10px] text-gray-500 font-mono">${escaparHtml(p.processo)}</div>
+                            </td>
+                            <td class="py-3 text-xs text-gray-400">${escaparHtml(p.chegada)}</td>
+                            <td class="py-3 text-right">
+                                <form method="POST" class="inline" onsubmit="return confirm('Chamar este periciado fora da fila?');">
+                                    <input type="hidden" name="csrf" value="${csrfToken}">
+                                    <input type="hidden" name="atendimento_id" value="${atendimentoAtualId}">
+                                    <input type="hidden" name="action" value="chamar_especifico">
+                                    <input type="hidden" name="id" value="${p.id}">
+                                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold px-2.5 py-1 rounded transition">
+                                        Chamar
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>`;
+                    });
+                    elCorpoFila.innerHTML = html;
+                }
+            }
+        } catch (e) {
+            // Falha momentânea de rede ignorada silenciosamente
+        }
+    }
+
+    // Consulta automática a cada 3 segundos (tempo real)
+    setInterval(atualizarFilaPerito, 3000);
+})();
+</script>
 </body>
 </html>
