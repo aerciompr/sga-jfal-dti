@@ -134,25 +134,30 @@ O recepcionista pode responder de imediato e com total segurança ao jurisdicion
 
 ---
 
-## 7. Emissão da Declaração de Comparecimento A4
+## 7. Emissão da Declaração de Comparecimento A4 (Atribuição Central da Recepção)
 
-A Declaração de Comparecimento é emitida para comprovar que o periciado ou seu acompanhante esteve na sede da Justiça Federal para a perícia.
+A emissão e entrega da **Declaração de Comparecimento** é uma das atribuições centrais da equipe de Recepção. O documento comprova formalmente que a parte periciada e/ou seu acompanhante compareceu ao ato judicial perante a Justiça Federal, servindo de justificativa funcional perante empregadores, órgãos públicos e instituições de ensino.
 
 ![Declaração Oficial de Comparecimento A4](imagens/05_declaracao_comparecimento.png)
 
-### Como Emitir:
-1. Na linha do periciado (seja na lista de espera ou na lista de concluídos), clique no botão **📄 Declaração**.
-2. A janela de impressão abre automaticamente em formato A4 padronizado da Justiça Federal, contendo:
-   - Brasão da República e cabeçalho oficial do Tribunal Regional Federal da 5ª Região / Seção Judiciária de Alagoas.
-   - Nome completo e CPF do periciado.
-   - Número do processo e vara de origem.
-   - Nome do médico perito responsável.
-   - Horário de registro da entrada no fórum e campo para validação.
-3. Clique em **Imprimir** (ou utilize o atalho de teclado `Ctrl + P`).
-4. Entregue o documento assinado ou carimbado ao cidadão.
+### Formas de Emissão pela Recepção:
 
-> [!TIP]
-> A declaração possui CSS otimizado para impressão: todos os botões, cabeçalhos do navegador e menus do sistema são automaticamente ocultados, gerando um documento limpo e formal.
+1. **Ao Término do Atendimento (Fluxo Mais Frequente):**
+   - Quando o médico perito clica em "Concluir Atendimento" no consultório, o cidadão sai da sala e dirige-se ao balcão da Recepção para retirar sua declaração.
+   - O recepcionista localiza o paciente no painel lateral direito de **Finalizados**.
+   - Basta clicar no botão azul **🖨️ Declaração** correspondente. O documento abrirá com o horário de chegada e o horário exato de término registrado pelo perito.
+
+2. **Durante a Espera (Tabela de Aguardando Chamada):**
+   - Caso o cidadão solicite a declaração de presença logo no check-in para comprovar horário de chegada enquanto aguarda o perito, o recepcionista pode clicar no botão **🖨️ Declaração** na coluna **Ação** da tabela de fila de espera.
+
+3. **Pelo Modal de Detalhes:**
+   - Ao clicar sobre qualquer agendamento na pauta, o modal de detalhes é exibido, contendo o botão **🖨️ Declaração de Comparecimento**.
+
+### Procedimento de Impressão:
+1. Ao abrir a declaração na tela, confira o nome, CPF, número do processo, vara e perito.
+2. Pressione o atalho de teclado `Ctrl + P` (ou clique com o botão direito e selecione *Imprimir*).
+3. O modelo A4 da JFAL possui formatação inteligente para impressão: botões de tela, menus e cabeçalhos do navegador são automaticamente omitidos.
+4. Entregue a folha assinada ou carimbada pela recepção ao cidadão.
 
 ---
 

@@ -497,15 +497,13 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                 <th class="pb-2">Nome / Processo</th>
                                 <th class="pb-2">Perito</th>
                                 <th class="pb-2">Chegada / Chamada</th>
-                                <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                                    <th class="pb-2 text-right">Ação</th>
-                                <?php endif; ?>
+                                <th class="pb-2 text-right">Ação</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-800/50">
                             <?php if (empty($presentes)): ?>
                                 <tr>
-                                    <td colspan="<?= in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) ? 7 : 5 ?>" class="py-4 text-center text-xs text-gray-500">Ninguém aguardando no momento.</td>
+                                    <td colspan="<?= in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) ? 7 : 6 ?>" class="py-4 text-center text-xs text-gray-500">Ninguém aguardando no momento.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($presentes as $item): ?>
@@ -549,16 +547,16 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                                 </span>
                                             <?php endif; ?>
                                         </td>
-                                        <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                                            <td class="py-3 text-right flex items-center justify-end gap-1.5">
-                                                <a href="declaracao_comparecimento.php?id=<?= $item['id'] ?>&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 text-xs px-2 py-1 rounded transition flex items-center gap-1">
-                                                    🖨️ Declaração
-                                                </a>
-                                                <?php if ((int)$item['chamadas_count'] === 0): ?><button type="button" onclick="removerIndividual(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['status']) ?>)" class="bg-gray-800 hover:bg-gray-750 text-gray-400 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
+                                        <td class="py-3 text-right flex items-center justify-end gap-1.5">
+                                            <a href="declaracao_comparecimento.php?id=<?= $item['id'] ?>&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 text-xs px-2 py-1 rounded transition flex items-center gap-1">
+                                                🖨️ Declaração
+                                            </a>
+                                            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) && (int)$item['chamadas_count'] === 0): ?>
+                                                <button type="button" onclick="removerIndividual(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['status']) ?>)" class="bg-gray-800 hover:bg-gray-750 text-gray-400 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
                                                     Desfazer presença
-                                                </button><?php endif; ?>
-                                            </td>
-                                        <?php endif; ?>
+                                                </button>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
@@ -604,15 +602,20 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                             <p class="text-xs text-gray-500 text-center py-4">Nenhum atendimento finalizado.</p>
                         <?php else: ?>
                             <?php foreach ($concluidos as $item): ?>
-                                <div class="bg-gray-950/30 border border-gray-800/40 p-3 rounded-xl flex justify-between items-center opacity-70">
+                                <div class="bg-gray-950/30 border border-gray-800/40 p-3 rounded-xl flex justify-between items-center opacity-85 hover:opacity-100 transition">
                                     <div class="truncate flex-1 pr-2">
-                                        <div class="text-xs font-semibold text-gray-300 truncate"><?= escapar($item['nome']) ?></div>
-                                        <div class="text-[10px] text-gray-500 truncate">Perito: <?= escapar($item['perito']) ?></div>
-                                        <div class="text-[10px] text-gray-500 mt-0.5"><?= escapar($item['sala']) ?></div>
+                                        <div class="text-xs font-semibold text-gray-200 truncate"><?= escapar($item['nome']) ?></div>
+                                        <div class="text-[10px] text-gray-400 truncate">Perito: <?= escapar($item['perito']) ?> &bull; <?= escapar($item['sala']) ?></div>
+                                        <div class="text-[9px] text-gray-500 font-mono mt-0.5"><?= escapar($item['processo'] ?: 'Sem processo') ?></div>
                                     </div>
-                                    <div class="text-right">
-                                        <div class="text-sm font-bold text-gray-400"><?= escapar($item['senha']) ?></div>
-                                        <div class="text-[9px] text-gray-600 font-semibold">Fim: <?= date('H:i', strtotime($item['chamado_em'])) ?></div>
+                                    <div class="text-right flex items-center gap-2">
+                                        <div>
+                                            <div class="text-xs font-black text-blue-400 font-mono"><?= escapar($item['senha']) ?></div>
+                                            <div class="text-[9px] text-gray-500">Fim: <?= date('H:i', strtotime($item['finalizado_em'] ?: $item['chamado_em'])) ?></div>
+                                        </div>
+                                        <a href="declaracao_comparecimento.php?id=<?= $item['id'] ?>&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/70 text-indigo-300 text-xs px-2.5 py-1 rounded-lg transition flex items-center gap-1 font-semibold">
+                                            🖨️ Declaração
+                                        </a>
                                     </div>
                                 </div>
                             <?php endforeach; ?>

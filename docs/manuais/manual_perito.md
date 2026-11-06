@@ -126,16 +126,19 @@ Durante a realização dos exames clínicos, você não precisa ficar atualizand
 
 ---
 
-## 7. Emissão de Declaração de Comparecimento
+## 7. Emissão de Declaração de Comparecimento (Rotina e Atalho Opcional)
 
-Se o periciado ou seu advogado solicitar a comprovação de presença diretamente no consultório:
+> [!NOTE]
+> **Fluxo Padrão da JFAL:** Na rotina padrão dos Juizados Especiais Federais, **a emissão e entrega da Declaração de Comparecimento é atribuição da equipe de Recepção**. 
+> O perito médico concentra-se exclusivamente no exame físico e anamnese. Ao término do atendimento, o periciado é simplesmente orientado a passar no balcão da Recepção para retirar sua declaração já impressa e carimbada.
+
+Caso o periciado, seu patrono ou assistente técnico solicite a comprovação de presença diretamente no consultório e o médico opte por emiti-la de imediato:
 
 ![Declaração Oficial A4](imagens/05_declaracao_comparecimento.png)
 
-1. Localize o nome do paciente no card de atendimento atual ou no histórico de atendidos do dia.
-2. Clique no ícone **📄 Declaração**.
-3. O formulário em padrão oficial da JFAL será aberto com o nome do médico perito, número do processo e horários de entrada e saída já preenchidos.
-4. Pressione `Ctrl + P` para enviar diretamente à impressora do consultório.
+1. No card de atendimento atual ou na coluna de histórico de atendidos na lateral, clique no atalho **🖨️ Declaração**.
+2. O formulário em padrão oficial da JFAL será aberto com o nome do médico perito, número do processo e horários de entrada e saída já preenchidos.
+3. Pressione `Ctrl + P` para enviar diretamente à impressora do consultório.
 
 ---
 
