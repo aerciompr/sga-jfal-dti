@@ -82,6 +82,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $message_type = 'success';
     } catch (DomainException $e) { $message = $e->getMessage(); $message_type = 'error'; }
     catch (Throwable $e) { $message = erroPublico($e); $message_type = 'error'; }
+
+    $isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') 
+        || str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json');
+
+    if ($isAjax) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'success' => $message_type === 'success',
+            'message' => $message,
+            'message_type' => $message_type,
+            'csrf_token' => csrfToken(),
+            'action' => $action,
+            'confirmado' => $confirmado ?? null,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     $_SESSION['flash_recepcao'] = [$message,$message_type];
     header('Location: recepcao.php' . '?data_filtro=' . urlencode($dataFiltro), true, 303); exit;
 }
@@ -172,6 +189,8 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
     <link rel="stylesheet" href="assets/usabilidade.css">
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
+    <!-- Container de Toasts de Notificação da Recepção -->
+    <div id="toast-container-recepcao" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none *:pointer-events-auto"></div>
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md shrink-0">
         <div class="flex items-center space-x-3">
@@ -187,24 +206,24 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
             </span>
         </div>
         <div class="flex items-center space-x-3">
-            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/30 px-3 py-1.5 rounded-lg transition">Painel Principal</a>
+            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Painel Principal</a>
             
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
-                <a href="recepcao.php" class="text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-900/60 bg-emerald-950/30 px-3 py-1.5 rounded-lg transition">Recepção</a>
+                <a href="recepcao.php" class="text-xs text-white font-bold bg-emerald-900/60 border border-emerald-500 shadow-sm ring-1 ring-emerald-500/30 px-3 py-1.5 rounded-lg transition">Recepção</a>
             <?php endif; ?>
 
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
-                <a href="atendente.php" class="text-xs text-blue-400 hover:text-blue-300 border border-blue-900/60 bg-blue-950/30 px-3 py-1.5 rounded-lg transition">Atendimento</a>
+                <a href="atendente.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Atendimento</a>
             <?php endif; ?>
 
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                <a href="gerenciar_pauta.php" class="text-xs text-sky-400 hover:text-sky-300 border border-sky-900/60 bg-sky-950/30 px-3 py-1.5 rounded-lg transition">Pautas</a>
-                <a href="salas.php" class="text-xs text-pink-400 hover:text-pink-300 border border-pink-900/60 bg-pink-950/30 px-3 py-1.5 rounded-lg transition">Salas</a>
-                <a href="auditoria.php" class="text-xs text-teal-400 hover:text-teal-300 border border-teal-900/60 bg-teal-950/30 px-3 py-1.5 rounded-lg transition">Auditoria</a>
+                <a href="gerenciar_pauta.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Pautas</a>
+                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Salas</a>
+                <a href="auditoria.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Auditoria</a>
             <?php endif; ?>
 
             <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
-                <a href="usuarios.php" class="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-900/60 bg-indigo-950/30 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
+                <a href="usuarios.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
             <?php endif; ?>
 
             <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
@@ -212,7 +231,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
         </div>
     </header>
 
-    <main class="flex-1 max-w-7xl w-full mx-auto p-6 <?= in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) ? 'grid grid-cols-1 lg:grid-cols-3 gap-6' : 'space-y-6' ?>">
+    <main class="flex-1 max-w-[96rem] w-full mx-auto p-6 <?= in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) ? 'grid grid-cols-1 lg:grid-cols-3 gap-6' : 'space-y-6' ?>">
         <!-- Área de Listas (Fila de Hoje) -->
         <div class="sga-queue <?= in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) ? 'lg:col-span-2' : '' ?> space-y-6">
             <?php if ($message): ?>
@@ -282,17 +301,9 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                         <p id="busca-resultado" role="status" aria-live="polite" class="sga-helper"></p>
                     </div>
 
-                    <!-- Alerta de agendamentos em outras datas -->
-                    <div id="alerta-outras-datas" class="hidden mb-4 p-4 rounded-xl border bg-blue-950/40 border-blue-900/60 text-blue-300 text-xs space-y-2 animate-fade-in">
-                        <div class="font-bold flex items-center gap-1.5 uppercase text-blue-400">
-                            <span>📅</span> Agendamento Encontrado em Outra Data!
-                        </div>
-                        <div id="lista-outras-datas" class="space-y-1.5 font-medium">
-                            <!-- Injetado via JS -->
-                        </div>
-                    </div>
 
-                    <div class="overflow-x-auto max-h-[300px] overflow-y-auto">
+
+                    <div class="overflow-x-auto max-h-[460px] overflow-y-auto">
                         <table class="w-full text-left text-sm text-gray-300">
                             <thead>
                                 <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">
@@ -340,8 +351,8 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                             <td class="sga-doctor py-3 text-xs text-gray-300 truncate max-w-[150px]"><?= escapar($item['perito'] ?: 'Não associado') ?></td>
                                             <td class="sga-actions py-3 text-right flex items-center justify-end gap-1.5">
                                                 <?php if ($permite_checkin): ?>
-                                                    <button type="button" onclick="confirmarChegada(<?= $item['id'] ?>)" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-2.5 py-1 rounded transition">
-                                                        Confirmar Chegada
+                                                    <button type="button" onclick="confirmarChegada(<?= $item['id'] ?>, this)" class="btn-checkin bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-sm transition transform active:scale-95 flex items-center gap-1">
+                                                        <span>✅</span> Confirmar Chegada
                                                     </button>
                                                 <?php endif; ?>
                                                 <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
@@ -456,34 +467,36 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
             <?php endif; ?>
 
             <!-- 2. Presentes (Fila de espera ativa para chamada do perito) -->
-            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
-                <h2 class="text-sm font-semibold uppercase text-emerald-400 tracking-wider mb-4 flex justify-between items-center">
-                    <span>Aguardando Chamada (Fila de Espera)</span>
+            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl" id="bloco-presentes">
+                <form method="POST" id="form-presentes"><?= csrfCampo() ?>
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                    <h2 class="text-sm font-semibold uppercase text-emerald-400 tracking-wider flex items-center gap-2">
+                        <span>Aguardando Chamada (Fila de Espera)</span>
+                        <span class="bg-emerald-950 text-emerald-400 text-xs px-2.5 py-0.5 rounded-full" id="contador-presentes"><?= count($presentes) ?></span>
+                    </h2>
                     <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                    <div class="flex flex-col sm:flex-row gap-3 mb-4">
-                        <button type="submit" name="action" value="remover_multiplos" id="btn-remover-presentes" disabled onclick="return confirm('Retornar todos os periciados selecionados para a lista de agendados?');" class="bg-amber-950/40 hover:bg-amber-900/40 border border-amber-900/60 text-amber-400 text-xs px-3 py-1.5 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex-1 sm:flex-none">
-                            🔄 Voltar Selecionados para Agendados
-                        </button>
-                    </div>
+                    <button type="submit" name="action" value="remover_multiplos" id="btn-remover-presentes" disabled onclick="return confirm('Retornar todos os periciados selecionados para a lista de agendados?');" class="bg-amber-950/40 hover:bg-amber-900/40 border border-amber-900/60 text-amber-400 text-xs px-3.5 py-1.5 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
+                        🔄 Voltar Selecionados para Agendados
+                    </button>
                     <?php endif; ?>
-                </h2>
+                </div>
 
                 <?php if (!empty($posicoesPorPerito)): ?>
-                <!-- Filtro rápido por perito na fila de espera -->
-                <div class="flex flex-wrap items-center gap-1.5 mb-4">
-                    <span class="text-[10px] uppercase font-bold text-gray-400 mr-1">Filtrar por Médico:</span>
-                    <button type="button" onclick="filtrarFilaPerito('')" id="chip-perito-todos" class="chip-perito-fila bg-blue-600 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg transition">
-                        Todos (<?= count($presentes) ?>)
-                    </button>
-                    <?php foreach ($posicoesPorPerito as $medicoNome => $qtd): ?>
-                        <button type="button" onclick="filtrarFilaPerito(<?= jsValor($medicoNome) ?>)" class="chip-perito-fila bg-gray-800 hover:bg-gray-750 text-gray-300 text-[11px] font-medium px-2.5 py-1 rounded-lg transition" data-medico="<?= escapar($medicoNome) ?>">
-                            🧑‍⚕️ <?= escapar($medicoNome) ?> (<?= $qtd ?>)
-                        </button>
-                    <?php endforeach; ?>
+                <!-- Filtro compacto por perito na fila de espera -->
+                <div class="flex items-center gap-3 mb-4">
+                    <label for="filtro-perito-select" class="text-xs uppercase font-bold text-gray-400 shrink-0">Filtrar por Médico:</label>
+                    <select id="filtro-perito-select" onchange="filtrarFilaPerito(this.value)" class="bg-gray-950 border border-gray-700 text-white text-xs rounded-xl px-3 py-2 font-medium focus:outline-none focus:border-blue-500 max-w-xs">
+                        <option value="">Todos os Médicos (<?= count($presentes) ?> aguardando)</option>
+                        <?php foreach ($posicoesPorPerito as $medicoNome => $qtd): ?>
+                            <option value="<?= escapar($medicoNome) ?>">
+                                <?= escapar($medicoNome) ?> (<?= $qtd ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
                 <?php endif; ?>
 
-                <div class="overflow-x-auto max-h-[300px] overflow-y-auto">
+                <div class="overflow-x-auto max-h-[460px] overflow-y-auto">
                     <table class="w-full text-left text-sm text-gray-300">
                         <thead>
                             <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">
@@ -816,10 +829,98 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
             });
         });
 
-        // Confirma chegada individual preenchendo formulário oculto
-        function confirmarChegada(id) {
-            document.getElementById('chegada-id').value = id;
-            document.getElementById('form-chegada-unica').submit();
+        function exibirToastRecepcao(msg, tipo = 'success') {
+            const container = document.getElementById('toast-container-recepcao');
+            if (!container) return;
+            const toast = document.createElement('div');
+            const corBg = tipo === 'success' ? 'bg-emerald-950/95 border-emerald-500/80 text-emerald-200' : (tipo === 'error' ? 'bg-rose-950/95 border-rose-500/80 text-rose-200' : 'bg-blue-950/95 border-blue-500/80 text-blue-200');
+            toast.className = `p-4 rounded-xl border shadow-2xl flex items-center gap-3 text-xs font-semibold animate-fade-in ${corBg}`;
+            toast.innerHTML = `<span>${tipo === 'success' ? '✅' : '⚠️'}</span> <span>${msg}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.5s ease';
+                setTimeout(() => toast.remove(), 500);
+            }, 4500);
+        }
+
+        // Recarrega dinamicamente a fila de presentes via DOMParser
+        async function recarregarFilaPresentes() {
+            try {
+                const resp = await fetch('recepcao.php?data_filtro=<?= urlencode($dataFiltro) ?>', { cache: 'no-store' });
+                if (!resp.ok) return;
+                const html = await resp.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const novoBloco = doc.getElementById('bloco-presentes');
+                const atualBloco = document.getElementById('bloco-presentes');
+                if (novoBloco && atualBloco) {
+                    atualBloco.innerHTML = novoBloco.innerHTML;
+                    // Reanexar eventos de checkbox de presentes
+                    reancorarEventosPresentes();
+                }
+            } catch (e) {}
+        }
+
+        // Confirma chegada individual via AJAX com feedback instantâneo
+        async function confirmarChegada(id, btn) {
+            const row = btn ? btn.closest('tr') : document.querySelector(`tr[data-id="${id}"]`);
+            const btnOriginalHtml = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '⏳ Confirmando...';
+            }
+
+            const csrfToken = document.querySelector('input[name="csrf"]')?.value || '';
+            const formData = new FormData();
+            formData.append('csrf', csrfToken);
+            formData.append('action', 'confirmar_chegada');
+            formData.append('id', id);
+
+            try {
+                const resp = await fetch('recepcao.php?data_filtro=<?= urlencode($dataFiltro) ?>', {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                if (!resp.ok) throw new Error('Falha de resposta do servidor.');
+                const res = await resp.json();
+                if (res.csrf_token) {
+                    document.querySelectorAll('input[name="csrf"]').forEach(i => i.value = res.csrf_token);
+                }
+
+                if (res.success) {
+                    exibirToastRecepcao(res.message, 'success');
+                    if (row) {
+                        row.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                        row.style.opacity = '0';
+                        row.style.transform = 'translateX(20px)';
+                        setTimeout(() => {
+                            row.remove();
+                            // Atualizar contador de agendados
+                            const badgeAgendados = document.querySelector('#form-agendados h2 span:last-child');
+                            if (badgeAgendados) {
+                                const atual = parseInt(badgeAgendados.textContent.trim(), 10) || 0;
+                                badgeAgendados.textContent = Math.max(0, atual - 1);
+                            }
+                        }, 300);
+                    }
+                    if (typeof sincronizarPeritosRecepcao === 'function') {
+                        sincronizarPeritosRecepcao();
+                    }
+                    await recarregarFilaPresentes();
+                } else {
+                    exibirToastRecepcao(res.message || 'Erro ao confirmar presença.', 'error');
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = btnOriginalHtml;
+                    }
+                }
+            } catch (err) {
+                // Se der erro ou offline, fallback clássico
+                document.getElementById('chegada-id').value = id;
+                document.getElementById('form-chegada-unica').submit();
+            }
         }
 
         // Submete ação para limpar agendados do dia
@@ -857,40 +958,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 resultado.classList.toggle('sga-empty-search', query.length > 0 && visiveis.length === 0);
                 if (chkSelectAll) { chkSelectAll.checked = false; chkSelectAll.indeterminate = false; }
 
-                // Busca em outras datas via AJAX
-                clearTimeout(timeoutBuscaOutroDia);
-                const alertaEl = document.getElementById('alerta-outras-datas');
-                const listaEl = document.getElementById('lista-outras-datas');
-                
-                if (query.length >= 3) {
-                    timeoutBuscaOutroDia = setTimeout(() => {
-                        fetch(`api_verificar_outro_dia.php?busca=${encodeURIComponent(query)}&hoje=<?= $dataFiltro ?>`)
-                            .then(res => res.json())
-                            .then(data => {
-                                if (data && data.length > 0) {
-                                    listaEl.innerHTML = '';
-                                    data.forEach(item => {
-                                        const div = document.createElement('div');
-                                        div.className = 'bg-blue-900/30 border border-blue-800/40 p-2.5 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1.5';
-                                        const texto = document.createElement('span');
-                                        texto.textContent = `${item.nome} | Perito: ${item.perito || 'Não associado'} | ${item.status_formatado} | ${item.data_pauta_formatada}`;
-                                        div.appendChild(texto);
-                                        listaEl.appendChild(div);
-                                    });
-                                    alertaEl.classList.remove('hidden');
-                                } else {
-                                    alertaEl.classList.add('hidden');
-                                    listaEl.innerHTML = '';
-                                }
-                            })
-                            .catch(() => {
-                                alertaEl.classList.add('hidden');
-                            });
-                    }, 350); // Debounce de 350ms
-                } else {
-                    alertaEl.classList.add('hidden');
-                    listaEl.innerHTML = '';
-                }
+
             });
         }
 
@@ -1118,28 +1186,44 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
         // Filtra a fila de espera da recepção por médico
         function filtrarFilaPerito(medico) {
             const rows = document.querySelectorAll('.row-presente');
-            const chips = document.querySelectorAll('.chip-perito-fila');
-            chips.forEach(c => {
-                c.classList.remove('bg-blue-600', 'text-white', 'font-bold');
-                c.classList.add('bg-gray-800', 'text-gray-300', 'font-medium');
+            const select = document.getElementById('filtro-perito-select');
+            if (select && select.value !== (medico || '')) {
+                select.value = medico || '';
+            }
+            rows.forEach(r => {
+                r.style.display = (!medico || r.getAttribute('data-perito') === medico) ? '' : 'none';
             });
-            if (!medico) {
-                const btnTodos = document.getElementById('chip-perito-todos');
-                if (btnTodos) {
-                    btnTodos.classList.add('bg-blue-600', 'text-white', 'font-bold');
-                    btnTodos.classList.remove('bg-gray-800', 'text-gray-300', 'font-medium');
+        }
+
+        function reancorarEventosPresentes() {
+            const chkAll = document.getElementById('chk-select-all-presentes');
+            const chkItems = document.querySelectorAll('.chk-presente-item');
+            const btnRemover = document.getElementById('btn-remover-presentes');
+            function toggleBtn() {
+                if (btnRemover) {
+                    const checkedCount = document.querySelectorAll('.chk-presente-item:checked').length;
+                    btnRemover.disabled = checkedCount === 0;
                 }
-                rows.forEach(r => r.style.display = '');
-            } else {
-                const chipAtivo = document.querySelector(`.chip-perito-fila[data-medico="${medico}"]`);
-                if (chipAtivo) {
-                    chipAtivo.classList.add('bg-blue-600', 'text-white', 'font-bold');
-                    chipAtivo.classList.remove('bg-gray-800', 'text-gray-300', 'font-medium');
-                }
-                rows.forEach(r => {
-                    r.style.display = (r.getAttribute('data-perito') === medico) ? '' : 'none';
+            }
+            if (chkAll) {
+                chkAll.addEventListener('change', function() {
+                    chkItems.forEach(chk => {
+                        chk.checked = this.checked && chk.closest('tr').style.display !== 'none';
+                    });
+                    toggleBtn();
                 });
             }
+            chkItems.forEach(item => {
+                item.addEventListener('change', function() {
+                    if (!this.checked && chkAll) {
+                        chkAll.checked = false;
+                    } else if (chkAll) {
+                        const allChecked = document.querySelectorAll('.chk-presente-item:checked').length === chkItems.length;
+                        chkAll.checked = allChecked;
+                    }
+                    toggleBtn();
+                });
+            });
         }
 
         // Polling em tempo real para sincronizar os dados dos peritos e salas

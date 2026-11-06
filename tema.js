@@ -246,6 +246,86 @@ const themeStyles = `
     body.theme-jf #logo-menu {
         filter: none !important;
     }
+
+    /* --- AJUSTES DO PAINEL DA TV (painel.php) NO TEMA JF --- */
+    body.theme-jf.sga-tv header {
+        background-color: #ffffff !important;
+        border-color: #cbd5e1 !important;
+    }
+    body.theme-jf.sga-tv footer {
+        background-color: #ffffff !important;
+        border-color: #cbd5e1 !important;
+    }
+    body.theme-jf.sga-tv footer h3 {
+        color: #002F6C !important;
+    }
+    body.theme-jf.sga-tv footer p {
+        color: #64748b !important;
+    }
+    body.theme-jf.sga-tv #rodape-senhas > div {
+        background-color: #f8fafc !important;
+        border-color: #cbd5e1 !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+    }
+    body.theme-jf.sga-tv #rodape-senhas > div.border-blue-500\/70,
+    body.theme-jf.sga-tv #rodape-senhas > div:first-child:not(:empty) {
+        background-color: #eff6ff !important;
+        border-color: #002F6C !important;
+        border-width: 2px !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 47, 108, 0.15) !important;
+    }
+    body.theme-jf.sga-tv #rodape-senhas .text-white {
+        color: #0f172a !important;
+        font-weight: 800 !important;
+    }
+    body.theme-jf.sga-tv #rodape-senhas .text-emerald-400 {
+        color: #007A33 !important;
+        font-weight: 700 !important;
+    }
+    body.theme-jf.sga-tv #rodape-senhas .text-gray-600 {
+        color: #94a3b8 !important;
+        font-weight: 600 !important;
+    }
+    body.theme-jf.sga-tv #rodape-senhas .bg-gray-950\/20 {
+        background-color: #f1f5f9 !important;
+        border-color: #e2e8f0 !important;
+    }
+
+    /* Modal de Chamada da TV no tema JF */
+    body.theme-jf.sga-tv #chamada-overlay .bg-gray-900 {
+        background-color: #ffffff !important;
+        border-color: #002F6C !important;
+        box-shadow: 0 25px 50px -12px rgba(0, 47, 108, 0.25) !important;
+    }
+    body.theme-jf.sga-tv #chamada-overlay #overlay-nome {
+        color: #002F6C !important;
+    }
+    body.theme-jf.sga-tv #chamada-overlay .bg-gray-800\/50 {
+        background-color: #f0fdf4 !important;
+        border-color: #86efac !important;
+    }
+    body.theme-jf.sga-tv #chamada-overlay #overlay-sala {
+        color: #007A33 !important;
+    }
+
+    /* Abas do Dashboard no tema JF */
+    body.theme-jf .tab-btn.tab-ativo {
+        background-color: var(--color-jf-blue) !important;
+        color: #ffffff !important;
+        border-color: var(--color-jf-blue) !important;
+    }
+    body.theme-jf .tab-btn:not(.tab-ativo) {
+        background-color: #ffffff !important;
+        color: #475569 !important;
+        border-color: #cbd5e1 !important;
+    }
+
+    /* Regras da Fila (Widget Sidebar) no tema JF */
+    body.theme-jf #grupo-criterio-fila,
+    body.theme-jf #grupo-prioridade-fila {
+        background-color: #f1f5f9 !important;
+        border-color: #cbd5e1 !important;
+    }
 `;
 
 // Helper para ler cookies

@@ -19,8 +19,14 @@ if (!dataValida($dataBusca)) {
     $dataBusca = date('Y-m-d');
 }
 
+$isAdminOuSupervisor = in_array($_SESSION['usuario_role'], ['admin', 'supervisor'], true);
+$abaAtiva = (string)($_GET['aba'] ?? (isset($_GET['data_busca']) ? 'metricas' : 'modulos'));
+if ($abaAtiva !== 'metricas' || !$isAdminOuSupervisor) {
+    $abaAtiva = 'modulos';
+}
+
 // Exportação do Relatório Executivo em CSV para a Diretoria / Coordenação
-if (isset($_GET['exportar']) && $_GET['exportar'] === 'metricas_csv' && in_array($_SESSION['usuario_role'], ['admin', 'supervisor'], true)) {
+if (isset($_GET['exportar']) && $_GET['exportar'] === 'metricas_csv' && $isAdminOuSupervisor) {
     $rel = obterMetricasDia($pdo, $dataBusca);
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="relatorio_produtividade_' . $dataBusca . '.csv"');
@@ -61,14 +67,13 @@ if (isset($_GET['exportar']) && $_GET['exportar'] === 'metricas_csv' && in_array
     exit;
 }
 
-$isAdminOuSupervisor = in_array($_SESSION['usuario_role'], ['admin', 'supervisor'], true);
 $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel do Administrador - <?= escapar($sys_name) ?></title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
     <link rel="stylesheet" href="assets/tailwind.css">
@@ -77,7 +82,7 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
     <!-- Header -->
-    <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md">
+    <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md shrink-0">
         <div class="flex items-center space-x-3">
             <a href="dashboard.php" class="flex items-center space-x-3 group hover:opacity-95 transition">
                 <img src="assets/catavento-jfal.png" alt="JFAL" class="h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-105">
@@ -86,18 +91,165 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
                     <p class="text-[8px] text-gray-400 font-semibold tracking-widest uppercase mt-0.5">Seção Judiciária de Alagoas</p>
                 </div>
             </a>
+            <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
+                <?= escapar(ucfirst($_SESSION['usuario_role'])) ?>
+            </span>
         </div>
-        <div class="flex items-center space-x-4">
-            <span class="text-sm text-gray-300">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
-            <a href="alterar_senha_obrigatorio.php" class="text-sm underline">Minha senha</a>
+        <div class="flex items-center space-x-3">
+            <a href="dashboard.php" class="text-xs text-white font-bold bg-blue-900/60 border border-blue-500 shadow-sm ring-1 ring-blue-500/30 px-3 py-1.5 rounded-lg transition">Painel Principal</a>
+            
+            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
+                <a href="recepcao.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Recepção</a>
+            <?php endif; ?>
+
+            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
+                <a href="atendente.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Atendimento</a>
+            <?php endif; ?>
+
+            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
+                <a href="gerenciar_pauta.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Pautas</a>
+                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Salas</a>
+                <a href="auditoria.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Auditoria</a>
+            <?php endif; ?>
+
+            <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
+                <a href="usuarios.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
+            <?php endif; ?>
+
+            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
+            <a href="alterar_senha_obrigatorio.php" class="text-xs text-gray-400 hover:text-white underline">Minha senha</a>
             <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
 
-    <!-- Main Central Hub -->
-    <main class="flex-1 max-w-6xl w-full mx-auto p-6 space-y-8">
+    <!-- Main Central Hub com Abas -->
+    <main class="flex-1 max-w-6xl w-full mx-auto p-6 space-y-6">
+        <!-- Barra de Abas do Dashboard -->
+        <div class="flex items-center justify-between border-b border-gray-800 pb-3 mb-6">
+            <div class="flex items-center gap-2">
+                <button type="button" id="tab-btn-modulos" onclick="alternarAbaDashboard('modulos')" class="tab-btn flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition border <?= $abaAtiva === 'modulos' ? 'bg-blue-600 text-white border-blue-500 shadow-md tab-ativo' : 'bg-gray-900/70 text-gray-400 border-gray-800 hover:text-white hover:bg-gray-800/50' ?>">
+                    <span>🏛️</span> Módulos Principais
+                </button>
+                <?php if ($isAdminOuSupervisor): ?>
+                <button type="button" id="tab-btn-metricas" onclick="alternarAbaDashboard('metricas')" class="tab-btn flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition border <?= $abaAtiva === 'metricas' ? 'bg-blue-600 text-white border-blue-500 shadow-md tab-ativo' : 'bg-gray-900/70 text-gray-400 border-gray-800 hover:text-white hover:bg-gray-800/50' ?>">
+                    <span>📊</span> Métricas & Produtividade
+                </button>
+                <?php endif; ?>
+            </div>
+            <div class="text-[11px] text-gray-500 hidden sm:flex items-center gap-1.5 font-medium">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span> Sistema Ativo • Justiça Federal em Alagoas
+            </div>
+        </div>
+
+        <!-- ABA 1: Módulos do Sistema (Principal) -->
+        <div id="aba-conteudo-modulos" class="<?= $abaAtiva === 'modulos' ? '' : 'hidden' ?> space-y-6">
+            <div class="text-center flex flex-col items-center">
+                <h2 class="text-xl font-black text-white leading-tight">Módulos do Sistema</h2>
+                <p class="text-xs text-gray-400 mt-1">Selecione o subsistema que deseja acessar</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
+                <!-- Recepção Card -->
+                <a href="recepcao.php" class="bg-gray-900 border border-gray-800 hover:border-emerald-500/50 p-6 rounded-3xl shadow-xl hover:shadow-emerald-500/5 transition transform hover:-translate-y-1 group">
+                    <div class="w-12 h-12 bg-emerald-950/50 border border-emerald-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        📋
+                    </div>
+                    <h3 class="text-base font-bold text-white group-hover:text-emerald-400 transition-colors">Recepção</h3>
+                    <p class="text-xs text-gray-400 mt-2 leading-relaxed">Confirmar chegada de periciados e gerenciar agendamentos do dia.</p>
+                    <div class="text-xs text-emerald-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                        Acessar Fila <span>→</span>
+                    </div>
+                </a>
+                <?php endif; ?>
+
+                <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
+                <!-- Atendente (Perito) Card -->
+                <a href="atendente.php" class="bg-gray-900 border border-gray-800 hover:border-blue-500/50 p-6 rounded-3xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                    <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        🧑‍⚕️
+                    </div>
+                    <h3 class="text-base font-bold text-white group-hover:text-blue-400 transition-colors">Painel do Perito</h3>
+                    <p class="text-xs text-gray-400 mt-2 leading-relaxed">Chamar periciados por ordem de chegada para a sua sala de atendimento.</p>
+                    <div class="text-xs text-blue-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                        Chamar Paciente <span>→</span>
+                    </div>
+                </a>
+                <?php endif; ?>
+
+                <!-- TV Panel Card -->
+                <a href="painel.php" target="_blank" class="bg-gray-900 border border-gray-800 hover:border-amber-500/50 p-6 rounded-3xl shadow-xl hover:shadow-amber-500/5 transition transform hover:-translate-y-1 group">
+                    <div class="w-12 h-12 bg-amber-950/50 border border-amber-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        📺
+                    </div>
+                    <h3 class="text-base font-bold text-white group-hover:text-amber-400 transition-colors">Painel da TV</h3>
+                    <p class="text-xs text-gray-400 mt-2 leading-relaxed">Tela de TV da recepção para exibição das chamadas de senhas e vídeo.</p>
+                    <div class="text-xs text-amber-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                        Abrir TV <span>→</span>
+                    </div>
+                </a>
+
+                <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
+                <!-- Gerenciar Pautas Card -->
+                <a href="gerenciar_pauta.php" class="bg-gray-900 border border-gray-800 hover:border-sky-500/50 p-6 rounded-3xl shadow-xl hover:shadow-sky-500/5 transition transform hover:-translate-y-1 group">
+                    <div class="w-12 h-12 bg-sky-950/50 border border-sky-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        📅
+                    </div>
+                    <h3 class="text-base font-bold text-white group-hover:text-sky-400 transition-colors">Gerenciar Pautas</h3>
+                    <p class="text-xs text-gray-400 mt-2 leading-relaxed">Filtrar, excluir e transferir agendamentos de forma massiva por dia ou mês inteiro.</p>
+                    <div class="text-xs text-sky-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                        Gerenciar Pauta <span>→</span>
+                    </div>
+                </a>
+                <?php endif; ?>
+
+                <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
+                <!-- Salas de Atendimento Card -->
+                <a href="salas.php" class="bg-gray-900 border border-gray-800 hover:border-pink-500/50 p-6 rounded-3xl shadow-xl hover:shadow-pink-500/5 transition transform hover:-translate-y-1 group">
+                    <div class="w-12 h-12 bg-pink-950/50 border border-pink-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        🚪
+                    </div>
+                    <h3 class="text-base font-bold text-white group-hover:text-pink-400 transition-colors">Salas de Atendimento</h3>
+                    <p class="text-xs text-gray-400 mt-2 leading-relaxed">Cadastrar e gerenciar salas físicas que estarão disponíveis para escolha dos peritos.</p>
+                    <div class="text-xs text-pink-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                        Gerenciar Salas <span>→</span>
+                    </div>
+                </a>
+                <?php endif; ?>
+
+                <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
+                <!-- Auditoria Card -->
+                <a href="auditoria.php" class="bg-gray-900 border border-gray-800 hover:border-teal-500/50 p-6 rounded-3xl shadow-xl hover:shadow-teal-500/5 transition transform hover:-translate-y-1 group">
+                    <div class="w-12 h-12 bg-teal-950/50 border border-teal-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        🔎
+                    </div>
+                    <h3 class="text-base font-bold text-white group-hover:text-teal-400 transition-colors">Auditoria de Chamadas</h3>
+                    <p class="text-xs text-gray-400 mt-2 leading-relaxed">Histórico completo de atendimentos, logs de chamadas, filtros por perito e exportação CSV.</p>
+                    <div class="text-xs text-teal-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                        Ver Auditoria <span>→</span>
+                    </div>
+                </a>
+                <?php endif; ?>
+
+                <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
+                <!-- Perfis e Senhas Card -->
+                <a href="usuarios.php" class="bg-gray-900 border border-gray-800 hover:border-indigo-500/50 p-6 rounded-3xl shadow-xl hover:shadow-indigo-500/5 transition transform hover:-translate-y-1 group">
+                    <div class="w-12 h-12 bg-indigo-950/50 border border-indigo-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                        🔑
+                    </div>
+                    <h3 class="text-base font-bold text-white group-hover:text-indigo-400 transition-colors">Perfis e Senhas</h3>
+                    <p class="text-xs text-gray-400 mt-2 leading-relaxed">Gerenciar contas de acesso, senhas e perfis de recepção e administrador.</p>
+                    <div class="text-xs text-indigo-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                        Gerenciar Contas <span>→</span>
+                    </div>
+                </a>
+                <?php endif; ?>
+            </div>
+        </div>
+
         <?php if ($isAdminOuSupervisor && $metricas): ?>
-            <!-- Seção de Indicadores Executivos do Dia -->
+        <!-- ABA 2: Métricas & Produtividade -->
+        <div id="aba-conteudo-metricas" class="<?= $abaAtiva === 'metricas' ? '' : 'hidden' ?> space-y-6">
             <section class="bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-2xl space-y-6">
                 <!-- Cabeçalho de Métricas com Seletor de Data e Exportação -->
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-gray-800">
@@ -109,6 +261,7 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
                     </div>
 
                     <form method="GET" class="flex flex-wrap items-center gap-2">
+                        <input type="hidden" name="aba" value="metricas">
                         <input type="date" name="data_busca" value="<?= htmlspecialchars($dataBusca, ENT_QUOTES, 'UTF-8') ?>" class="bg-gray-950 border border-gray-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono">
                         <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition">
                             Filtrar
@@ -197,116 +350,56 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
                 </div>
                 <?php endif; ?>
             </section>
+        </div>
         <?php endif; ?>
-
-        <div class="text-center flex flex-col items-center">
-            <h2 class="text-xl font-black text-white leading-tight">Módulos do Sistema</h2>
-            <p class="text-xs text-gray-400 mt-1">Selecione o subsistema que deseja acessar</p>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
-            <!-- Recepção Card -->
-            <a href="recepcao.php" class="bg-gray-900 border border-gray-800 hover:border-emerald-500/50 p-6 rounded-3xl shadow-xl hover:shadow-emerald-500/5 transition transform hover:-translate-y-1 group">
-                <div class="w-12 h-12 bg-emerald-950/50 border border-emerald-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
-                    📋
-                </div>
-                <h3 class="text-base font-bold text-white group-hover:text-emerald-400 transition-colors">Recepção</h3>
-                <p class="text-xs text-gray-400 mt-2 leading-relaxed">Confirmar chegada de periciados e gerenciar agendamentos do dia.</p>
-                <div class="text-xs text-emerald-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                    Acessar Fila <span>→</span>
-                </div>
-            </a>
-            <?php endif; ?>
-
-            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
-            <!-- Atendente (Perito) Card -->
-            <a href="atendente.php" class="bg-gray-900 border border-gray-800 hover:border-blue-500/50 p-6 rounded-3xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
-                <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
-                    🧑‍⚕️
-                </div>
-                <h3 class="text-base font-bold text-white group-hover:text-blue-400 transition-colors">Painel do Perito</h3>
-                <p class="text-xs text-gray-400 mt-2 leading-relaxed">Chamar periciados por ordem de chegada para a sua sala de atendimento.</p>
-                <div class="text-xs text-blue-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                    Chamar Paciente <span>→</span>
-                </div>
-            </a>
-            <?php endif; ?>
-
-            <!-- TV Panel Card -->
-            <a href="painel.php" target="_blank" class="bg-gray-900 border border-gray-800 hover:border-amber-500/50 p-6 rounded-3xl shadow-xl hover:shadow-amber-500/5 transition transform hover:-translate-y-1 group">
-                <div class="w-12 h-12 bg-amber-950/50 border border-amber-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
-                    📺
-                </div>
-                <h3 class="text-base font-bold text-white group-hover:text-amber-400 transition-colors">Painel da TV</h3>
-                <p class="text-xs text-gray-400 mt-2 leading-relaxed">Tela de TV da recepção para exibição das chamadas de senhas e vídeo.</p>
-                <div class="text-xs text-amber-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                    Abrir TV <span>→</span>
-                </div>
-            </a>
-
-            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-            <!-- Auditoria Card -->
-            <a href="auditoria.php" class="bg-gray-900 border border-gray-800 hover:border-teal-500/50 p-6 rounded-3xl shadow-xl hover:shadow-teal-500/5 transition transform hover:-translate-y-1 group">
-                <div class="w-12 h-12 bg-teal-950/50 border border-teal-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
-                    🔎
-                </div>
-                <h3 class="text-base font-bold text-white group-hover:text-teal-400 transition-colors">Auditoria de Chamadas</h3>
-                <p class="text-xs text-gray-400 mt-2 leading-relaxed">Histórico completo de atendimentos, logs de chamadas, filtros por perito e exportação CSV.</p>
-                <div class="text-xs text-teal-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                    Ver Auditoria <span>→</span>
-                </div>
-            </a>
-            <?php endif; ?>
-
-            <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
-            <!-- Perfis e Senhas Card -->
-            <a href="usuarios.php" class="bg-gray-900 border border-gray-800 hover:border-indigo-500/50 p-6 rounded-3xl shadow-xl hover:shadow-indigo-500/5 transition transform hover:-translate-y-1 group">
-                <div class="w-12 h-12 bg-indigo-950/50 border border-indigo-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
-                    🔑
-                </div>
-                <h3 class="text-base font-bold text-white group-hover:text-indigo-400 transition-colors">Perfis e Senhas</h3>
-                <p class="text-xs text-gray-400 mt-2 leading-relaxed">Gerenciar contas de acesso, senhas e perfis de recepção e administrador.</p>
-                <div class="text-xs text-indigo-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                    Gerenciar Contas <span>→</span>
-                </div>
-            </a>
-            <?php endif; ?>
-
-            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-            <!-- Salas de Atendimento Card -->
-            <a href="salas.php" class="bg-gray-900 border border-gray-800 hover:border-pink-500/50 p-6 rounded-3xl shadow-xl hover:shadow-pink-500/5 transition transform hover:-translate-y-1 group">
-                <div class="w-12 h-12 bg-pink-950/50 border border-pink-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
-                    🚪
-                </div>
-                <h3 class="text-base font-bold text-white group-hover:text-pink-400 transition-colors">Salas de Atendimento</h3>
-                <p class="text-xs text-gray-400 mt-2 leading-relaxed">Cadastrar e gerenciar salas físicas que estarão disponíveis para escolha dos peritos.</p>
-                <div class="text-xs text-pink-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                    Gerenciar Salas <span>→</span>
-                </div>
-            </a>
-            <?php endif; ?>
-
-            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-            <!-- Gerenciar Pautas Card -->
-            <a href="gerenciar_pauta.php" class="bg-gray-900 border border-gray-800 hover:border-blue-500/50 p-6 rounded-3xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
-                <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
-                    📅
-                </div>
-                <h3 class="text-base font-bold text-white group-hover:text-blue-400 transition-colors">Gerenciar Pautas</h3>
-                <p class="text-xs text-gray-400 mt-2 leading-relaxed">Filtrar, excluir e transferir agendamentos de forma massiva por dia ou mês inteiro.</p>
-                <div class="text-xs text-blue-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                    Gerenciar Pauta <span>→</span>
-                </div>
-            </a>
-            <?php endif; ?>
-        </div>
     </main>
 
     <!-- Footer -->
     <footer class="bg-gray-900 border-t border-gray-800 py-4 text-center text-[10px] text-gray-500 font-medium tracking-wide">
         <span>&copy; <?= date('Y') ?> - Desenvolvido pela DTI - Justiça Federal em Alagoas</span>
     </footer>
+
+<script>
+function alternarAbaDashboard(aba) {
+    const modulosConteudo = document.getElementById('aba-conteudo-modulos');
+    const metricasConteudo = document.getElementById('aba-conteudo-metricas');
+    const btnModulos = document.getElementById('tab-btn-modulos');
+    const btnMetricas = document.getElementById('tab-btn-metricas');
+
+    if (aba === 'metricas' && metricasConteudo) {
+        modulosConteudo.classList.add('hidden');
+        metricasConteudo.classList.remove('hidden');
+
+        btnModulos.className = 'tab-btn flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition border bg-gray-900/70 text-gray-400 border-gray-800 hover:text-white hover:bg-gray-800/50';
+        btnMetricas.className = 'tab-btn flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition border bg-blue-600 text-white border-blue-500 shadow-md tab-ativo';
+        localStorage.setItem('sga_dashboard_aba', 'metricas');
+    } else {
+        if (metricasConteudo) metricasConteudo.classList.add('hidden');
+        modulosConteudo.classList.remove('hidden');
+
+        btnModulos.className = 'tab-btn flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition border bg-blue-600 text-white border-blue-500 shadow-md tab-ativo';
+        if (btnMetricas) {
+            btnMetricas.className = 'tab-btn flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition border bg-gray-900/70 text-gray-400 border-gray-800 hover:text-white hover:bg-gray-800/50';
+        }
+        localStorage.setItem('sga_dashboard_aba', 'modulos');
+    }
+
+    const url = new URL(window.location);
+    url.searchParams.set('aba', aba);
+    window.history.replaceState({}, '', url);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(window.location.search);
+    const abaParam = params.get('aba');
+    if (!abaParam && !params.get('data_busca')) {
+        const salva = localStorage.getItem('sga_dashboard_aba');
+        if (salva === 'metricas' && document.getElementById('aba-conteudo-metricas')) {
+            alternarAbaDashboard('metricas');
+        }
+    }
+});
+</script>
 <script src="assets/acessibilidade.js" defer></script>
 <script src="assets/usabilidade.js" defer></script>
 </body>

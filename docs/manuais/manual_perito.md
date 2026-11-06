@@ -77,8 +77,8 @@ Uma vez dentro da sala, o perito visualiza o painel operacional de atendimento:
 - **Botão Liberar Sala:** Libera o consultório no sistema sem encerrar a sessão do usuário.
 - **Botão Sair:** Encerra a sessão e desocupa automaticamente o consultório.
 
-#### B. Alternadores de Regras da Fila (Autonomia do Perito)
-Localizados logo abaixo do cabeçalho, esses botões definem a inteligência de ordenação dos seus pacientes:
+#### B. Widget de Regras da Fila na Barra Lateral (Autonomia Médica)
+Localizado de forma ergonômica na barra lateral esquerda (logo abaixo dos contadores de espera), este widget dedicado permite ao médico configurar suas regras sem ocupar espaço na área central de exame:
 
 1. **Critério da Fila (Chegada vs Horário PJe):**
    - **🏃 Ordem de Chegada:** Os pacientes que já deram entrada na recepção são ordenados pelo horário do check-in físico. Ideal para evitar esperas prolongadas de quem chegou cedo.
@@ -112,7 +112,7 @@ O ciclo de atendimento é simples, objetivo e controlado por três botões de a�
 
 ![Chamada em Destaque na TV da Recepção](imagens/14_painel_tv_chamada.png)
 
-4. O status no seu painel passa para **Chamando...**. Caso o paciente demore a entrar, clique em **Chamar Novamente** para repetir o aviso sonoro na TV.
+4. O status no seu painel passa instantaneamente para **Chamando...** com cronômetro ativo via comunicação assíncrona (AJAX), sem recarregar nem piscar a tela do consultório. Caso o paciente demore a entrar, clique em **📢 Chamar Novamente** para repetir a convocação na TV.
 
 ### Etapa 2: Iniciar o Exame Pericial
 1. Quando o paciente adentrar o consultório, clique no botão verde **▶ Iniciar Perícia**.

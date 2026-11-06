@@ -107,19 +107,21 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
             color: #111;
             background: #e2e8f0;
             padding: 24px;
-            font-size: 14pt;
-            line-height: 1.6;
+            font-size: 12pt;
+            line-height: 1.5;
         }
         .folha {
             background: #fff;
             width: 210mm;
-            min-height: 297mm;
+            min-height: 285mm;
+            max-height: 297mm;
             margin: 0 auto;
-            padding: 25mm 25mm 20mm 25mm;
+            padding: 18mm 20mm 15mm 20mm;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+            page-break-inside: avoid;
         }
         .barra-acoes {
             max-width: 210mm;
@@ -150,29 +152,29 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
         .cabecalho {
             text-align: center;
             border-bottom: 2px solid #000;
-            padding-bottom: 12px;
-            margin-bottom: 30px;
+            padding-bottom: 8px;
+            margin-bottom: 18px;
         }
         .cabecalho img {
-            height: 60px;
+            height: 52px;
             width: auto;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
         .cabecalho h1 {
-            font-size: 13pt;
+            font-size: 12pt;
             font-weight: bold;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             margin-bottom: 2px;
         }
         .cabecalho h2 {
-            font-size: 11pt;
+            font-size: 10.5pt;
             font-weight: normal;
             text-transform: uppercase;
             margin-bottom: 2px;
         }
         .cabecalho h3 {
-            font-size: 10pt;
+            font-size: 9.5pt;
             font-weight: normal;
             text-transform: uppercase;
             color: #333;
@@ -181,11 +183,11 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
         /* Título do Documento */
         .titulo-doc {
             text-align: center;
-            font-size: 15pt;
+            font-size: 14pt;
             font-weight: bold;
             text-transform: uppercase;
             letter-spacing: 1px;
-            margin: 35px 0 35px 0;
+            margin: 20px 0 20px 0;
             text-decoration: underline;
         }
 
@@ -193,9 +195,9 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
         .corpo {
             text-align: justify;
             text-indent: 40px;
-            margin-bottom: 25px;
-            font-size: 13pt;
-            line-height: 1.8;
+            margin-bottom: 16px;
+            font-size: 12pt;
+            line-height: 1.55;
         }
         .destaque {
             font-weight: bold;
@@ -203,20 +205,20 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
         
         /* Quadro com Dados Resumidos */
         .resumo-dados {
-            margin: 25px 0;
-            border: 1px solid #333;
+            margin: 16px 0;
+            border: 1px solid #444;
             border-radius: 4px;
-            padding: 12px 16px;
+            padding: 10px 14px;
             background: #fafafa;
-            font-size: 11pt;
-            line-height: 1.6;
+            font-size: 10.5pt;
+            line-height: 1.45;
         }
         .resumo-dados table {
             width: 100%;
             border-collapse: collapse;
         }
         .resumo-dados td {
-            padding: 4px 6px;
+            padding: 3px 6px;
             vertical-align: top;
         }
         .resumo-dados td.label {
@@ -226,68 +228,77 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
         }
 
         .nota-legal {
-            font-size: 9.5pt;
+            font-size: 8.5pt;
             color: #555;
             font-style: italic;
             text-align: justify;
-            margin-top: 20px;
-            line-height: 1.4;
+            margin-top: 14px;
+            line-height: 1.35;
         }
 
         /* Data e Assinatura */
         .fechamento {
-            margin-top: 35px;
+            margin-top: 22px;
             text-align: right;
-            font-size: 12pt;
+            font-size: 11pt;
         }
         .bloco-assinaturas {
-            margin-top: 50px;
+            margin-top: 32px;
             display: flex;
             justify-content: space-around;
             text-align: center;
         }
         .linha-assinatura {
-            width: 260px;
+            width: 250px;
             border-top: 1px solid #000;
-            padding-top: 6px;
-            font-size: 10.5pt;
+            padding-top: 4px;
+            font-size: 10pt;
         }
         .linha-assinatura .cargo {
-            font-size: 9pt;
+            font-size: 8.5pt;
             color: #444;
         }
 
         /* Rodapé de Autenticidade */
         .rodape {
             border-top: 1px solid #999;
-            padding-top: 8px;
-            margin-top: 40px;
-            font-size: 8.5pt;
+            padding-top: 6px;
+            margin-top: 20px;
+            font-size: 8pt;
             color: #444;
             display: flex;
             justify-content: space-between;
             align-items: center;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            page-break-inside: avoid;
         }
 
         @media print {
-            body {
+            html, body {
                 background: #fff;
                 padding: 0;
+                margin: 0;
+                height: 100%;
+                overflow: hidden;
             }
-            .barra-acoes {
+            .barra-acoes, .no-print {
                 display: none !important;
             }
             .folha {
                 box-shadow: none;
                 margin: 0;
                 width: 100%;
-                min-height: auto;
-                padding: 15mm 20mm 15mm 20mm;
+                min-height: 100%;
+                height: 100%;
+                max-height: 297mm;
+                padding: 10mm 16mm 10mm 16mm;
+                page-break-inside: avoid;
+                page-break-after: avoid;
+                justify-content: space-between;
             }
             @page {
                 size: A4 portrait;
-                margin: 10mm;
+                margin: 0;
             }
         }
     </style>

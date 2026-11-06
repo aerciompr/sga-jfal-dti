@@ -74,17 +74,17 @@ Ao chegar ao balcão, o cidadão deve apresentar seu documento oficial de identi
 
 ### Passo a Passo:
 1. **Localizar o Periciado:**
-   - Localize o nome do periciado na seção **Aguardando Chegada (Pauta do Dia)**.
-   - Dica: Utilize a barra de busca rápida digitando os primeiros dígitos do CPF ou o primeiro nome.
+   - Localize o nome do periciado na seção **Agendados para o Dia**.
+   - Dica: Utilize a barra de busca instantânea digitando os primeiros dígitos do CPF, parte do nome ou número do processo.
 2. **Confirmar Dados:**
-   - Confira o nome do periciado, o número do processo e o nome do médico perito responsável.
-3. **Acionar a Confirmação:**
-   - Clique no botão verde **✓ Confirmar Chegada**.
-4. **Emissão de Senha:**
-   - O sistema gera a senha sequencial correspondente (ex: `PE-03`) e registra a hora exata da chegada.
-   - O paciente passa imediatamente para a tabela **Aguardando Chamada (Fila de Espera Ativa)**.
+   - Confira o nome completo do periciado, o processo e o perito associado.
+3. **Acionar a Confirmação Dinâmica (Sem Recarregar a Tela):**
+   - Clique no botão destacado **✅ Confirmar Chegada**.
+   - O sistema processa o check-in assincronamente (via AJAX): a linha sai com transição suave da tabela de agendados e entra na fila de espera, sem recarregar a página e preservando sua busca e rolagem.
+4. **Emissão de Senha e Notificação Flutuante:**
+   - Um alerta flutuante verde (toast) surge no canto superior direito confirmando a presença e exibindo com clareza a senha gerada (ex: `Presença confirmada: Carlos Santos. Senha: PE-04`).
 5. **Orientação ao Cidadão:**
-   - Informe a senha ao cidadão: *"Sua senha é PE-03 com o Dr. Carlos na Sala 02. Por favor, aguarde na sala de espera que seu nome e senha serão chamados na TV com sinal sonoro."*
+   - Informe a senha ao cidadão: *"Sua senha é PE-04 com o Dr. Carlos na Sala 02. Por favor, aguarde na sala de espera que seu nome e senha serão chamados na TV com sinal sonoro."*
 
 ---
 
@@ -156,7 +156,7 @@ A emissão e entrega da **Declaração de Comparecimento** é uma das atribuiç�
 ### Procedimento de Impressão:
 1. Ao abrir a declaração na tela, confira o nome, CPF, número do processo, vara e perito.
 2. Pressione o atalho de teclado `Ctrl + P` (ou clique com o botão direito e selecione *Imprimir*).
-3. O modelo A4 da JFAL possui formatação inteligente para impressão: botões de tela, menus e cabeçalhos do navegador são automaticamente omitidos.
+3. O modelo oficial A4 da JFAL foi configurado com margens rígidas de engenharia visual (@page 0 e folha A4 com 100% de aproveitamento), garantindo que todo o corpo do documento e o rodapé institucional de autenticidade caibam com folga em EXATAMENTE 1 ÚNICA PÁGINA impressa, sem folhas extras nem cortes indesejados.
 4. Entregue a folha assinada ou carimbada pela recepção ao cidadão.
 
 ---
@@ -166,7 +166,8 @@ A emissão e entrega da **Declaração de Comparecimento** é uma das atribuiç�
 | Situação | Ação Recomendada |
 | :--- | :--- |
 | **O periciado não está na pauta do dia** | Verifique se a data selecionada no topo da tela corresponde ao dia correto. Se a pauta ainda não foi homologada, avise o Supervisor da Vara. |
-| **Check-in realizado por engano** | Caso tenha confirmado a presença do paciente errado, clique no botão de opções e selecione **Desfazer Presença**. A senha é cancelada e o registro volta para "Aguardando Chegada". |
+| **Check-in realizado por engano** | Selecione os pacientes desejados através das caixas de seleção na tabela de espera e clique no botão superior **🔄 Voltar Selecionados para Agendados** (ou use o botão individual *Desfazer Presença*). O sistema reverte os periciados para agendados preservando todo o histórico de auditoria. |
+| **Filtrar lista por médico específico** | Utilize o seletor compacto no topo da fila (*Filtrar por Médico*) para isolar os pacientes de um único consultório sem poluir a visão geral da recepção. |
 | **Periciado precisa sair temporariamente** | Oriente o periciado a não se ausentar do prédio, pois caso o perito chame na TV e ele não esteja, poderá ser reposicionado no final da tolerância. |
 | **A TV da recepção não está chamando com som** | Verifique se a aba do Painel TV está aberta e se o volume do televisor ou caixa de som está ligado. O navegador necessita de ao menos um clique na página para habilitar o som automático. |
 

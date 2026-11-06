@@ -199,10 +199,21 @@ function falarSenha(nome, sala, count = 1, prioridade = 'normal') {
     });
 }
 
-async function atualizarRodape() {
-    const resposta = await fetch('api_senhas_recentes.php', { cache: 'no-store' });
-    if (!resposta.ok) throw new Error('Histórico indisponível');
-    document.getElementById('rodape-senhas').innerHTML = await resposta.text();
+let ultimoHtmlRodape = '';
+
+async function atualizarRodape(forcar = false) {
+    try {
+        const resposta = await fetch('api_senhas_recentes.php', { cache: 'no-store' });
+        if (!resposta.ok) return;
+        const novoHtml = await resposta.text();
+        const container = document.getElementById('rodape-senhas');
+        if (container && (forcar || novoHtml !== ultimoHtmlRodape)) {
+            ultimoHtmlRodape = novoHtml;
+            container.innerHTML = novoHtml;
+        }
+    } catch (_) {
+        /* Silencioso para evitar poluição no console da TV */
+    }
 }
 
 async function verificarNovaSenha() {
@@ -256,7 +267,9 @@ async function verificarNovaSenha() {
             cursor = Number(evento.id);
             try { sessionStorage.setItem(cursorKey, String(cursor)); } catch (_) { /* Mantém a fila funcionando sem storage. */ }
         }
-        await atualizarRodape();
+        if (dados.eventos.length > 0 || !ultimoHtmlRodape) {
+            await atualizarRodape();
+        }
     } catch (erro) {
         indicador.textContent = 'Sem atualização — verifique conexão/autorização';
         console.error(erro);

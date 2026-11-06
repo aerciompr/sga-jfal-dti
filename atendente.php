@@ -110,6 +110,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     } catch (Throwable $e) {
         $message = erroPublico($e); $message_type = 'error';
     }
+    $isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') 
+        || str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json');
+
+    if ($isAjax) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'success' => $message_type === 'success',
+            'message' => $message,
+            'message_type' => $message_type,
+            'csrf_token' => csrfToken(),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     $_SESSION['flash_atendimento'] = [$message, $message_type];
     header('Location: atendente.php', true, 303); exit;
 }
@@ -174,7 +188,9 @@ $fila_espera = $cont_aguardando;
     <script src="tema.js"></script>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
+
     <!-- Container de Toasts de Notificação do Perito -->
+
     <div id="toast-container-perito" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none *:pointer-events-auto"></div>
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md shrink-0">
@@ -191,20 +207,20 @@ $fila_espera = $cont_aguardando;
             </span>
         </div>
         <div class="flex items-center space-x-3">
-            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/30 px-3 py-1.5 rounded-lg transition">Painel Principal</a>
+            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Painel Principal</a>
             
             <?php if (in_array($user_role, ['admin', 'supervisor', 'recepcao'])): ?>
-                <a href="recepcao.php" class="text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-900/60 bg-emerald-950/30 px-3 py-1.5 rounded-lg transition">Recepção</a>
+                <a href="recepcao.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Recepção</a>
             <?php endif; ?>
 
             <?php if (in_array($user_role, ['admin', 'perito'])): ?>
-                <a href="atendente.php" class="text-xs text-blue-400 hover:text-blue-300 border border-blue-900/60 bg-blue-950/30 px-3 py-1.5 rounded-lg transition">Atendimento</a>
+                <a href="atendente.php" class="text-xs text-white font-bold bg-blue-900/60 border border-blue-500 shadow-sm ring-1 ring-blue-500/30 px-3 py-1.5 rounded-lg transition">Atendimento</a>
             <?php endif; ?>
 
             <?php if (in_array($user_role, ['admin', 'supervisor'])): ?>
-                <a href="gerenciar_pauta.php" class="text-xs text-sky-400 hover:text-sky-300 border border-sky-900/60 bg-sky-950/30 px-3 py-1.5 rounded-lg transition">Pautas</a>
-                <a href="salas.php" class="text-xs text-pink-400 hover:text-pink-300 border border-pink-900/60 bg-pink-950/30 px-3 py-1.5 rounded-lg transition">Salas</a>
-                <a href="auditoria.php" class="text-xs text-teal-400 hover:text-teal-300 border border-teal-900/60 bg-teal-950/30 px-3 py-1.5 rounded-lg transition">Auditoria</a>
+                <a href="gerenciar_pauta.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Pautas</a>
+                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Salas</a>
+                <a href="auditoria.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Auditoria</a>
             <?php endif; ?>
 
             <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($user_name) ?></strong></span>
@@ -307,6 +323,46 @@ $fila_espera = $cont_aguardando;
                 <div class="text-5xl font-black text-amber-500 my-4" id="contador-fila"><?= $fila_espera ?></div>
                 <p class="text-xs text-gray-400">confirmados na recepção prontos para chamada</p>
             </div>
+
+            <!-- Widget de Critérios e Priorização da Fila (Autonomia Médica) -->
+            <div class="bg-gray-900 p-5 rounded-2xl border border-gray-800 shadow-xl space-y-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xs font-bold uppercase text-gray-400 tracking-wider flex items-center gap-1.5">
+                        <span>⚙️</span> Regras da Sua Fila
+                    </h2>
+                    <span id="criterio-aviso-sync" class="text-[10px] text-emerald-400 flex items-center gap-1 font-semibold">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span> Sincronizada
+                    </span>
+                </div>
+                
+                <div>
+                    <label class="block text-[11px] font-bold uppercase text-gray-400 mb-1.5 tracking-wider">Critério de Ordenação</label>
+                    <div class="grid grid-cols-2 gap-1 rounded-xl border border-gray-750 bg-gray-950 p-1" id="grupo-criterio-fila">
+                        <button type="button" id="btn-crit-chegada" class="px-2 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white transition text-center shadow-sm">
+                            🏃 Chegada
+                        </button>
+                        <button type="button" id="btn-crit-horario" class="px-2 py-1.5 text-xs font-medium rounded-lg text-gray-400 hover:text-white transition text-center">
+                            🕒 Horário PJe
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold uppercase text-gray-400 mb-1.5 tracking-wider">Prioridade no Topo</label>
+                    <div class="grid grid-cols-2 gap-1 rounded-xl border border-gray-750 bg-gray-950 p-1" id="grupo-prioridade-fila">
+                        <button type="button" id="btn-prio-desativado" class="px-2 py-1.5 text-xs font-bold rounded-lg bg-gray-800 text-gray-300 transition text-center" title="Fila segue ordem normal sem priorização automática">
+                            ⚪ Não
+                        </button>
+                        <button type="button" id="btn-prio-ativado" class="px-2 py-1.5 text-xs font-medium rounded-lg text-gray-400 hover:text-white transition text-center" title="Prioridades Legais sobem automaticamente">
+                            ♿ Sim (Topo)
+                        </button>
+                    </div>
+                </div>
+                
+                <p class="text-[10px] text-gray-500 leading-tight">
+                    A recepção e a ordem de chamada respeitam a preferência selecionada acima.
+                </p>
+            </div>
         </div>
 
         <!-- Área Central (Paciente Ativo, Ações de Chamada e Fila) -->
@@ -334,9 +390,10 @@ $fila_espera = $cont_aguardando;
             <?php endif; ?>
 
             <!-- Informações do Paciente em Atendimento na Sala -->
-            <div class="bg-gray-900 p-8 rounded-3xl border border-gray-800 shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden">
+            <div id="card-atendimento-container" class="bg-gray-900 p-8 rounded-3xl border border-gray-800 shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden">
                 <div class="absolute top-0 left-0 right-0 h-1.5 bg-blue-600"></div>
                 <h2 class="text-xs uppercase font-bold text-gray-400 tracking-wider mb-4">Periciado em Atendimento</h2>
+                <div id="conteudo-atendimento-atual" class="w-full flex flex-col items-center">
                 
                 <?php if ($atendimento_atual): ?>
                     <div class="flex items-center gap-2 mb-2 flex-wrap">
@@ -353,28 +410,28 @@ $fila_espera = $cont_aguardando;
                     <div class="flex flex-col sm:flex-row flex-wrap gap-2.5 w-full max-w-xl">
                         <?php if ($atendimento_atual['status'] === 'chamada'): ?>
                             <!-- Chamar Novamente -->
-                            <form method="POST" class="flex-1 min-w-[140px]"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
+                            <form method="POST" class="flex-1 min-w-[140px] form-acao-perito"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
                                 <input type="hidden" name="action" value="chamar_novamente">
                                 <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 px-3 rounded-xl text-xs transition">
                                     📢 Chamar Novamente (<?= $atendimento_atual['chamadas_count'] ?>)
                                 </button>
                             </form>
                             <!-- Iniciar Perícia -->
-                            <form method="POST" class="flex-1 min-w-[140px]"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
+                            <form method="POST" class="flex-1 min-w-[140px] form-acao-perito"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
                                 <input type="hidden" name="action" value="iniciar_atendimento">
                                 <button type="submit" class="w-full bg-blue-600 hover:bg-blue-750 text-white font-semibold py-3 px-3 rounded-xl text-xs transition font-bold">
                                     🚀 Iniciar Perícia
                                 </button>
                             </form>
                             <!-- Ausente (Descer 2 posições na fila) -->
-                            <form method="POST" class="flex-1 min-w-[140px]"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
+                            <form method="POST" class="flex-1 min-w-[140px] form-acao-perito"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
                                 <input type="hidden" name="action" value="nao_compareceu">
                                 <button type="submit" onclick="return confirm('Marcar como ausente temporário? O periciado descerá 2 posições na fila para você chamar os próximos.');" class="w-full bg-amber-850 hover:bg-amber-900 border border-amber-700/60 text-amber-200 font-semibold py-3 px-2 rounded-xl text-xs transition" title="Dá tolerância reposicionando 2 posições abaixo na fila">
                                     ⏳ Ausente (Descer 2 na fila)
                                 </button>
                             </form>
                             <!-- Desistência (Foi embora) -->
-                            <form method="POST" class="flex-1 min-w-[140px]"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
+                            <form method="POST" class="flex-1 min-w-[140px] form-acao-perito"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
                                 <input type="hidden" name="action" value="marcar_desistencia">
                                 <button type="submit" onclick="return confirm('Confirmar desistência? O paciente será finalizado como desistente e sairá definitivamente da fila.');" class="w-full bg-rose-800 hover:bg-rose-900 text-white font-semibold py-3 px-2 rounded-xl text-xs transition">
                                     🚫 Desistência (Foi embora)
@@ -382,7 +439,7 @@ $fila_espera = $cont_aguardando;
                             </form>
                         <?php else: ?>
                             <!-- Paciente em perícia (status 'atendimento') -->
-                            <form method="POST" class="flex-1"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
+                            <form method="POST" class="flex-1 form-acao-perito"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
                                 <input type="hidden" name="action" value="concluir">
                                 <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-xl text-xs transition">
                                     ✓ Concluir Perícia
@@ -401,12 +458,13 @@ $fila_espera = $cont_aguardando;
 
                 <?php if ($atendimento_atual): ?><p id="orientacao-atendimento" class="sga-helper mb-3">Conclua o atendimento atual antes de chamar outra pessoa.</p><?php endif; ?>
                 <!-- Botão Principal: Chamar o próximo da fila de espera -->
-                <form method="POST" class="w-full max-w-sm"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
+                <form method="POST" class="w-full max-w-sm form-acao-perito"><?= csrfCampo() ?><input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
                     <input type="hidden" name="action" value="chamar_proximo">
                     <button type="submit" <?= ($atendimento_atual || !$sala_confirmada) ? 'disabled aria-describedby="orientacao-atendimento"' : '' ?> class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-2xl text-base shadow-lg hover:shadow-blue-500/20 transition transform hover:-translate-y-0.5">
                         🔊 Chamar Próximo da Fila
                     </button>
                 </form>
+                </div>
             </div>
 
             <!-- Fila de Espera Detalhada deste Médico hoje com Busca e Filtros -->
@@ -416,34 +474,7 @@ $fila_espera = $cont_aguardando;
                     <a href="atendente.php" class="sga-neutral text-xs">Atualizar</a>
                 </div>
 
-                <!-- Seletor de Critério de Atendimento Sincronizado com a Recepção -->
-                <div class="flex items-center justify-between flex-wrap gap-2 bg-gray-950/80 border border-gray-800 p-2.5 rounded-xl mb-3">
-                    <div class="flex items-center gap-2">
-                        <span class="text-[11px] uppercase font-bold text-gray-400 tracking-wider">Critério da Fila:</span>
-                        <div class="inline-flex rounded-lg border border-gray-750 bg-gray-900 p-0.5" id="grupo-criterio-fila">
-                            <button type="button" id="btn-crit-chegada" class="px-3 py-1 text-xs font-bold rounded-md bg-blue-600 text-white transition">
-                                🏃 Ordem de Chegada (Padrão)
-                            </button>
-                            <button type="button" id="btn-crit-horario" class="px-3 py-1 text-xs font-medium rounded-md text-gray-400 hover:text-white transition">
-                                🕒 Horário PJe
-                            </button>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-[11px] uppercase font-bold text-gray-400 tracking-wider">Priorizar Fila:</span>
-                        <div class="inline-flex rounded-lg border border-gray-750 bg-gray-900 p-0.5" id="grupo-prioridade-fila">
-                            <button type="button" id="btn-prio-desativado" class="px-2.5 py-1 text-xs font-bold rounded-md bg-gray-800 text-gray-300 transition" title="Fila segue ordem normal sem priorização automática (badges continuam visíveis)">
-                                ⚪ Não (Ordem Normal)
-                            </button>
-                            <button type="button" id="btn-prio-ativado" class="px-2.5 py-1 text-xs font-medium rounded-md text-gray-400 hover:text-white transition" title="Prioridades Legais e Superprioridades sobem automaticamente para o topo da fila">
-                                ♿ Sim (Prioridades no Topo)
-                            </button>
-                        </div>
-                    </div>
-                    <div id="criterio-aviso-sync" class="text-[11px] text-gray-400 flex items-center gap-1">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> Fila sincronizada com a recepção
-                    </div>
-                </div>
+
 
                 <!-- Barra de Busca Instantânea e Filtros por Situação -->
                 <div class="space-y-3 mb-4">
@@ -904,8 +935,162 @@ $fila_espera = $cont_aguardando;
 
             // Renderizar a tabela respeitando busca e filtros ativos
             renderizarTabela();
+            renderizarCardAtendimentoAtual(data.atendimento_atual);
         } catch (e) {
             // Falha de rede momentânea silenciosa
+        }
+    }
+
+    function renderizarCardAtendimentoAtual(atual) {
+        const elContainer = document.getElementById('conteudo-atendimento-atual');
+        if (!elContainer) return;
+        const csrfToken = document.querySelector('input[name="csrf"]')?.value || '';
+
+        if (!atual) {
+            elContainer.innerHTML = `
+                <div class="text-2xl font-bold text-gray-500 my-8">Nenhum atendimento em andamento</div>
+                <hr class="w-full border-gray-800 my-6">
+                <form method="POST" class="w-full max-w-sm form-acao-perito">
+                    <input type="hidden" name="csrf" value="${csrfToken}">
+                    <input type="hidden" name="atendimento_id" value="0">
+                    <input type="hidden" name="action" value="chamar_proximo">
+                    <button type="submit" ${!salaConfirmada ? 'disabled aria-describedby="orientacao-atendimento"' : ''} class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-2xl text-base shadow-lg hover:shadow-blue-500/20 transition transform hover:-translate-y-0.5">
+                        🔊 Chamar Próximo da Fila
+                    </button>
+                </form>
+            `;
+            return;
+        }
+
+        let prioHtml = '';
+        if (atual.prioridade === 'superprioridade') {
+            prioHtml = '<span class="bg-amber-950/80 text-amber-300 border border-amber-600/60 text-xs px-2.5 py-1 rounded-full font-black uppercase tracking-wider">⭐ Superprioridade (80+)</span>';
+        } else if (atual.prioridade === 'prioridade') {
+            prioHtml = '<span class="bg-sky-950/80 text-sky-300 border border-sky-600/60 text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">♿ Prioridade Legal</span>';
+        }
+
+        let botoesAcao = '';
+        if (atual.status === 'chamada') {
+            botoesAcao = `
+                <form method="POST" class="flex-1 min-w-[140px] form-acao-perito">
+                    <input type="hidden" name="csrf" value="${csrfToken}">
+                    <input type="hidden" name="atendimento_id" value="${atual.id}">
+                    <input type="hidden" name="action" value="chamar_novamente">
+                    <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 px-3 rounded-xl text-xs transition">
+                        📢 Chamar Novamente (${atual.chamadas_count || 1})
+                    </button>
+                </form>
+                <form method="POST" class="flex-1 min-w-[140px] form-acao-perito">
+                    <input type="hidden" name="csrf" value="${csrfToken}">
+                    <input type="hidden" name="atendimento_id" value="${atual.id}">
+                    <input type="hidden" name="action" value="iniciar_atendimento">
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-750 text-white font-semibold py-3 px-3 rounded-xl text-xs transition font-bold">
+                        🚀 Iniciar Perícia
+                    </button>
+                </form>
+                <form method="POST" class="flex-1 min-w-[140px] form-acao-perito" onsubmit="return confirm('Marcar como ausente temporário? O periciado descerá 2 posições na fila para você chamar os próximos.');">
+                    <input type="hidden" name="csrf" value="${csrfToken}">
+                    <input type="hidden" name="atendimento_id" value="${atual.id}">
+                    <input type="hidden" name="action" value="nao_compareceu">
+                    <button type="submit" class="w-full bg-amber-850 hover:bg-amber-900 border border-amber-700/60 text-amber-200 font-semibold py-3 px-2 rounded-xl text-xs transition" title="Dá tolerância reposicionando 2 posições abaixo na fila">
+                        ⏳ Ausente (Descer 2 na fila)
+                    </button>
+                </form>
+                <form method="POST" class="flex-1 min-w-[140px] form-acao-perito" onsubmit="return confirm('Confirmar desistência? O paciente será finalizado como desistente e sairá definitivamente da fila.');">
+                    <input type="hidden" name="csrf" value="${csrfToken}">
+                    <input type="hidden" name="atendimento_id" value="${atual.id}">
+                    <input type="hidden" name="action" value="marcar_desistencia">
+                    <button type="submit" class="w-full bg-rose-800 hover:bg-rose-900 text-white font-semibold py-3 px-2 rounded-xl text-xs transition">
+                        🚫 Desistência (Foi embora)
+                    </button>
+                </form>
+            `;
+        } else {
+            botoesAcao = `
+                <form method="POST" class="flex-1 form-acao-perito">
+                    <input type="hidden" name="csrf" value="${csrfToken}">
+                    <input type="hidden" name="atendimento_id" value="${atual.id}">
+                    <input type="hidden" name="action" value="concluir">
+                    <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-xl text-xs transition">
+                        ✓ Concluir Perícia
+                    </button>
+                </form>
+            `;
+        }
+
+        elContainer.innerHTML = `
+            <div class="flex items-center gap-2 mb-2 flex-wrap justify-center">
+                <span class="text-4xl font-black text-white">${escaparHtml(atual.nome || 'Sem Nome')}</span>
+                ${prioHtml}
+            </div>
+            <div class="text-xl font-bold text-blue-400 font-mono mb-2">Senha: ${escaparHtml(atual.senha || '---')}</div>
+            <div class="text-xs text-gray-400 mb-6 font-mono">Processo: ${escaparHtml(atual.processo || 'Sem processo')}</div>
+            
+            <div class="flex flex-col sm:flex-row flex-wrap gap-2.5 w-full max-w-xl">
+                ${botoesAcao}
+            </div>
+            <a href="declaracao_comparecimento.php?id=${atual.id}&print=1" target="_blank" class="w-full max-w-xl bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 font-semibold py-2.5 px-3 rounded-xl text-xs transition inline-flex items-center justify-center gap-1.5 mt-3">
+                🖨️ Emitir Declaração de Comparecimento
+            </a>
+            <hr class="w-full border-gray-800 my-6">
+            <p id="orientacao-atendimento" class="sga-helper mb-3">Conclua o atendimento atual antes de chamar outra pessoa.</p>
+            <form method="POST" class="w-full max-w-sm form-acao-perito">
+                <input type="hidden" name="csrf" value="${csrfToken}">
+                <input type="hidden" name="atendimento_id" value="${atual.id}">
+                <input type="hidden" name="action" value="chamar_proximo">
+                <button type="submit" disabled aria-describedby="orientacao-atendimento" class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-2xl text-base shadow-lg hover:shadow-blue-500/20 transition transform hover:-translate-y-0.5">
+                    🔊 Chamar Próximo da Fila
+                </button>
+            </form>
+        `;
+    }
+
+    document.addEventListener('submit', function(e) {
+        const form = e.target;
+        if (form.matches('form') && form.querySelector('input[name="action"]')) {
+            const action = form.querySelector('input[name="action"]').value;
+            const acoesAjax = ['chamar_proximo', 'chamar_novamente', 'iniciar_atendimento', 'concluir', 'nao_compareceu', 'marcar_desistencia', 'chamar_especifico'];
+            if (acoesAjax.includes(action)) {
+                e.preventDefault();
+                executarAcaoPeritoAjax(form);
+            }
+        }
+    });
+
+    async function executarAcaoPeritoAjax(form) {
+        const btnSubmit = form.querySelector('button[type="submit"]');
+        const textoOriginal = btnSubmit ? btnSubmit.innerHTML : '';
+        if (btnSubmit) {
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = 'Processando...';
+        }
+
+        try {
+            const formData = new FormData(form);
+            const resp = await fetch('atendente.php', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+            if (!resp.ok) throw new Error('Erro na comunicação');
+            const res = await resp.json();
+            if (res.csrf_token) {
+                document.querySelectorAll('input[name="csrf"]').forEach(i => i.value = res.csrf_token);
+            }
+            if (res.success) {
+                exibirToastChegada(res.message, '', null);
+                await atualizarFilaPerito();
+            } else {
+                exibirToastChegada(res.message || 'Erro ao processar', '', null);
+                if (btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = textoOriginal;
+                }
+            }
+        } catch (err) {
+            form.submit();
         }
     }
 

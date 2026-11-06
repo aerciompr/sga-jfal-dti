@@ -33,7 +33,7 @@ for ($i = 0; $i < 4; $i++) {
             $badgePrio = "<span class='text-[9px] font-bold text-sky-300 bg-sky-950/80 border border-sky-800/80 px-1.5 py-0.2 rounded'>♿ Prioridade</span>";
         }
 
-        $active_class = $i === 0 ? 'border-blue-500/30 bg-blue-950/20 animate-pulse' : '';
+        $active_class = $i === 0 ? 'border-blue-500/70 bg-blue-950/40 shadow-md ring-1 ring-blue-500/30' : 'border-gray-800 bg-gray-950/80';
         echo "<div class='bg-gray-950/60 border border-gray-800/50 rounded-xl py-2.5 px-4 flex justify-between items-center $active_class'>";
         echo "  <div class='text-left truncate flex-1'>";
         echo "    <div class='text-sm font-black text-white truncate'>$nome</div>";

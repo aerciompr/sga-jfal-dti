@@ -15,9 +15,16 @@ O módulo de **Supervisão e Gestão** do SGA disponibiliza aos gestores judicia
 
 ---
 
-## 2. Dashboard Executivo em Tempo Real
+## 2. Dashboard Executivo em Duas Abas Estratégicas
 
-O Dashboard (`dashboard.php`) consolida a operação do dia em uma interface visual de alta legibilidade:
+O Dashboard do Administrador e Supervisor (`dashboard.php`) foi organizado em uma estrutura moderna de **Duas Abas**, separando a operação diária das análises gerenciais:
+
+1. **🏛️ Aba Módulos Principais (Visão Padrão):**
+   - Apresenta os cartões de acesso direto a todos os subsistemas autorizados para o perfil: *Recepção*, *Painel do Perito*, *Painel da TV*, *Gestão de Pautas*, *Salas de Atendimento*, *Auditoria* e *Perfis & Senhas*.
+   - A barra superior conta com navegação uniforme e visualmente contrastada em todos os módulos, com destaque para a seção ativa.
+
+2. **📊 Aba Métricas & Produtividade:**
+   - Reúne os indicadores em tempo real (KPIs), seletor de data da pauta, botão de exportação executiva em planilha CSV e a tabela consolidada de produtividade por médico perito (agendados, presentes, concluídos, na fila, ausentes e tempo médio de exame).
 
 ![Dashboard Executivo em Tempo Real](imagens/11_dashboard_executivo.png)
 
