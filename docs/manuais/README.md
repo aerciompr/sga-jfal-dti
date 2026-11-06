@@ -69,6 +69,22 @@ Todas as telas foram projetadas com foco em usabilidade, conformidade com a legi
 
 ---
 
+## ⚙️ Manutenção e Compilação dos Manuais
+
+Em conformidade com as regras do projeto ([PROJECT_RULES.md](../../PROJECT_RULES.md)), **qualquer alteração no sistema exige a atualização dos manuais e a regeneração imediata dos PDFs oficiais**, mantendo estritamente o modelo homologado pela JFAL.
+
+### Scripts Oficiais de Compilação:
+- **Gerar/Atualizar os 4 PDFs:**
+  ```powershell
+  python scripts/gerar_manuais_pdf.py
+  ```
+- **Gerar/Atualizar as Capturas de Tela:**
+  ```powershell
+  python scripts/gerar_screenshots_manuais.py
+  ```
+
+---
+
 ## 💻 Suporte e Informações Técnicas
 
 - **Plataforma:** Sistema SGA JFAL (PHP 8.2 / Tailwind CSS / MariaDB)
