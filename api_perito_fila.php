@@ -24,6 +24,7 @@ try {
 
     $sala = (string)($_SESSION['sala'] ?? 'Sala 1');
     $criterioFila = obterCriterioFilaPerito($pdo, $perito_selecionado);
+    $atendePrioridade = obterAtenderPrioridadePerito($pdo, $perito_selecionado);
 
     // Heartbeat: mantém a trava da sala ativa enquanto o médico estiver navegando
     if ($perito_selecionado !== '') {
@@ -32,9 +33,11 @@ try {
 
     $temHora = colunaExiste($pdo, 'atendimentos', 'hora_pericia');
     $colHora = $temHora ? ", hora_pericia" : "";
+    $temPrioridade = colunaExiste($pdo, 'atendimentos', 'prioridade');
+    $colPrioridade = $temPrioridade ? ", prioridade" : "";
 
     // Atendimento atual (sendo chamado ou atendido agora nesta sala)
-    $stmtAtual = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chamado_em, chamadas_count $colHora FROM atendimentos WHERE status IN ('chamada', 'atendimento') AND sala = ? AND data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?)) ORDER BY chamado_em DESC LIMIT 1");
+    $stmtAtual = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chamado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE status IN ('chamada', 'atendimento') AND sala = ? AND data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?)) ORDER BY chamado_em DESC LIMIT 1");
     $stmtAtual->execute([$sala, $ownerId, $ownerAdmin, $perito_selecionado]);
     $atendimentoAtual = $stmtAtual->fetch(PDO::FETCH_ASSOC);
 
@@ -43,15 +46,19 @@ try {
         ? "COALESCE(hora_pericia, '23:59:59') ASC, fila_em ASC, id ASC"
         : "fila_em ASC, id ASC";
 
-    $orderClausula = "ORDER BY CASE WHEN status = 'presente' THEN 1 WHEN status IN ('chamada','atendimento') THEN 2 WHEN status = 'agendado' THEN 3 WHEN status = 'concluido' THEN 4 ELSE 5 END, " . $orderSecundario;
+    $orderFilaPresentes = ($atendePrioridade && $temPrioridade)
+        ? "CASE WHEN prioridade = 'superprioridade' THEN 1 WHEN prioridade = 'prioridade' THEN 2 ELSE 3 END ASC, " . $orderSecundario
+        : $orderSecundario;
+
+    $orderClausula = "ORDER BY CASE WHEN status = 'presente' THEN 1 WHEN status IN ('chamada','atendimento') THEN 2 WHEN status = 'agendado' THEN 3 WHEN status = 'concluido' THEN 4 ELSE 5 END, " . $orderFilaPresentes;
 
     // Consulta todos os agendamentos deste perito hoje
     if ($perito_selecionado !== '') {
-        $stmtTodos = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count $colHora FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?)) $orderClausula");
+        $stmtTodos = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?)) $orderClausula");
         $stmtTodos->execute([$ownerId, $ownerAdmin, $perito_selecionado]);
         $todosRegistros = $stmtTodos->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        $stmtTodos = $pdo->query("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count $colHora FROM atendimentos WHERE data_pauta = CURRENT_DATE() $orderClausula");
+        $stmtTodos = $pdo->query("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE data_pauta = CURRENT_DATE() $orderClausula");
         $todosRegistros = $stmtTodos->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -61,10 +68,13 @@ try {
     $contPendentes = 0;
     $contAtendidos = 0;
     $contDesistentes = 0;
+    $contPrioritarios = 0;
 
     $posFila = 1;
     foreach ($todosRegistros as $p) {
         $st = (string)$p['status'];
+        $prio = (string)($p['prioridade'] ?? 'normal');
+        if ($st === 'presente' && in_array($prio, ['prioridade', 'superprioridade'], true)) $contPrioritarios++;
         if ($st === 'presente') $contAguardando++;
         elseif ($st === 'agendado') $contPendentes++;
         elseif ($st === 'concluido') $contAtendidos++;
@@ -87,6 +97,7 @@ try {
             'status' => $st,
             'sala' => (string)($p['sala'] ?? ''),
             'posicao_fila' => $posAtual,
+            'prioridade' => $prio,
             'hora_pericia' => $horaFormatada,
             'chamadas_count' => (int)$p['chamadas_count'],
             'chegada' => !empty($p['chegada_em']) ? date('H:i:s', strtotime($p['chegada_em'])) : '--:--:--',
@@ -103,12 +114,14 @@ try {
     echo json_encode([
         'success' => true,
         'criterio_fila' => $criterioFila,
+        'atender_prioridade' => $atendePrioridade,
         'total_aguardando' => $contAguardando,
         'totais' => [
             'aguardando' => $contAguardando,
             'pendentes' => $contPendentes,
             'atendidos' => $contAtendidos,
             'desistentes' => $contDesistentes,
+            'prioritarios' => $contPrioritarios,
             'total' => count($todosFormatados),
         ],
         'fila' => $filaFormatada,
@@ -122,6 +135,7 @@ try {
             'status' => (string)$atendimentoAtual['status'],
             'hora_pericia' => !empty($atendimentoAtual['hora_pericia']) ? date('H:i', strtotime($atendimentoAtual['hora_pericia'])) : null,
             'chamadas_count' => (int)$atendimentoAtual['chamadas_count'],
+            'prioridade' => (string)($atendimentoAtual['prioridade'] ?? 'normal'),
         ] : null,
     ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {

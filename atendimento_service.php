@@ -8,20 +8,40 @@ function getNextSenha(PDO $pdo): string {
     return 'PE-' . sprintf('%03d', (int)$pdo->lastInsertId());
 }
 
-function confirmarPresencas(PDO $pdo, array $ids, string $role): int {
+function alterarPrioridadeAtendimento(PDO $pdo, int $id, string $prioridade): void {
+    if (!in_array($prioridade, ['normal', 'prioridade', 'superprioridade'], true)) {
+        throw new DomainException('Tipo de prioridade inválido.');
+    }
+    $temPrioridade = colunaExiste($pdo, 'atendimentos', 'prioridade');
+    if (!$temPrioridade) return;
+    $stmt = $pdo->prepare("UPDATE atendimentos SET prioridade = ? WHERE id = ?");
+    $stmt->execute([$prioridade, $id]);
+    registrarLog($pdo, 'Alterar Prioridade', "Atendimento: $id; Prioridade: $prioridade", $id);
+}
+
+function confirmarPresencas(PDO $pdo, array $ids, string $role, ?string $prioridade = null): int {
     $ids = array_values(array_unique(array_map('intval', $ids))); sort($ids);
     $pdo->beginTransaction();
     try {
         $total = 0;
         $check = $pdo->prepare('SELECT * FROM atendimentos WHERE id = ? FOR UPDATE');
-        $update = $pdo->prepare("UPDATE atendimentos SET status = 'presente', senha = ?, chegada_em = CURRENT_TIMESTAMP, fila_em = CURRENT_TIMESTAMP(6) WHERE id = ? AND status = 'agendado'");
+        $temPrio = colunaExiste($pdo, 'atendimentos', 'prioridade');
+        $comPrio = ($prioridade !== null && in_array($prioridade, ['normal', 'prioridade', 'superprioridade'], true) && $temPrio);
+        $update = $comPrio
+            ? $pdo->prepare("UPDATE atendimentos SET status = 'presente', senha = ?, prioridade = ?, chegada_em = CURRENT_TIMESTAMP, fila_em = CURRENT_TIMESTAMP(6) WHERE id = ? AND status = 'agendado'")
+            : $pdo->prepare("UPDATE atendimentos SET status = 'presente', senha = ?, chegada_em = CURRENT_TIMESTAMP, fila_em = CURRENT_TIMESTAMP(6) WHERE id = ? AND status = 'agendado'");
         foreach ($ids as $id) {
             $check->execute([$id]); $item = $check->fetch();
             if (!$item) throw new DomainException('Agendamento inexistente.');
             if ($item['data_pauta'] !== date('Y-m-d')) throw new DomainException('Presença só pode ser confirmada no dia da pauta.');
             if ($role === 'recepcao' && !isPautaLiberada($pdo, $item['data_pauta'])) throw new DomainException('Pauta ainda não homologada.');
             if ($item['status'] !== 'agendado') continue; // Repetição é idempotente.
-            $senha = getNextSenha($pdo); $update->execute([$senha, $id]);
+            $senha = getNextSenha($pdo);
+            if ($comPrio) {
+                $update->execute([$senha, $prioridade, $id]);
+            } else {
+                $update->execute([$senha, $id]);
+            }
             registrarLog($pdo, 'Confirmar Presença', "Paciente: {$item['nome']}, Senha: $senha", $id); $total++;
         }
         $pdo->commit(); return $total;
@@ -29,7 +49,12 @@ function confirmarPresencas(PDO $pdo, array $ids, string $role): int {
 }
 
 function eventoChamada(PDO $pdo, int $id): void {
-    $stmt = $pdo->prepare('INSERT INTO eventos_chamada (atendimento_id, nome, senha, sala, perito, data_pauta) SELECT id, nome, senha, sala, perito, data_pauta FROM atendimentos WHERE id = ?');
+    $temPrio = colunaExiste($pdo, 'eventos_chamada', 'prioridade');
+    if ($temPrio) {
+        $stmt = $pdo->prepare('INSERT INTO eventos_chamada (atendimento_id, nome, senha, sala, perito, prioridade, data_pauta) SELECT id, nome, senha, sala, perito, COALESCE(prioridade, "normal"), data_pauta FROM atendimentos WHERE id = ?');
+    } else {
+        $stmt = $pdo->prepare('INSERT INTO eventos_chamada (atendimento_id, nome, senha, sala, perito, data_pauta) SELECT id, nome, senha, sala, perito, data_pauta FROM atendimentos WHERE id = ?');
+    }
     $stmt->execute([$id]);
 }
 
@@ -124,6 +149,24 @@ function salvarCriterioFilaPerito(PDO $pdo, string $perito, string $criterio): v
     registrarLog($pdo, 'Alterar Critério de Fila', "Perito: $perito; Critério: $criterio");
 }
 
+function obterAtenderPrioridadePerito(PDO $pdo, string $perito): bool {
+    $temCol = colunaExiste($pdo, 'salas_peritos', 'atender_prioridade');
+    if (!$temCol) return false;
+    $stmt = $pdo->prepare("SELECT atender_prioridade FROM salas_peritos WHERE perito = ?");
+    $stmt->execute([$perito]);
+    return (bool)$stmt->fetchColumn();
+}
+
+function salvarAtenderPrioridadePerito(PDO $pdo, string $perito, bool $atender): void {
+    $temCol = colunaExiste($pdo, 'salas_peritos', 'atender_prioridade');
+    if (!$temCol) return;
+    $valor = $atender ? 1 : 0;
+    $stmt = $pdo->prepare("INSERT INTO salas_peritos (perito, sala, atender_prioridade, atualizado_em) VALUES (?, 'A definir', ?, CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE atender_prioridade = VALUES(atender_prioridade), atualizado_em = CURRENT_TIMESTAMP");
+    $stmt->execute([$perito, $valor]);
+    $desc = $atender ? 'Ativado' : 'Desativado';
+    registrarLog($pdo, 'Alterar Priorizacao Perito', "Perito: $perito; Atender Prioridade: $desc");
+}
+
 function agirAtendimento(PDO $pdo, string $acao, string $perito, string $sala, array $dados): string {
     if ($perito === '') throw new DomainException('Selecione o perito.');
     $profissionalId = ($_SESSION['usuario_role'] ?? '') === 'perito' ? (int)$_SESSION['usuario_id'] : peritoId($pdo, $perito);
@@ -140,6 +183,13 @@ function agirAtendimento(PDO $pdo, string $acao, string $perito, string $sala, a
     if ($acao === 'alternar_criterio_fila') {
         $criterio = (string)($dados['criterio_fila'] ?? 'chegada');
         salvarCriterioFilaPerito($pdo, $perito, $criterio);
+        return $criterio === 'horario' ? 'Fila alternada para ordenação por Horário Agendado (PJe).' : 'Fila alternada para ordenação por Ordem de Chegada.';
+    }
+    if ($acao === 'alternar_atender_prioridade') {
+        $atual = obterAtenderPrioridadePerito($pdo, $perito);
+        $novo = isset($dados['atender_prioridade']) ? (bool)$dados['atender_prioridade'] : !$atual;
+        salvarAtenderPrioridadePerito($pdo, $perito, $novo);
+        return $novo ? 'Fila configurada para priorizar atendimentos preferenciais no topo.' : 'Fila configurada para seguir a ordem normal (priorização automática desativada).';
         return $criterio === 'horario' ? 'Fila alternada para ordenação por Horário Agendado (PJe).' : 'Fila alternada para ordenação por Ordem de Chegada.';
     }
 
@@ -176,7 +226,12 @@ function agirAtendimento(PDO $pdo, string $acao, string $perito, string $sala, a
                 if ($acao === 'chamar_especifico') { $sql .= ' AND id = ?'; $params[] = (int)($dados['id'] ?? 0); }
                 $critPerito = obterCriterioFilaPerito($pdo, $perito);
                 $temHora = colunaExiste($pdo, 'atendimentos', 'hora_pericia');
-                $orderProximo = ($critPerito === 'horario' && $temHora) ? "ORDER BY COALESCE(hora_pericia, '23:59:59') ASC, fila_em ASC, id ASC" : "ORDER BY fila_em ASC, id ASC";
+                $atendePrioridade = obterAtenderPrioridadePerito($pdo, $perito);
+                $temPrio = colunaExiste($pdo, 'atendimentos', 'prioridade');
+                $orderBase = ($critPerito === 'horario' && $temHora) ? "COALESCE(hora_pericia, '23:59:59') ASC, fila_em ASC, id ASC" : "fila_em ASC, id ASC";
+                $orderProximo = ($atendePrioridade && $temPrio)
+                    ? "ORDER BY CASE WHEN prioridade = 'superprioridade' THEN 1 WHEN prioridade = 'prioridade' THEN 2 ELSE 3 END ASC, " . $orderBase
+                    : "ORDER BY " . $orderBase;
                 $stmt = $pdo->prepare($sql . ' ' . $orderProximo . ' LIMIT 1 FOR UPDATE'); $stmt->execute($params); $item = $stmt->fetch();
                 if (!$item) throw new DomainException('Não há paciente elegível na fila deste perito.');
                 $id = (int)$item['id'];
@@ -263,11 +318,17 @@ function obterResumoFilasPeritos(PDO $pdo, string $data): array {
     $temCriterio = colunaExiste($pdo, 'salas_peritos', 'criterio_fila');
     $salasMap = [];
     $criteriosMap = [];
+    $prioridadesConfigMap = [];
+    $temPrioridadeConfig = colunaExiste($pdo, 'salas_peritos', 'atender_prioridade');
     if ($temCriterio) {
-        $stmtSalas = $pdo->query("SELECT perito, sala, criterio_fila FROM salas_peritos");
+        $colPrioConfig = $temPrioridadeConfig ? ", atender_prioridade" : "";
+        $stmtSalas = $pdo->query("SELECT perito, sala, criterio_fila $colPrioConfig FROM salas_peritos");
         while ($r = $stmtSalas->fetch(PDO::FETCH_ASSOC)) {
             $salasMap[$r['perito']] = $r['sala'];
             $criteriosMap[$r['perito']] = $r['criterio_fila'];
+            if ($temPrioridadeConfig) {
+                $prioridadesConfigMap[$r['perito']] = (bool)($r['atender_prioridade'] ?? false);
+            }
         }
     } else {
         $salasMap = $pdo->query("SELECT perito, sala FROM salas_peritos")->fetchAll(PDO::FETCH_KEY_PAIR);
@@ -314,12 +375,17 @@ function obterResumoFilasPeritos(PDO $pdo, string $data): array {
         $totDesistentes = (int)($contagens['desistente'] ?? 0);
         $totEmAtendimento = (int)($contagens['chamada'] ?? 0) + (int)($contagens['atendimento'] ?? 0);
 
-        // Fila ordenada de espera conforme o critério ativo do perito
-        $orderFila = ($criterioFila === 'horario' && $temHora)
-            ? "COALESCE(hora_pericia, '23:59:59') ASC, fila_em ASC, id ASC"
-            : "fila_em ASC, id ASC";
+        $atendePrioridade = $prioridadesConfigMap[$peritoNome] ?? false;
+        $temPrio = colunaExiste($pdo, 'atendimentos', 'prioridade');
+        $orderBase = ($criterioFila === 'horario' && $temHora) ? "COALESCE(hora_pericia, '23:59:59') ASC, fila_em ASC, id ASC" : "fila_em ASC, id ASC";
+        $orderFila = ($atendePrioridade && $temPrio) ? "CASE WHEN prioridade = 'superprioridade' THEN 1 WHEN prioridade = 'prioridade' THEN 2 ELSE 3 END ASC, " . $orderBase : $orderBase;
+        $colsHora = ($temHora ? ", hora_pericia" : "") . ($temPrio ? ", prioridade" : "");
 
-        $colsHora = $temHora ? ", hora_pericia" : "";
+
+
+
+
+
         $stmtFila = $pdo->prepare("
             SELECT id, nome, processo, cpf, senha, status, chegada_em, fila_em, chamadas_count $colsHora
             FROM atendimentos
@@ -332,8 +398,13 @@ function obterResumoFilasPeritos(PDO $pdo, string $data): array {
 
         $fila = [];
         $pos = 1;
+        $totPrioritarios = 0;
         foreach ($filaRaw as $f) {
             $fCount = (int)$f['chamadas_count'];
+            $fPrio = (string)($f['prioridade'] ?? 'normal');
+            if (in_array($fPrio, ['prioridade', 'superprioridade'], true)) {
+                $totPrioritarios++;
+            }
             $horaFormatada = (!empty($f['hora_pericia'])) ? date('H:i', strtotime($f['hora_pericia'])) : null;
             $fila[] = [
                 'id' => (int)$f['id'],
@@ -343,6 +414,7 @@ function obterResumoFilasPeritos(PDO $pdo, string $data): array {
                 'processo' => (string)($f['processo'] ?: 'Sem processo'),
                 'cpf' => (string)($f['cpf'] ?? ''),
                 'senha' => (string)$f['senha'],
+                'prioridade' => $fPrio,
                 'chegada_em' => !empty($f['chegada_em']) ? date('H:i:s', strtotime($f['chegada_em'])) : '--:--:--',
                 'hora_pericia' => $horaFormatada,
                 'chamadas_count' => $fCount,
@@ -356,12 +428,14 @@ function obterResumoFilasPeritos(PDO $pdo, string $data): array {
             'perito_id' => $peritoId,
             'sala' => $sala,
             'criterio_fila' => $criterioFila,
+            'atender_prioridade' => $atendePrioridade,
             'totais' => [
                 'agendados' => $totAgendados,
                 'presentes' => $totPresentes,
                 'concluidos' => $totConcluidos,
                 'desistentes' => $totDesistentes,
                 'em_atendimento' => $totEmAtendimento,
+                'prioritarios' => $totPrioritarios,
                 'total' => $totAgendados + $totPresentes + $totConcluidos + $totDesistentes + $totEmAtendimento
             ],
             'atendimento_ativo' => $ativo,

@@ -127,6 +127,7 @@ $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_cham
                 <div class="absolute inset-x-0 top-0 h-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-t-3xl"></div>
                 <div class="flex flex-col items-center mb-6">
                     <img src="assets/catavento-jfal.png" alt="JFAL" class="h-12 w-auto object-contain mb-3">
+                    <div id="overlay-badge-prio" class="hidden mb-2 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest"></div>
                     <div id="overlay-titulo" class="text-blue-500 font-extrabold text-sm uppercase tracking-widest">🔔 Atenção! Chamando...</div>
                 </div>
                 

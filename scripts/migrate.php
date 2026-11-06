@@ -87,6 +87,9 @@ try {
         ['logs_auditoria','request_id','VARCHAR(32) NULL'],
         ['atendimentos','hora_pericia','TIME NULL DEFAULT NULL'],
         ['salas_peritos','criterio_fila',"VARCHAR(20) NOT NULL DEFAULT 'chegada'"],
+        ['atendimentos','prioridade',"VARCHAR(20) NOT NULL DEFAULT 'normal'"],
+        ['salas_peritos','atender_prioridade','TINYINT(1) NOT NULL DEFAULT 0'],
+        ['eventos_chamada','prioridade',"VARCHAR(20) NOT NULL DEFAULT 'normal'"],
     ];
     foreach ($add as [$table, $column, $definition]) {
         if (!colunaExiste($pdo, $table, $column)) $pdo->exec("ALTER TABLE $table ADD COLUMN $column $definition");
@@ -95,7 +98,7 @@ try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS eventos_chamada (
         id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, atendimento_id INT NOT NULL,
         nome VARCHAR(100) NOT NULL, senha VARCHAR(20), sala VARCHAR(50) NOT NULL,
-        perito VARCHAR(100), data_pauta DATE NOT NULL, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        perito VARCHAR(100), prioridade VARCHAR(20) NOT NULL DEFAULT 'normal', data_pauta DATE NOT NULL, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_evento_data (data_pauta, id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $pdo->exec("CREATE TABLE IF NOT EXISTS locks_peritos (perito VARCHAR(100) PRIMARY KEY) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");

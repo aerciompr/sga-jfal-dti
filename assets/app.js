@@ -163,7 +163,7 @@ if (!Number.isSafeInteger(cursor) || cursor < 0) cursor = Number(window.initialC
 let processando = false;
 const esperar = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-function falarSenha(nome, sala, count = 1) {
+function falarSenha(nome, sala, count = 1, prioridade = 'normal') {
     return new Promise(resolve => {
         if (!audioAtivado || !window.speechSynthesis) { esperar(6000).then(() => resolve(false)); return; }
         const playerAnuncio=ytPlayer;
@@ -177,7 +177,10 @@ function falarSenha(nome, sala, count = 1) {
         } catch (_) { /* Vídeo indisponível não impede o anúncio. */ }
         playChime();
         setTimeout(() => {
-            const prefixo = Number(count) > 1 ? `${count}ª chamada: ` : 'Atenção: ';
+            let prefixoPrio = '';
+            if (prioridade === 'superprioridade') prefixoPrio = 'Superprioridade: ';
+            else if (prioridade === 'prioridade') prefixoPrio = 'Atendimento prioritário: ';
+            const prefixo = Number(count) > 1 ? `${prefixoPrio}${count}ª chamada: ` : `${prefixoPrio}Atenção: `;
             const fala = new SpeechSynthesisUtterance(`${prefixo}${nome || 'Atendimento'}. Dirija-se à ${sala}`);
             fala.lang = 'pt-BR'; fala.rate = 0.95;
             const voz = speechSynthesis.getVoices().find(v => v.lang.startsWith('pt-'));
@@ -228,13 +231,26 @@ async function verificarNovaSenha() {
             const count = Number(evento.chamadas_count || 1);
             const overlay = document.getElementById('chamada-overlay');
             const elTitulo = document.getElementById('overlay-titulo');
+            const elBadgePrio = document.getElementById('overlay-badge-prio');
+            if (elBadgePrio) {
+                const prio = evento.prioridade || 'normal';
+                if (prio === 'superprioridade') {
+                    elBadgePrio.textContent = '⭐ SUPERPRIORIDADE (80+)';
+                    elBadgePrio.className = 'mb-2 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest bg-amber-500/20 text-amber-300 border border-amber-500/40 inline-block';
+                } else if (prio === 'prioridade') {
+                    elBadgePrio.textContent = '♿ ATENDIMENTO PREFERENCIAL';
+                    elBadgePrio.className = 'mb-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest bg-sky-500/20 text-sky-300 border border-sky-500/40 inline-block';
+                } else {
+                    elBadgePrio.className = 'hidden';
+                }
+            }
             if (elTitulo) {
                 elTitulo.textContent = count > 1 ? `🔔 Atenção! ${count}ª Chamada...` : '🔔 Atenção! Chamando...';
             }
             document.getElementById('overlay-nome').textContent = evento.nome || 'Atendimento';
             document.getElementById('overlay-sala').textContent = evento.sala;
             overlay.classList.remove('hidden');
-            const falou = await falarSenha(evento.nome, evento.sala, count);
+            const falou = await falarSenha(evento.nome, evento.sala, count, evento.prioridade || 'normal');
             if (!falou && audioAtivado) await esperar(5000);
             await esperar(1000); overlay.classList.add('hidden');
             cursor = Number(evento.id);

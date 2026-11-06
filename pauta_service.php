@@ -62,7 +62,15 @@ function operarPauta(PDO $pdo, string $acao, array $dados, string $dataFiltro): 
         } elseif ($acao === 'agendar_unico') {
             if (!dataValida($dataFiltro) || $dataFiltro < date('Y-m-d')) throw new DomainException('Agende para hoje ou data futura.');
             [$nome,$processo,$perito,$cpf,$peritoId] = validarAgendamento($pdo, $dados, $dataFiltro);
-            $s = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, cpf, perito_id, data_pauta, status) VALUES (?, ?, ?, ?, ?, ?, 'agendado')"); $s->execute([$nome,$processo,$perito,$cpf,$peritoId,$dataFiltro]);
+            $prioridade = in_array((string)($dados['prioridade'] ?? 'normal'), ['normal', 'prioridade', 'superprioridade'], true) ? (string)$dados['prioridade'] : 'normal';
+            $temPrio = colunaExiste($pdo, 'atendimentos', 'prioridade');
+            if ($temPrio) {
+                $s = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, cpf, perito_id, data_pauta, status, prioridade) VALUES (?, ?, ?, ?, ?, ?, 'agendado', ?)");
+                $s->execute([$nome,$processo,$perito,$cpf,$peritoId,$dataFiltro,$prioridade]);
+            } else {
+                $s = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, cpf, perito_id, data_pauta, status) VALUES (?, ?, ?, ?, ?, ?, 'agendado')");
+                $s->execute([$nome,$processo,$perito,$cpf,$peritoId,$dataFiltro]);
+            }
             registrarLog($pdo, $acao, json_encode(array_diff_key($dados,['csrf'=>1]), JSON_UNESCAPED_UNICODE), (int)$pdo->lastInsertId()); $mensagem = 'Agendamento cadastrado.';
         } else {
             $ids = isset($dados['id']) ? [(int)$dados['id']] : array_values(array_unique(array_map('intval', (array)($dados['selecionados'] ?? []))));
@@ -84,7 +92,15 @@ function operarPauta(PDO $pdo, string $acao, array $dados, string $dataFiltro): 
                 if ($acao === 'editar_atendimento') {
                     if ($estado !== 'agendado') throw new DomainException('Só é possível editar agendamentos ainda não confirmados.');
                     [$nome,$processo,$perito,$cpf,$peritoId] = validarAgendamento($pdo,$dados,$item['data_pauta'],$id);
-                    $u = $pdo->prepare("UPDATE atendimentos SET nome=?, processo=?, perito=?, cpf=?, perito_id=? WHERE id=? AND status='agendado'"); $u->execute([$nome,$processo,$perito,$cpf,$peritoId,$id]);
+                    $prioridade = in_array((string)($dados['prioridade'] ?? 'normal'), ['normal', 'prioridade', 'superprioridade'], true) ? (string)$dados['prioridade'] : 'normal';
+                    $temPrio = colunaExiste($pdo, 'atendimentos', 'prioridade');
+                    if ($temPrio) {
+                        $u = $pdo->prepare("UPDATE atendimentos SET nome=?, processo=?, perito=?, cpf=?, perito_id=?, prioridade=? WHERE id=? AND status='agendado'");
+                        $u->execute([$nome,$processo,$perito,$cpf,$peritoId,$prioridade,$id]);
+                    } else {
+                        $u = $pdo->prepare("UPDATE atendimentos SET nome=?, processo=?, perito=?, cpf=?, perito_id=? WHERE id=? AND status='agendado'");
+                        $u->execute([$nome,$processo,$perito,$cpf,$peritoId,$id]);
+                    }
                 } elseif ($acao === 'mover_pauta' || $acao === 'alterar_perito_lote') {
                     if ($estado !== 'agendado') continue;
                     $data = $item['data_pauta']; $perito = $item['perito'];

@@ -339,7 +339,14 @@ $fila_espera = $cont_aguardando;
                 <h2 class="text-xs uppercase font-bold text-gray-400 tracking-wider mb-4">Periciado em Atendimento</h2>
                 
                 <?php if ($atendimento_atual): ?>
-                    <div class="text-4xl font-black text-white mb-2"><?= escapar($atendimento_atual['nome'] ?: 'Sem Nome') ?></div>
+                    <div class="flex items-center gap-2 mb-2 flex-wrap">
+                        <span class="text-4xl font-black text-white"><?= escapar($atendimento_atual['nome'] ?: 'Sem Nome') ?></span>
+                        <?php if (($atendimento_atual['prioridade'] ?? 'normal') === 'superprioridade'): ?>
+                            <span class="bg-amber-950/80 text-amber-300 border border-amber-600/60 text-xs px-2.5 py-1 rounded-full font-black uppercase tracking-wider">⭐ Superprioridade (80+)</span>
+                        <?php elseif (($atendimento_atual['prioridade'] ?? 'normal') === 'prioridade'): ?>
+                            <span class="bg-sky-950/80 text-sky-300 border border-sky-600/60 text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">♿ Prioridade Legal</span>
+                        <?php endif; ?>
+                    </div>
                     <div class="text-xl font-bold text-blue-400 font-mono mb-2">Senha: <?= escapar($atendimento_atual['senha']) ?></div>
                     <div class="text-xs text-gray-400 mb-6 font-mono">Processo: <?= escapar($atendimento_atual['processo'] ?: 'Sem processo') ?></div>
                     
@@ -419,6 +426,17 @@ $fila_espera = $cont_aguardando;
                             </button>
                             <button type="button" id="btn-crit-horario" class="px-3 py-1 text-xs font-medium rounded-md text-gray-400 hover:text-white transition">
                                 🕒 Horário PJe
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[11px] uppercase font-bold text-gray-400 tracking-wider">Priorizar Fila:</span>
+                        <div class="inline-flex rounded-lg border border-gray-750 bg-gray-900 p-0.5" id="grupo-prioridade-fila">
+                            <button type="button" id="btn-prio-desativado" class="px-2.5 py-1 text-xs font-bold rounded-md bg-gray-800 text-gray-300 transition" title="Fila segue ordem normal sem priorização automática (badges continuam visíveis)">
+                                ⚪ Não (Ordem Normal)
+                            </button>
+                            <button type="button" id="btn-prio-ativado" class="px-2.5 py-1 text-xs font-medium rounded-md text-gray-400 hover:text-white transition" title="Prioridades Legais e Superprioridades sobem automaticamente para o topo da fila">
+                                ♿ Sim (Prioridades no Topo)
                             </button>
                         </div>
                     </div>
@@ -508,6 +526,8 @@ $fila_espera = $cont_aguardando;
     const chipsFiltro = document.querySelectorAll('.chip-status');
     const btnCritChegada = document.getElementById('btn-crit-chegada');
     const btnCritHorario = document.getElementById('btn-crit-horario');
+    const btnPrioDesativado = document.getElementById('btn-prio-desativado');
+    const btnPrioAtivado = document.getElementById('btn-prio-ativado');
     const btnToggleSom = document.getElementById('btn-toggle-som-perito');
     const iconeSom = document.getElementById('icone-som');
     const textoSom = document.getElementById('texto-som');
@@ -654,6 +674,45 @@ $fila_espera = $cont_aguardando;
     if (btnCritChegada) btnCritChegada.addEventListener('click', () => alternarCriterioFila('chegada'));
     if (btnCritHorario) btnCritHorario.addEventListener('click', () => alternarCriterioFila('horario'));
 
+    // Configuração do alternador de priorização na fila
+    async function alternarAtenderPrioridade(ativar) {
+        const csrfToken = document.querySelector('input[name="csrf"]')?.value || '';
+        try {
+            const formData = new FormData();
+            formData.append('csrf', csrfToken);
+            formData.append('action', 'alternar_atender_prioridade');
+            formData.append('atender_prioridade', ativar ? '1' : '0');
+
+            await fetch('atendente.php', {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            atualizarUiPrioridade(ativar);
+            atualizarFilaPerito();
+        } catch (e) {
+            // Silencioso
+        }
+    }
+
+    function atualizarUiPrioridade(ativar) {
+        if (!btnPrioDesativado || !btnPrioAtivado) return;
+        if (ativar) {
+            btnPrioAtivado.classList.remove('text-gray-400', 'hover:text-white', 'font-medium');
+            btnPrioAtivado.classList.add('bg-amber-600', 'text-white', 'font-bold');
+            btnPrioDesativado.classList.remove('bg-gray-800', 'text-gray-300', 'font-bold');
+            btnPrioDesativado.classList.add('text-gray-400', 'font-medium');
+        } else {
+            btnPrioDesativado.classList.remove('text-gray-400', 'font-medium');
+            btnPrioDesativado.classList.add('bg-gray-800', 'text-gray-300', 'font-bold');
+            btnPrioAtivado.classList.remove('bg-amber-600', 'text-white', 'font-bold');
+            btnPrioAtivado.classList.add('text-gray-400', 'hover:text-white', 'font-medium');
+        }
+    }
+
+    if (btnPrioDesativado) btnPrioDesativado.addEventListener('click', () => alternarAtenderPrioridade(false));
+    if (btnPrioAtivado) btnPrioAtivado.addEventListener('click', () => alternarAtenderPrioridade(true));
+
     // Configuração dos chips de filtro
     chipsFiltro.forEach(chip => {
         chip.addEventListener('click', function() {
@@ -755,6 +814,13 @@ $fila_espera = $cont_aguardando;
             }
 
             // Exibição do Horário Agendado e Horário de Chegada
+            let prioBadge = '';
+            if (p.prioridade === 'superprioridade') {
+                prioBadge = `<span class="bg-amber-950/80 text-amber-300 border border-amber-600/60 text-[9px] px-1.5 py-0.2 rounded-full font-black uppercase tracking-wider">⭐ 80+ Superprioridade</span>`;
+            } else if (p.prioridade === 'prioridade') {
+                prioBadge = `<span class="bg-sky-950/80 text-sky-300 border border-sky-600/60 text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider">♿ Prioridade</span>`;
+            }
+
             let horarioHtml = '';
             if (p.hora_pericia) {
                 horarioHtml += `<span class="bg-blue-950/70 border border-blue-900 text-blue-300 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded block w-max mb-0.5">🕒 ${escaparHtml(p.hora_pericia)}</span>`;
@@ -769,7 +835,10 @@ $fila_espera = $cont_aguardando;
             <tr class="hover:bg-gray-800/30 transition">
                 <td class="py-3 font-mono font-bold text-blue-400 text-xs">${escaparHtml(p.senha)}</td>
                 <td class="py-3">
-                    <div class="font-semibold text-white text-xs">${escaparHtml(p.nome)}</div>
+                    <div class="font-semibold text-white text-xs flex items-center gap-1.5 flex-wrap">
+                        <span>${escaparHtml(p.nome)}</span>
+                        ${prioBadge}
+                    </div>
                     <div class="text-[10px] text-gray-500 font-mono">
                         ${escaparHtml(p.processo)}
                         ${p.cpf ? `<span class="text-blue-400/80 ml-1">| CPF: ${escaparHtml(p.cpf)}</span>` : ''}
@@ -810,6 +879,9 @@ $fila_espera = $cont_aguardando;
             // Sincronizar UI do alternador de critério
             if (data.criterio_fila) {
                 atualizarUiCriterio(data.criterio_fila);
+            }
+            if (typeof data.atender_prioridade !== 'undefined') {
+                atualizarUiPrioridade(Boolean(data.atender_prioridade));
             }
 
             // 1. Atualizar o contador da fila
