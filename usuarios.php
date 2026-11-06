@@ -136,6 +136,11 @@ $usuarios = $stmt->fetchAll();
                         </select>
                     </div>
 
+                    <div class="flex items-center gap-2 pt-1 bg-gray-800/40 p-2.5 rounded-lg border border-gray-750">
+                        <input type="checkbox" name="must_change_password" id="form-must-change" value="1" checked class="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500">
+                        <label for="form-must-change" class="text-xs text-gray-300 font-medium select-none cursor-pointer">Exigir troca de senha no próximo acesso</label>
+                    </div>
+
                     <div class="flex gap-2">
                         <button type="submit" id="submit-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2.5 rounded-lg transition">
                             Cadastrar Usuário
@@ -156,8 +161,16 @@ $usuarios = $stmt->fetchAll();
                         <span>Usuários Cadastrados</span>
                         <span class="bg-gray-800 text-gray-400 text-xs px-2.5 py-0.5 rounded-full font-bold"><?= count($usuarios) ?></span>
                     </h2>
-                    <div class="w-full sm:w-64">
-                        <input type="text" id="busca-usuarios" aria-label="Buscar usuário" oninput="filtrarUsuarios()" placeholder="🔍 Filtrar por nome ou login..." class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <form method="POST" class="inline" onsubmit="return confirm('ATENÇÃO: Deseja exigir a troca de senha de TODOS os peritos médicos no próximo acesso? Todas as sessões abertas de peritos serão revogadas.');"><?= csrfCampo() ?>
+                            <input type="hidden" name="action" value="exigir_troca_todos_peritos">
+                            <button type="submit" class="bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/70 text-amber-300 text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-sm">
+                                <span>🔒 Exigir Troca de Todos os Peritos</span>
+                            </button>
+                        </form>
+                        <div class="w-full sm:w-56">
+                            <input type="text" id="busca-usuarios" aria-label="Buscar usuário" oninput="filtrarUsuarios()" placeholder="🔍 Filtrar por nome ou login..." class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition">
+                        </div>
                     </div>
                 </div>
 
@@ -176,7 +189,14 @@ $usuarios = $stmt->fetchAll();
                             <?php foreach ($usuarios as $u): ?>
                                 <tr>
                                     <td class="py-3 font-mono text-xs text-gray-500"><?= $u['id'] ?></td>
-                                    <td class="py-3 font-bold text-white"><?= escapar($u['username']) ?><?php if ($u['must_change_password']): ?><span class="block text-xs">Ativação / troca de senha pendente</span><?php endif; ?></td>
+                                    <td class="py-3 font-bold text-white">
+                                        <div><?= escapar($u['username']) ?></div>
+                                        <?php if ($u['must_change_password']): ?>
+                                            <span class="inline-flex items-center gap-1 text-[10px] text-amber-400 bg-amber-950/40 border border-amber-900/50 px-2 py-0.5 rounded font-medium mt-0.5">⚠️ Troca pendente</span>
+                                        <?php else: ?>
+                                            <span class="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/30 border border-emerald-900/40 px-2 py-0.5 rounded font-medium mt-0.5">✓ Senha individual ativa</span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td class="py-3 text-gray-300"><?= escapar($u['nome'] ?? '') ?></td>
                                     <td class="py-3">
                                         <?php if ($u['role'] === 'admin'): ?>
@@ -190,10 +210,19 @@ $usuarios = $stmt->fetchAll();
                                         <?php endif; ?>
                                     </td>
                                     <td class="py-3 text-right">
-                                        <div class="flex justify-end gap-2">
-                                            <button onclick="editUser(<?= $u['id'] ?>, <?= jsValor($u['username']) ?>, <?= jsValor($u['nome'] ?? '') ?>, <?= jsValor($u['role']) ?>)" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold px-2.5 py-1 rounded transition border border-gray-750">
+                                        <div class="flex justify-end gap-1.5 flex-wrap">
+                                            <button onclick="editUser(<?= $u['id'] ?>, <?= jsValor($u['username']) ?>, <?= jsValor($u['nome'] ?? '') ?>, <?= jsValor($u['role']) ?>, <?= (int)$u['must_change_password'] ?>)" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold px-2.5 py-1 rounded transition border border-gray-750">
                                                 Editar
                                             </button>
+                                            <?php if (!$u['must_change_password']): ?>
+                                                <form method="POST" class="inline" onsubmit="return confirm('Deseja exigir a troca de senha do usuário <?= escapar($u['username']) ?> no próximo acesso?');"><?= csrfCampo() ?>
+                                                    <input type="hidden" name="action" value="exigir_troca">
+                                                    <input type="hidden" name="id" value="<?= $u['id'] ?>">
+                                                    <button type="submit" title="Exigir troca obrigatória de senha no próximo login" class="bg-amber-950/40 hover:bg-amber-900/50 border border-amber-900/60 text-amber-300 text-xs px-2.5 py-1 rounded transition">
+                                                        Exigir Troca
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
                                             <form method="POST" class="inline" onsubmit="return confirm('Deseja excluir este usuário?');"><?= csrfCampo() ?>
                                                 <input type="hidden" name="action" value="deletar">
                                                 <input type="hidden" name="id" value="<?= $u['id'] ?>">
@@ -220,7 +249,7 @@ $usuarios = $stmt->fetchAll();
     <!-- Scripts de Interação das Ações CRUD no lado do Cliente -->
     <script>
         // Transforma o formulário de Cadastro em formulário de Edição com preenchimento prévio
-        function editUser(id, username, nome, role) {
+        function editUser(id, username, nome, role, mustChange = 1) {
             document.getElementById('form-title').textContent = "✏️ Editar Usuário";
             document.getElementById('form-action').value = "editar";
             document.getElementById('user-id').value = id;
@@ -235,6 +264,7 @@ $usuarios = $stmt->fetchAll();
             document.getElementById('password-help').classList.remove('hidden');
             
             document.getElementById('form-role').value = role;
+            document.getElementById('form-must-change').checked = Boolean(mustChange);
             
             document.getElementById('submit-btn').textContent = "Atualizar Usuário";
             document.getElementById('cancel-btn').classList.remove('hidden');
@@ -257,6 +287,7 @@ $usuarios = $stmt->fetchAll();
             document.getElementById('password-help').classList.add('hidden');
             
             document.getElementById('form-role').value = "recepcao";
+            document.getElementById('form-must-change').checked = true;
             
             document.getElementById('submit-btn').textContent = "Cadastrar Usuário";
             document.getElementById('cancel-btn').classList.add('hidden');

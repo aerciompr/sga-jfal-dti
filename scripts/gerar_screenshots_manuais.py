@@ -660,6 +660,172 @@ html_pauta = wrap_html(f"""
 </main>
 """)
 
+# 15_alterar_senha_obrigatorio.html
+html_alterar_senha = wrap_html(f"""
+<div class="min-h-screen flex items-center justify-center p-6 bg-gray-950">
+    <div class="max-w-md w-full bg-gray-900 rounded-2xl border border-gray-800 p-8 shadow-2xl relative">
+        <div class="text-center mb-6 flex flex-col items-center">
+            <div class="bg-white p-3 rounded-xl shadow-md border border-slate-200 mb-3 inline-block">
+                <img src="file:///{assets_dir}/logo-jfal-completo.png" alt="Justiça Federal" class="h-10 object-contain">
+            </div>
+            <h1 class="text-lg font-black text-blue-500 uppercase leading-none">Segurança da Informação</h1>
+            <p class="text-[9px] text-gray-400 uppercase tracking-widest font-semibold mt-1">Alteração de Senha Obrigatória</p>
+        </div>
+
+        <div class="bg-blue-950/40 border border-blue-900/60 rounded-xl p-4 mb-6">
+            <p class="text-xs text-blue-300 leading-relaxed">
+                Olá, <strong class="text-white">Dr. Carlos Eduardo Silveira</strong>. Identificamos que este é o seu primeiro acesso com a credencial inicial do sistema.
+                Para garantir a integridade dos atendimentos periciais, defina agora sua nova senha pessoal individual (mínimo de 12 caracteres).
+            </p>
+        </div>
+
+        <form class="space-y-4">
+            <div>
+                <label class="block text-xs text-gray-400 uppercase font-semibold mb-1">Nova Senha Individual</label>
+                <input type="password" value="••••••••••••••••" readonly class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white">
+                <span class="text-[10px] text-gray-500 mt-1 block">Mínimo de 12 caracteres (diferente do CPF e do login).</span>
+            </div>
+
+            <div>
+                <label class="block text-xs text-gray-400 uppercase font-semibold mb-1">Confirme a Nova Senha</label>
+                <input type="password" value="••••••••••••••••" readonly class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white">
+            </div>
+
+            <button type="button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-2.5 rounded-lg shadow transition">
+                Salvar Nova Senha Institucional
+            </button>
+        </form>
+    </div>
+</div>
+""")
+
+# 16_usuarios_gerenciamento.html
+html_usuarios = wrap_html(f"""
+<header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md">
+    <div class="flex items-center space-x-3">
+        <img src="file:///{assets_dir}/catavento-jfal.png" alt="JFAL" class="h-8 w-auto">
+        <div>
+            <h1 class="text-xs font-black tracking-wide text-blue-500 uppercase leading-none">Justiça Federal em Alagoas</h1>
+            <p class="text-[8px] text-gray-400 font-semibold tracking-widest uppercase mt-0.5">SGA — Gestão de Perfis e Segurança</p>
+        </div>
+        <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">Administrador</span>
+    </div>
+    <div class="flex items-center space-x-3">
+        <a href="#" class="text-xs text-gray-400 border border-gray-800 bg-gray-950/30 px-3 py-1.5 rounded-lg">Painel Principal</a>
+        <a href="#" class="text-xs text-emerald-400 border border-emerald-900/60 bg-emerald-950/30 px-3 py-1.5 rounded-lg">Recepção</a>
+        <span class="text-xs text-gray-400">Olá, <strong class="text-white">Admin DTI</strong></span>
+        <button class="bg-red-950/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg">Sair</button>
+    </div>
+</header>
+
+<main class="max-w-6xl mx-auto p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- Formulário Lateral -->
+    <div class="md:col-span-1 space-y-6">
+        <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
+            <h2 class="text-sm font-semibold uppercase text-blue-500 tracking-wider mb-4">🆕 Cadastrar Novo Usuário</h2>
+            <form class="space-y-4">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1 font-semibold uppercase">Nome de Usuário (Login)</label>
+                    <input type="text" value="carlos.eduardo" readonly class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1 font-semibold uppercase">Nome Completo</label>
+                    <input type="text" value="DR. CARLOS EDUARDO SILVEIRA" readonly class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1 font-semibold uppercase">Senha Inicial Temporária</label>
+                    <input type="password" value="••••••••••••" readonly class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1 font-semibold uppercase">Perfil / Permissão</label>
+                    <select class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white">
+                        <option selected>Perito Médico</option>
+                        <option>Recepção</option>
+                        <option>Supervisor da Recepção</option>
+                        <option>Administrador</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-2 pt-1 bg-gray-800/40 p-2.5 rounded-lg border border-gray-750">
+                    <input type="checkbox" checked readonly class="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-600">
+                    <label class="text-xs text-gray-300 font-medium">Exigir troca de senha no próximo acesso</label>
+                </div>
+                <button type="button" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2.5 rounded-lg">
+                    Cadastrar Usuário
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabela de Usuários -->
+    <div class="md:col-span-2 space-y-6">
+        <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider flex items-center gap-2">
+                    <span>Usuários Cadastrados</span>
+                    <span class="bg-gray-800 text-gray-400 text-xs px-2.5 py-0.5 rounded-full font-bold">4</span>
+                </h2>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button class="bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/70 text-amber-300 text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                        <span>🔒 Exigir Troca de Todos os Peritos</span>
+                    </button>
+                    <div class="w-48">
+                        <input type="text" placeholder="🔍 Filtrar..." class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white">
+                    </div>
+                </div>
+            </div>
+
+            <table class="w-full text-left text-sm text-gray-300">
+                <thead>
+                    <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">
+                        <th class="pb-2">Usuário & Segurança</th>
+                        <th class="pb-2">Nome Completo</th>
+                        <th class="pb-2">Perfil</th>
+                        <th class="pb-2 text-right">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800/50">
+                    <tr>
+                        <td class="py-3 font-bold text-white">
+                            <div>carlos.eduardo</div>
+                            <span class="inline-flex items-center gap-1 text-[10px] text-amber-400 bg-amber-950/40 border border-amber-900/50 px-2 py-0.5 rounded font-medium mt-0.5">⚠️ Troca pendente</span>
+                        </td>
+                        <td class="py-3 text-gray-300 text-xs">DR. CARLOS EDUARDO SILVEIRA</td>
+                        <td class="py-3"><span class="bg-purple-950 text-purple-400 text-[10px] px-2.5 py-0.5 rounded-full border border-purple-900/50 uppercase font-semibold">Perito Médico</span></td>
+                        <td class="py-3 text-right">
+                            <button class="bg-gray-800 text-gray-300 text-xs px-2.5 py-1 rounded border border-gray-750">Editar</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 font-bold text-white">
+                            <div>roberto.souza</div>
+                            <span class="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/30 border border-emerald-900/40 px-2 py-0.5 rounded font-medium mt-0.5">✓ Senha individual ativa</span>
+                        </td>
+                        <td class="py-3 text-gray-300 text-xs">DR. ROBERTO SOUZA LIMA</td>
+                        <td class="py-3"><span class="bg-purple-950 text-purple-400 text-[10px] px-2.5 py-0.5 rounded-full border border-purple-900/50 uppercase font-semibold">Perito Médico</span></td>
+                        <td class="py-3 text-right">
+                            <button class="bg-gray-800 text-gray-300 text-xs px-2.5 py-1 rounded border border-gray-750 mr-1">Editar</button>
+                            <button class="bg-amber-950/40 border border-amber-900/60 text-amber-300 text-xs px-2.5 py-1 rounded">Exigir Troca</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="py-3 font-bold text-white">
+                            <div>mariana.recepcao</div>
+                            <span class="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/30 border border-emerald-900/40 px-2 py-0.5 rounded font-medium mt-0.5">✓ Senha individual ativa</span>
+                        </td>
+                        <td class="py-3 text-gray-300 text-xs">MARIANA SILVA OLIVEIRA</td>
+                        <td class="py-3"><span class="bg-emerald-950 text-emerald-400 text-[10px] px-2.5 py-0.5 rounded-full border border-emerald-900/50 uppercase font-semibold">Recepção</span></td>
+                        <td class="py-3 text-right">
+                            <button class="bg-gray-800 text-gray-300 text-xs px-2.5 py-1 rounded border border-gray-750 mr-1">Editar</button>
+                            <button class="bg-amber-950/40 border border-amber-900/60 text-amber-300 text-xs px-2.5 py-1 rounded">Exigir Troca</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
+""")
+
 shots = [
     ('02_recepcao_visao_geral.html', '02_recepcao_visao_geral.png', 1440, 1000, html_recepcao_visao),
     ('03_confirmar_presenca.html', '03_confirmar_presenca.png', 1100, 750, html_confirmar_presenca),
@@ -669,6 +835,8 @@ shots = [
     ('09_perito_alerta_toast.html', '09_perito_alerta_toast.png', 1200, 700, html_perito_toast),
     ('11_dashboard_executivo.html', '11_dashboard_executivo.png', 1440, 1050, html_dashboard),
     ('13_gerenciamento_pauta.html', '13_gerenciamento_pauta.png', 1100, 850, html_pauta),
+    ('15_alterar_senha_obrigatorio.html', '15_alterar_senha_obrigatorio.png', 1000, 800, html_alterar_senha),
+    ('16_usuarios_gerenciamento.html', '16_usuarios_gerenciamento.png', 1300, 850, html_usuarios),
 ]
 
 with sync_playwright() as p:

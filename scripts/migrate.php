@@ -121,12 +121,36 @@ try {
     $pdo->exec("INSERT INTO sequencia_diaria_senhas (data_pauta,ultimo_numero) SELECT data_pauta,MAX(CAST(SUBSTRING(senha,4) AS UNSIGNED)) FROM atendimentos WHERE data_pauta IS NOT NULL AND senha REGEXP '^PE-[0-9]+$' GROUP BY data_pauta ON DUPLICATE KEY UPDATE ultimo_numero=GREATEST(ultimo_numero,VALUES(ultimo_numero))");
     $pdo->exec("UPDATE atendimentos SET primeira_chamada_em = chamado_em WHERE primeira_chamada_em IS NULL AND chamado_em IS NOT NULL");
     // Marca credenciais legadas previsíveis; não divulga CPF ou senha no output.
-    foreach ($pdo->query('SELECT id, username, password, cpf FROM usuarios')->fetchAll() as $u) {
+    $senhasPadraoIniciais = [
+        '123456', '12345678', '123456789', 'admin', 'admin123',
+        'jfal123', 'jfal@123', 'mudar123', 'mudar@123', 'perito123',
+        'perito@123', 'senha123', 'senha@123', 'trocar123', 'trocar@123',
+        'primeiroacesso', 'trocarsenha'
+    ];
+    foreach ($pdo->query('SELECT id, username, password, cpf, role FROM usuarios')->fetchAll() as $u) {
         $cpf = preg_replace('/\D/', '', $u['cpf'] ?? '');
-        if (password_verify('admin', $u['password']) || (strlen($cpf) === 11 && password_verify(substr($cpf, 0, 6), $u['password']))) {
-            $s = $pdo->prepare('UPDATE usuarios SET must_change_password = 1 WHERE id = ?'); $s->execute([$u['id']]);
+        $ehPrevisivel = false;
+        if (password_verify('admin', $u['password']) || password_verify($u['username'], $u['password'])) {
+            $ehPrevisivel = true;
+        }
+        if ($cpf !== '') {
+            if (password_verify($cpf, $u['password']) || (strlen($cpf) >= 6 && password_verify(substr($cpf, 0, 6), $u['password']))) {
+                $ehPrevisivel = true;
+            }
+        }
+        foreach ($senhasPadraoIniciais as $sp) {
+            if (password_verify($sp, $u['password'])) {
+                $ehPrevisivel = true;
+                break;
+            }
+        }
+        if ($ehPrevisivel) {
+            $s = $pdo->prepare('UPDATE usuarios SET must_change_password = 1 WHERE id = ?');
+            $s->execute([$u['id']]);
         }
     }
+    // Assegura que peritos com credenciais iniciais pendentes troquem a senha no próximo acesso
+    $pdo->exec("UPDATE usuarios SET must_change_password = 1 WHERE role = 'perito' AND (must_change_password IS NULL OR must_change_password = 0) AND (username REGEXP '^[0-9]{11}$' OR cpf IS NOT NULL)");
     if ((int)$pdo->query('SELECT COUNT(*) FROM usuarios')->fetchColumn() === 0) {
         $password = getenv('BOOTSTRAP_ADMIN_PASSWORD') ?: '';
         if (strlen($password) < 12) throw new RuntimeException('Banco novo exige BOOTSTRAP_ADMIN_PASSWORD de 12 caracteres ou mais.');

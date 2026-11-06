@@ -15,20 +15,42 @@
 O módulo do **Médico Perito Judicial** no SGA foi projetado para oferecer agilidade, autonomia clínica e total transparência no fluxo de atendimento dos periciados dentro do consultório.
 
 Principais recursos disponíveis para o perito:
-1. **Seleção Segura de Consultório:** Vinculação da sala de exame com mecanismo inteligente de prevenção de conflitos entre peritos.
-2. **Chamada Audiovisual na TV:** Acionamento de chamadas na sala de espera com toque sonoro de campainha e sintetização por voz do nome, senha e sala.
-3. **Autonomia de Critério de Atendimento:** Escolha livre entre atender por **Ordem de Chegada** (balcão da recepção) ou pelo **Horário Marcado no PJe**.
-4. **Gestão Flexível de Prioridades Legais:** Chave liga/desliga para priorizar pacientes 80+ (Superprioridade) e 60+/PCD no topo da fila, respeitando a conveniência do fluxo de trabalho do médico.
-5. **Tolerância Inteligente de Ausência:** Reposiciona pacientes ausentes 2 posições para trás na fila, sem cancelamento da perícia.
-6. **Notificações em Tempo Real:** Alertas sonoros suaves e notificações visuais (toasts) a cada novo paciente que faz check-in na recepção.
-7. **Emissão Direta de Declaração de Comparecimento:** Impressão em 1 clique do comprovante oficial A4 direto do consultório.
-8. **Liberação Automática de Sala:** Desvinculação imediata do consultório ao encerrar o expediente ou fazer logout.
+1. **Segurança de Acesso e Credencial Pessoal:** Troca obrigatória da senha inicial provisória no primeiro acesso com política rigorosa de segurança.
+2. **Seleção Segura de Consultório:** Vinculação da sala de exame com mecanismo inteligente de prevenção de conflitos entre peritos.
+3. **Chamada Audiovisual na TV:** Acionamento de chamadas na sala de espera com toque sonoro de campainha e sintetização por voz do nome, senha e sala.
+4. **Autonomia de Critério de Atendimento:** Escolha livre entre atender por **Ordem de Chegada** (balcão da recepção) ou pelo **Horário Marcado no PJe**.
+5. **Gestão Flexível de Prioridades Legais:** Chave liga/desliga para priorizar pacientes 80+ (Superprioridade) e 60+/PCD no topo da fila, respeitando a conveniência do fluxo de trabalho do médico.
+6. **Tolerância Inteligente de Ausência:** Reposiciona pacientes ausentes 2 posições para trás na fila, sem cancelamento da perícia.
+7. **Notificações em Tempo Real:** Alertas sonoros suaves e notificações visuais (toasts) a cada novo paciente que faz check-in na recepção.
+8. **Emissão Direta de Declaração de Comparecimento:** Impressão em 1 clique do comprovante oficial A4 direto do consultório.
+9. **Liberação Automática de Sala:** Desvinculação imediata do consultório ao encerrar o expediente ou fazer logout.
 
 ---
 
-## 2. Acesso e Seleção de Sala (Trava Anti-Conflito)
+## 2. Primeiro Acesso e Troca Obrigatória de Senha
 
-Ao acessar o sistema (`http://atendimento.jfal.jus.br`) com o usuário de médico perito, a primeira etapa é a definição do consultório físico onde as perícias serão realizadas.
+Para atender às normas de segurança da informação da Justiça Federal e garantir que somente o médico perito nomeado acesse sua pauta e prontuários de atendimento, **o SGA bloqueia o uso de credenciais iniciais provisórias**.
+
+![Alteração Obrigatória de Senha](imagens/15_alterar_senha_obrigatorio.png)
+
+### Regras do Primeiro Acesso:
+- Ao entrar no sistema com a senha inicial temporária fornecida pela DTI/Administração (ou caso utilize uma credencial padrão), o sistema intercepta imediatamente o acesso e redireciona para a tela de **Alteração Obrigatória de Senha**.
+- Nenhuma outra funcionalidade (seleção de sala, visualização da pauta ou chamada de pacientes) é liberada enquanto o médico não cadastrar sua nova senha pessoal.
+
+### Requisitos Obrigatórios da Nova Senha:
+- **Tamanho seguro:** Mínimo de **12** e máximo de **72 caracteres**.
+- **Distinção do CPF:** Não é permitido utilizar o número do CPF (completo ou os primeiros 6 dígitos).
+- **Distinção do login:** Não é permitido que a nova senha seja igual ao nome de usuário.
+- **Ineditismo:** A nova senha não pode ser idêntica à senha anterior nem a sequências previsíveis (`123456`, `admin`, `jfal123`, `perito123`, etc.).
+
+> [!IMPORTANT]
+> Ao confirmar a nova senha, o sistema armazena a credencial com criptografia irreversível de alta segurança (Bcrypt), **revoga imediatamente qualquer outra sessão ativa anterior** e redireciona para a tela de login para que você entre com sua senha pessoal definitiva.
+
+---
+
+## 3. Acesso e Seleção de Sala (Trava Anti-Conflito)
+
+Após autenticar-se com sua senha definitiva, a primeira etapa operacional é a definição do consultório físico onde as perícias serão realizadas.
 
 ![Seleção de Sala com Prevenção de Conflito](imagens/06_perito_selecao_sala.png)
 
@@ -42,7 +64,7 @@ Ao acessar o sistema (`http://atendimento.jfal.jus.br`) com o usuário de médic
 
 ---
 
-## 3. Painel Principal do Consultório Pericial
+## 4. Painel Principal do Consultório Pericial
 
 Uma vez dentro da sala, o perito visualiza o painel operacional de atendimento:
 
@@ -71,7 +93,7 @@ Localizados logo abaixo do cabeçalho, esses botões definem a inteligência de 
 
 ---
 
-## 4. Ciclo Completo de Atendimento Pericial
+## 5. Ciclo Completo de Atendimento Pericial
 
 O ciclo de atendimento é simples, objetivo e controlado por três botões de ação:
 
@@ -104,7 +126,7 @@ O ciclo de atendimento é simples, objetivo e controlado por três botões de a�
 
 ---
 
-## 5. Ausência e Tolerância Inteligente (Descer 2 Posições)
+## 6. Ausência e Tolerância Inteligente (Descer 2 Posições)
 
 Caso o perito chame o paciente repetidas vezes e ele não compareça à porta do consultório:
 
@@ -119,7 +141,7 @@ Caso o perito chame o paciente repetidas vezes e ele não compareça à porta do
 
 ---
 
-## 6. Notificações e Alertas em Tempo Real (Toast)
+## 7. Notificações e Alertas em Tempo Real (Toast)
 
 Durante a realização dos exames clínicos, você não precisa ficar atualizando a página para saber se os demais pacientes do dia estão chegando.
 
@@ -132,7 +154,7 @@ Durante a realização dos exames clínicos, você não precisa ficar atualizand
 
 ---
 
-## 7. Emissão de Declaração de Comparecimento (Rotina e Atalho Opcional)
+## 8. Emissão de Declaração de Comparecimento (Rotina e Atalho Opcional)
 
 > [!NOTE]
 > **Fluxo Padrão da JFAL:** Na rotina padrão dos Juizados Especiais Federais, **a emissão e entrega da Declaração de Comparecimento é atribuição da equipe de Recepção**. 
@@ -148,7 +170,7 @@ Caso o periciado, seu patrono ou assistente técnico solicite a comprovação de
 
 ---
 
-## 8. Encerramento do Expediente e Liberação de Sala
+## 9. Encerramento do Expediente e Liberação de Sala
 
 Ao terminar a pauta pericial do dia:
 1. Verifique se todos os periciados presentes foram devidamente concluídos.

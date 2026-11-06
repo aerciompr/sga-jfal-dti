@@ -3,6 +3,10 @@
 require_once __DIR__ . '/banco.php';
 
 if (isset($_SESSION['usuario_id'])) {
+    if (!empty($_SESSION['troca_obrigatoria'])) {
+        header("Location: alterar_senha_obrigatorio.php");
+        exit;
+    }
     if ($_SESSION['usuario_role'] === 'perito') {
         header("Location: atendente.php");
     } else {
@@ -45,8 +49,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['usuario_role'] = $user['role'];
             $_SESSION['usuario_nome'] = $user['nome'] ?: $user['username'];
 
+            // Detecção ativa de credencial inicial ou pendência de troca obrigatória
+            $cpfLimpo = preg_replace('/\D/', '', $user['cpf'] ?? '');
+            $senhasPadraoIniciais = [
+                '123456', '12345678', '123456789', 'admin', 'admin123',
+                'jfal123', 'jfal@123', 'mudar123', 'mudar@123', 'perito123',
+                'perito@123', 'senha123', 'senha@123', 'trocar123', 'trocar@123',
+                'primeiroacesso', 'trocarsenha'
+            ];
+            $ehSenhaInicial = (
+                mb_strtolower($password) === mb_strtolower($user['username']) ||
+                ($cpfLimpo !== '' && ($password === $cpfLimpo || (strlen($cpfLimpo) >= 6 && $password === substr($cpfLimpo, 0, 6)))) ||
+                in_array(mb_strtolower($password), $senhasPadraoIniciais, true)
+            );
+
+            $deveTrocarSenha = (bool)$user['must_change_password'] || $ehSenhaInicial;
+
+            if ($deveTrocarSenha) {
+                if (!(int)$user['must_change_password']) {
+                    $pdo->prepare('UPDATE usuarios SET must_change_password = 1 WHERE id = ?')->execute([$user['id']]);
+                }
+                $_SESSION['troca_obrigatoria'] = true;
+                registrarLog($pdo, 'Login', "Usuário logou com perfil de " . ucfirst($user['role']) . " (troca de senha obrigatória acionada)");
+                header('Location: alterar_senha_obrigatorio.php');
+                exit;
+            }
+
             registrarLog($pdo, 'Login', "Usuário logou com perfil de " . ucfirst($user['role']));
-            if ($user['must_change_password']) { header('Location: alterar_senha_obrigatorio.php'); exit; }
 
             if ($user['role'] === 'perito') {
                 header("Location: atendente.php");

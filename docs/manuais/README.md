@@ -17,9 +17,9 @@ Esta suíte de documentação reúne os manuais práticos de operação do siste
 | Perfil de Usuário | Versão Web (Markdown) | Versão PDF Oficial (A4 Impressão) | Principais Atribuições |
 | :--- | :--- | :--- | :--- |
 | **👩‍💼 Recepção & Triagem** | [**Manual da Recepção**](manual_recepcao.md) | [📥 **Manual_Recepcao_SGA_JFAL.pdf**](Manual_Recepcao_SGA_JFAL.pdf) | Check-in, geração de senhas (`PE-XX`), classificação de prioridades (Normal, 60+/PCD, 80+ Superprioridade), monitoramento das salas e emissão da Declaração de Comparecimento A4. |
-| **👨‍⚕️ Médico Perito Judicial** | [**Manual do Perito Médico**](manual_perito.md) | [📥 **Manual_Perito_Medico_SGA_JFAL.pdf**](Manual_Perito_Medico_SGA_JFAL.pdf) | Seleção de consultório com trava anti-conflito, chamadas sonoras na TV, autonomia de critério (Chegada vs Horário PJe), alternador de prioridade, tolerância de ausência (2 posições) e liberação de sala. |
-| **📊 Supervisão & Gestão** | [**Manual do Supervisor**](manual_supervisor.md) | [📥 **Manual_Supervisor_Gestor_SGA_JFAL.pdf**](Manual_Supervisor_Gestor_SGA_JFAL.pdf) | Dashboard executivo, KPIs de tempo de espera e absenteísmo, auditoria de produtividade médica, exportação CSV, importação e homologação de pauta Excel (`.xlsx`) do PJe. |
-| **🏛️ Edição Geral Consolidada** | *Consolidação Integral* | [📥 **Manual_Geral_Completo_SGA_JFAL.pdf**](Manual_Geral_Completo_SGA_JFAL.pdf) | Manual institucional unificado abrangendo todos os módulos, fluxo ponta a ponta, governança e marco legal das prioridades federais. |
+| **👨‍⚕️ Médico Perito Judicial** | [**Manual do Perito Médico**](manual_perito.md) | [📥 **Manual_Perito_Medico_SGA_JFAL.pdf**](Manual_Perito_Medico_SGA_JFAL.pdf) | Primeiro acesso com troca obrigatória de credencial inicial, seleção de consultório com trava anti-conflito, chamadas sonoras na TV, autonomia de critério (Chegada vs Horário PJe), alternador de prioridade e tolerância de ausência. |
+| **📊 Supervisão & Gestão** | [**Manual do Supervisor**](manual_supervisor.md) | [📥 **Manual_Supervisor_Gestor_SGA_JFAL.pdf**](Manual_Supervisor_Gestor_SGA_JFAL.pdf) | Dashboard executivo, KPIs de tempo de espera e absenteísmo, gestão de segurança e imposição de troca de senha para peritos (individual e coletiva), importação de pauta Excel (.xlsx) do PJe e auditoria CSV. |
+| **🏛️ Edição Geral Consolidada** | *Consolidação Integral* | [📥 **Manual_Geral_Completo_SGA_JFAL.pdf**](Manual_Geral_Completo_SGA_JFAL.pdf) | Manual institucional unificado abrangendo todos os módulos, fluxo ponta a ponta, governança de credenciais e marco legal das prioridades federais. |
 
 ---
 
@@ -48,15 +48,13 @@ Para facilitar o treinamento do corpo clínico e da equipe de apoio judiciário:
 O fluxo operacional do SGA conecta todas as etapas do processo judicial de perícias:
 
 ```
-[ PJe — TRF5 ]
-      │ (Exportação da Pauta de Perícias .xlsx)
-      ▼
-[ 1. Supervisão SGA ] ── Homologação da Pauta Diária
+[ 1. PJe TRF5 ] ────── Exportação da Pauta Diária (.xlsx)
       │
       ▼
-[ 2. Recepção SGA ] ── Identificação do Cidadão + Classificação de Prioridade Legal
-      │                Geração da Senha de Atendimento (ex: PE-01)
-      ▼
+[ 2. SGA Recepção ] ── Check-in do Periciado + Classificação Legal (Normal / 60+ / 80+)
+      │
+      ├──────────────────────────────┐
+      ▼                              ▼
 [ 3. Painel TV ] ───── Chamada Audiovisual na Sala de Espera (Voz + Campainha)
       ▲
       │ (Chamada acionada pelo médico)
@@ -86,6 +84,8 @@ Todas as telas foram projetadas com foco em usabilidade, conformidade com a legi
 9. **[Dashboard Executivo de Gestão](imagens/11_dashboard_executivo.png):** Painel estratégico com métricas e produtividade.
 10. **[Importação de Pauta Excel PJe](imagens/13_gerenciamento_pauta.png):** Upload em lote de planilhas judiciais do TRF5.
 11. **[Painel TV de Chamadas](imagens/14_painel_tv_chamada.png):** Interface pública de alta visibilidade com alerta sonoro.
+12. **[Alteração Obrigatória de Senha](imagens/15_alterar_senha_obrigatorio.png):** Política de segurança para primeiro acesso e substituição de credenciais provisórias.
+13. **[Gestão de Perfis e Senhas](imagens/16_usuarios_gerenciamento.png):** Painel do administrador para monitoramento de segurança e imposição de troca coletiva/individual de senhas.
 
 ---
 

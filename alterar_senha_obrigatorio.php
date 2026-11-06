@@ -17,7 +17,19 @@ if (!isset($_SESSION['usuario_id'])) {
 
 $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
 $username = $_SESSION['usuario_name'];
-$user_id = $_SESSION['usuario_id'];
+$user_id = (int)$_SESSION['usuario_id'];
+
+// Obtém os dados mais recentes do usuário
+$stmtUser = $pdo->prepare("SELECT cpf, role, password, username, must_change_password FROM usuarios WHERE id = ?");
+$stmtUser->execute([$user_id]);
+$userData = $stmtUser->fetch();
+
+if (!$userData) {
+    header("Location: logout.php");
+    exit;
+}
+
+$trocaObrigatoria = !empty($_SESSION['troca_obrigatoria']) || !empty($userData['must_change_password']) || $userData['role'] === 'perito';
 
 $error_msg = '';
 $success_msg = '';
@@ -34,35 +46,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($nova_senha !== $confirma_senha) {
         $error_msg = "A confirmação de senha não coincide com a nova senha.";
     } else {
-        // Busca o CPF do usuário logado para impedir que a nova senha seja igual ao próprio CPF ou os primeiros 6 dígitos
-        $stmt = $pdo->prepare("SELECT cpf, role, password FROM usuarios WHERE id = ?");
-        $stmt->execute([$user_id]);
-        $userData = $stmt->fetch();
+        $senha_insegura = false;
 
-        $senha_insegura = !$userData || password_verify($nova_senha, $userData['password']) || $nova_senha === 'admin';
-        if (empty($_SESSION['troca_obrigatoria']) && !password_verify($_POST['senha_atual'] ?? '', $userData['password'])) $senha_insegura = true;
-        if ($userData && !empty($userData['cpf'])) {
+        // Se não for troca obrigatória por primeiro acesso, exige validar a senha atual digitada
+        if (!$trocaObrigatoria && !password_verify($_POST['senha_atual'] ?? '', $userData['password'])) {
+            $senha_insegura = true;
+            $error_msg = "A senha atual informada está incorreta.";
+        }
+
+        // Impede reutilização da senha anterior
+        if (password_verify($nova_senha, $userData['password'])) {
+            $senha_insegura = true;
+            $error_msg = "A nova senha não pode ser igual à senha anterior.";
+        }
+
+        // Impede uso da senha genérica 'admin'
+        if (mb_strtolower($nova_senha) === 'admin') {
+            $senha_insegura = true;
+            $error_msg = "A nova senha não pode ser uma senha genérica ('admin').";
+        }
+
+        // Impede que a nova senha seja igual ao nome de usuário
+        if (mb_strtolower($nova_senha) === mb_strtolower($userData['username'])) {
+            $senha_insegura = true;
+            $error_msg = "A nova senha não pode ser igual ao seu nome de usuário/login.";
+        }
+
+        // Impede que a nova senha seja igual ao próprio CPF ou os primeiros 6 dígitos
+        if (!empty($userData['cpf'])) {
             $cpfLimpo = preg_replace('/\D/', '', $userData['cpf']);
             $digitosIniciais = substr($cpfLimpo, 0, 6);
             if ($nova_senha === $cpfLimpo || $nova_senha === $digitosIniciais) {
                 $senha_insegura = true;
+                $error_msg = "A nova senha não pode conter o seu CPF ou os primeiros dígitos dele.";
             }
         }
 
-        if ($senha_insegura) {
-            $error_msg = "Confira a senha atual e escolha uma senha nova, diferente da anterior e do CPF.";
-        } else {
+        // Impede senhas triviais conhecidas
+        $senhasProibidas = [
+            '123456', '12345678', '123456789', 'admin', 'admin123',
+            'jfal123', 'jfal@123', 'mudar123', 'mudar@123', 'perito123',
+            'perito@123', 'senha123', 'senha@123', 'trocar123', 'trocar@123',
+            'primeiroacesso', 'trocarsenha'
+        ];
+        if (in_array(mb_strtolower($nova_senha), $senhasProibidas, true)) {
+            $senha_insegura = true;
+            $error_msg = "A nova senha não pode ser uma senha comum ou previsível.";
+        }
+
+        if (!$senha_insegura) {
             // Atualiza a senha no banco de dados com hash Bcrypt seguro
             try {
                 $hash = password_hash($nova_senha, PASSWORD_DEFAULT);
                 $pdo->beginTransaction();
                 $stmtUpdate = $pdo->prepare("UPDATE usuarios SET password = ?, must_change_password = 0, session_version = session_version + 1 WHERE id = ?");
                 $stmtUpdate->execute([$hash, $user_id]);
-                registrarLog($pdo, 'Alterar Senha', 'Credencial atualizada e demais sessões revogadas.');
+                registrarLog($pdo, 'Alterar Senha', 'Credencial atualizada com sucesso e demais sessões revogadas.');
                 $pdo->commit();
-                $_SESSION = []; session_regenerate_id(true);
-                $_SESSION['login_aviso'] = 'Senha atualizada. Entre com sua nova senha.';
-                header('Location: index.php'); exit;
+                $_SESSION = [];
+                session_regenerate_id(true);
+                $_SESSION['login_aviso'] = 'Senha atualizada com sucesso! Entre agora com sua nova senha individual.';
+                header('Location: index.php');
+                exit;
 
             } catch (Exception $e) {
                 if ($pdo->inTransaction()) $pdo->rollBack();
@@ -117,8 +162,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <!-- Formulário -->
         <form method="POST" class="space-y-4"><?= csrfCampo() ?>
-            <?php if (empty($_SESSION['troca_obrigatoria'])): ?>
-            <label>Senha atual <input type="password" name="senha_atual" required autocomplete="current-password" class="w-full bg-gray-800 rounded-lg px-3 py-2"></label>
+            <?php if (!$trocaObrigatoria): ?>
+            <div>
+                <label class="block text-xs text-gray-400 uppercase font-semibold mb-1">Senha Atual</label>
+                <input type="password" name="senha_atual" required autocomplete="current-password" placeholder="Digite sua senha atual" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+            </div>
             <?php endif; ?>
             <div>
                 <label class="block text-xs text-gray-400 uppercase font-semibold mb-1">Nova Senha</label>
