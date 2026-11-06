@@ -8,6 +8,7 @@ __pycache__/
 # Arquivos de dados temporários
 *.xlsx
 *.pdf
+!docs/manuais/*.pdf
 *.log
 
 .env
