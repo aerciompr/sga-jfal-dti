@@ -96,7 +96,10 @@ python scripts/gerar_screenshots_manuais.py
 # 2. Compilar os 4 PDFs no padrão exato homologado:
 python scripts/gerar_manuais_pdf.py
 
-# 3. Adicionar alterações e comitar:
+# 3. Gravar/Regenerar o Vídeo Tutorial do Perito (Playwright + FFmpeg):
+python scripts/gravar_tutorial_perito.py
+
+# 4. Adicionar alterações e comitar:
 git add .
 git commit -m "feat/fix: descrição da alteração com atualização de manuais e PDFs"
 git push origin master

@@ -6,6 +6,12 @@
 
 ## 1. Visão Geral e Finalidade
 
+> [!TIP]
+> **🎥 VÍDEO TUTORIAL DISPONÍVEL:**
+> Para uma demonstração visual rápida (menos de 1 minuto), assista ao vídeo gravado demonstrando passo a passo a escolha da sala, a alternância entre *Ordem de Chegada* e *Horário PJe*, a ativação da *Prioridade Legal (80+ e PCDs)* e as chamadas na TV:
+> - 🎬 [**Assistir no Player Interativo com Capítulos**](videos/assistir_tutorial.html)
+> - 📥 [**Baixar Vídeo Tutorial em MP4 (2.6 MB)**](videos/tutorial_painel_perito_sga.mp4)
+
 O módulo do **Médico Perito Judicial** no SGA foi projetado para oferecer agilidade, autonomia clínica e total transparência no fluxo de atendimento dos periciados dentro do consultório.
 
 Principais recursos disponíveis para o perito:

@@ -23,6 +23,26 @@ Esta suíte de documentação reúne os manuais práticos de operação do siste
 
 ---
 
+## 🎥 Vídeos Tutoriais e Demonstrações Audiovisuais
+
+Para facilitar o treinamento do corpo clínico e da equipe de apoio judiciário:
+
+| Recurso Multimídia | Formato | Como Assistir / Baixar |
+| :--- | :--- | :--- |
+| **🎬 Vídeo Tutorial do Médico Perito** | MP4 (H.264 HD 720p — 2.6 MB) | [📥 **Baixar tutorial_painel_perito_sga.mp4**](videos/tutorial_painel_perito_sga.mp4) |
+| **🌐 Player Web Interativo com Capítulos** | Página HTML5 Interativa | [▶️ **Abrir assistir_tutorial.html**](videos/assistir_tutorial.html) |
+| **🎞️ Gravação Original em Alta Fidelidade** | WebM nativo do navegador | [📥 **Baixar tutorial_painel_perito_sga.webm**](videos/tutorial_painel_perito_sga.webm) |
+
+*Tópicos abordados no vídeo (52 segundos):*
+1. Trava anti-conflito de salas periciais.
+2. Como alternar o critério da fila (**Ordem de Chegada** vs **Horário do PJe**).
+3. Como acionar a chave de **Prioridade Legal** e seu efeito imediato (Superprioridade 80+ no topo da fila).
+4. Disparo de chamada na TV da sala de espera (áudio e voz sintetizada).
+5. Início do atendimento pericial e cronômetro.
+6. Aplicação da **Tolerância de Ausência** (descer 2 posições sem cancelar perícia).
+
+---
+
 ## 🗺️ Fluxo Integrado de Atendimento Ponta a Ponta
 
 O fluxo operacional do SGA conecta todas as etapas do processo judicial de perícias:

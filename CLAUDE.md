@@ -10,5 +10,9 @@ Sempre que você alterar, criar ou refatorar qualquer tela, regra de negócio, p
    ```powershell
    python scripts/gerar_manuais_pdf.py
    ```
-4. **NÃO MUDE O MODELO DOS PDFs:** O modelo homologado para os PDFs já está fixado e codificado em `scripts/gerar_manuais_pdf.py`. Ele inclui capa institucional oficial com brasão, cabeçalho e rodapé em todas as páginas com numeração automática, callouts institucionais (azul, verde, amarelo, dourado e vermelho), tipografia do sistema e layout de alta fidelidade A4. **Não deve fugir em nada desse padrão.**
+4. **Regenere o Vídeo Tutorial do Perito** se houver alteração nos campos do consultório:
+   ```powershell
+   python scripts/gravar_tutorial_perito.py
+   ```
+5. **NÃO MUDE O MODELO DOS PDFs:** O modelo homologado para os PDFs já está fixado e codificado em `scripts/gerar_manuais_pdf.py`. Ele inclui capa institucional oficial com brasão, cabeçalho e rodapé em todas as páginas com numeração automática, callouts institucionais (azul, verde, amarelo, dourado e vermelho), tipografia do sistema e layout de alta fidelidade A4. **Não deve fugir em nada desse padrão.**
 5. Faça o commit de todo o conjunto (código + manuais `.md` + manuais `.pdf`) e o envio para o repositório.

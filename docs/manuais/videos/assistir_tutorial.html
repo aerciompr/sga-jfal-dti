@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vídeo Tutorial — Painel do Médico Perito (SGA JFAL)</title>
+    <link rel="stylesheet" href="../../assets/tailwind.css">
+    <style>
+        body { background-color: #030712; color: #f9fafb; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-950 text-white min-h-screen p-6 flex flex-col justify-between">
+
+    <div class="max-w-5xl mx-auto w-full space-y-6">
+        <!-- Cabeçalho -->
+        <header class="flex justify-between items-center bg-gray-900 border border-gray-800 p-4 rounded-2xl shadow-xl">
+            <div class="flex items-center gap-3">
+                <img src="../../assets/catavento-jfal.png" alt="JFAL" class="h-8 w-auto">
+                <div>
+                    <h1 class="text-sm font-black text-blue-500 uppercase tracking-wide">Justiça Federal em Alagoas</h1>
+                    <p class="text-[11px] text-gray-400 font-semibold tracking-wider uppercase">SGA &bull; Vídeo Tutorial Oficial do Médico Perito</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="../Manual_Perito_Medico_SGA_JFAL.pdf" target="_blank" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5">
+                    📥 Baixar Manual em PDF
+                </a>
+                <a href="../manual_perito.md" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1.5 rounded-xl border border-gray-700 transition">
+                    📖 Manual Web
+                </a>
+            </div>
+        </header>
+
+        <!-- Player de Vídeo -->
+        <div class="bg-gray-900 border border-gray-800 rounded-3xl overflow-hidden shadow-2xl p-4">
+            <div class="relative aspect-video rounded-2xl overflow-hidden bg-black border border-gray-800 shadow-inner">
+                <video id="player" controls autoplay muted class="w-full h-full object-contain">
+                    <source src="tutorial_painel_perito_sga.mp4" type="video/mp4">
+                    <source src="tutorial_painel_perito_sga.webm" type="video/webm">
+                    Seu navegador não suporta a tag de vídeo HTML5.
+                </video>
+            </div>
+
+            <!-- Controles de Salto / Capítulos do Vídeo -->
+            <div class="mt-4 pt-4 border-t border-gray-800">
+                <span class="text-[10px] uppercase font-bold text-gray-400 tracking-wider block mb-2">Saltar para o Tópico:</span>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                    <button onclick="jumpTo(4.5)" class="bg-gray-800 hover:bg-blue-600 text-gray-300 hover:text-white text-xs font-semibold p-2 rounded-xl border border-gray-700 transition text-left">
+                        <span class="block text-[9px] text-blue-400">00:04</span>
+                        1. Seleção de Sala
+                    </button>
+                    <button onclick="jumpTo(9.0)" class="bg-gray-800 hover:bg-blue-600 text-gray-300 hover:text-white text-xs font-semibold p-2 rounded-xl border border-gray-700 transition text-left">
+                        <span class="block text-[9px] text-blue-400">00:09</span>
+                        2. Fila (Chegada/PJe)
+                    </button>
+                    <button onclick="jumpTo(17.5)" class="bg-gray-800 hover:bg-blue-600 text-gray-300 hover:text-white text-xs font-semibold p-2 rounded-xl border border-gray-700 transition text-left">
+                        <span class="block text-[9px] text-amber-400">00:17</span>
+                        3. Prioridade Legal
+                    </button>
+                    <button onclick="jumpTo(24.5)" class="bg-gray-800 hover:bg-blue-600 text-gray-300 hover:text-white text-xs font-semibold p-2 rounded-xl border border-gray-700 transition text-left">
+                        <span class="block text-[9px] text-blue-400">00:24</span>
+                        4. Chamar na TV
+                    </button>
+                    <button onclick="jumpTo(31.0)" class="bg-gray-800 hover:bg-blue-600 text-gray-300 hover:text-white text-xs font-semibold p-2 rounded-xl border border-gray-700 transition text-left">
+                        <span class="block text-[9px] text-emerald-400">00:31</span>
+                        5. Iniciar Perícia
+                    </button>
+                    <button onclick="jumpTo(37.0)" class="bg-gray-800 hover:bg-blue-600 text-gray-300 hover:text-white text-xs font-semibold p-2 rounded-xl border border-gray-700 transition text-left">
+                        <span class="block text-[9px] text-amber-400">00:37</span>
+                        6. Ausente (Descer 2)
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Guia Resumido em Texto Abaixo do Vídeo -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-gray-900 border border-gray-800 p-5 rounded-2xl">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-blue-400 mb-3 flex items-center gap-2">
+                    <span>🏃 vs 🕒</span> Critério da Fila (Autonomia do Perito)
+                </h3>
+                <p class="text-xs text-gray-300 leading-relaxed">
+                    Você pode escolher no topo do painel se atende por <strong>Ordem de Chegada</strong> (quem fez check-in antes no balcão da recepção) ou pelo <strong>Horário do PJe</strong> (cumprindo estritamente a agenda do processo). A fila reorganiza-se instantaneamente na tela.
+                </p>
+            </div>
+
+            <div class="bg-gray-900 border border-gray-800 p-5 rounded-2xl">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-amber-400 mb-3 flex items-center gap-2">
+                    <span>⭐ 80+</span> Chave de Prioridade Legal
+                </h3>
+                <p class="text-xs text-gray-300 leading-relaxed">
+                    Ao ativar a chave <strong>Prioridade</strong>, idosos com <strong>Superprioridade (80+)</strong> e pessoas com <strong>Prioridade Legal (60+/PCD)</strong> sobem imediatamente para o topo da sua lista de espera. Se desativada, a fila segue a ordem cronológica pura.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="mt-8 text-center text-xs text-gray-600">
+        Desenvolvido pela Divisão de Tecnologia da Informação (DTI) &bull; Seção Judiciária de Alagoas &bull; 2026
+    </footer>
+
+    <script>
+        const player = document.getElementById('player');
+        function jumpTo(seconds) {
+            player.currentTime = seconds;
+            player.play();
+        }
+    </script>
+</body>
+</html>
