@@ -1,26 +1,27 @@
 <?php
 // header_menu.php - Componente Único, Canônico e Padronizado do Cabeçalho Institucional JFAL
 $paginaAtual = basename($_SERVER['PHP_SELF'] ?? '');
+$rotaAtual = preg_replace('/\.php$/', '', $paginaAtual);
 $userRole = $_SESSION['usuario_role'] ?? 'visitante';
 $userName = $_SESSION['usuario_name'] ?? 'Usuário';
 
-// Mapeamento oficial dos módulos por permissão de acesso
+// Mapeamento oficial dos módulos por permissão de acesso (URLs Amigáveis)
 $modulos = [
-    'dashboard.php'       => ['label' => 'Painel Principal', 'roles' => ['admin', 'supervisor']],
-    'recepcao.php'        => ['label' => 'Recepção',         'roles' => ['admin', 'supervisor', 'recepcao']],
-    'atendente.php'       => ['label' => 'Atendimento',      'roles' => ['admin', 'perito']],
-    'gerenciar_pauta.php' => ['label' => 'Pautas',           'roles' => ['admin', 'supervisor']],
-    'salas.php'           => ['label' => 'Salas',            'roles' => ['admin', 'supervisor']],
-    'auditoria.php'       => ['label' => 'Auditoria',        'roles' => ['admin', 'supervisor']],
-    'usuarios.php'        => ['label' => 'Perfis & Senhas',  'roles' => ['admin']],
+    'dashboard'       => ['label' => 'Painel Principal', 'file' => 'dashboard.php', 'roles' => ['admin', 'supervisor']],
+    'recepcao'        => ['label' => 'Recepção',         'file' => 'recepcao.php',  'roles' => ['admin', 'supervisor', 'recepcao']],
+    'atendente'       => ['label' => 'Atendimento',      'file' => 'atendente.php', 'roles' => ['admin', 'perito']],
+    'gerenciar_pauta' => ['label' => 'Pautas',           'file' => 'gerenciar_pauta.php', 'roles' => ['admin', 'supervisor']],
+    'salas'           => ['label' => 'Salas',            'file' => 'salas.php',     'roles' => ['admin', 'supervisor']],
+    'auditoria'       => ['label' => 'Auditoria',        'file' => 'auditoria.php', 'roles' => ['admin', 'supervisor']],
+    'usuarios'        => ['label' => 'Perfis & Senhas',  'file' => 'usuarios.php',  'roles' => ['admin']],
 ];
 
 // Destino ao clicar na logo institucional
-$homeDestino = 'dashboard.php';
+$homeDestino = 'dashboard';
 if ($userRole === 'recepcao') {
-    $homeDestino = 'recepcao.php';
+    $homeDestino = 'recepcao';
 } elseif ($userRole === 'perito') {
-    $homeDestino = 'atendente.php';
+    $homeDestino = 'atendente';
 }
 ?>
 <!-- Header Institucional Unificado JFAL (Padrão Único em Todas as Páginas) -->
@@ -39,11 +40,11 @@ if ($userRole === 'recepcao') {
         </span>
     </div>
 
-    <!-- 2. Barra de Navegação Central (Abas Limpas Padronizadas) -->
+    <!-- 2. Barra de Navegação Central (Abas Limpas Padronizadas com Rotas Amigáveis) -->
     <nav class="sga-nav-bar sga-nav-bar-clean flex items-center gap-0.5 shrink-1 min-w-0 overflow-x-auto">
-        <?php foreach ($modulos as $arquivo => $info): ?>
+        <?php foreach ($modulos as $slug => $info): ?>
             <?php if (in_array($userRole, $info['roles'], true)): ?>
-                <a href="<?= $arquivo ?>" class="sga-nav-link sga-nav-item<?= $paginaAtual === $arquivo ? ' sga-nav-active' : '' ?>">
+                <a href="<?= $slug ?>" class="sga-nav-link sga-nav-item<?= ($rotaAtual === $slug || $paginaAtual === $info['file']) ? ' sga-nav-active' : '' ?>">
                     <?= $info['label'] ?>
                 </a>
             <?php endif; ?>
@@ -52,7 +53,7 @@ if ($userRole === 'recepcao') {
 
     <!-- 3. Grupo de Utilitários (Idêntico em todas as páginas) -->
     <div class="sga-header-utils flex items-center space-x-1.5 shrink-0">
-        <?php if ($paginaAtual === 'atendente.php'): ?>
+        <?php if ($rotaAtual === 'atendente' || $paginaAtual === 'atendente.php'): ?>
             <button type="button" id="btn-audio-perito" onclick="toggleAudioPerito()" class="text-xs text-blue-400 hover:text-blue-300 border border-blue-900/60 bg-blue-950/40 px-2 py-1 rounded-md transition flex items-center gap-1 shrink-0 sga-btn-audio" title="Controle do som de chamadas">
                 <span id="icone-audio-perito">🔊</span> <span id="texto-audio-perito" class="hidden sm:inline">Som Ativo</span>
             </button>
@@ -62,17 +63,17 @@ if ($userRole === 'recepcao') {
             🌙 <span class="sga-theme-label">Escuro</span>
         </button>
 
-        <a href="ajuda.php" class="sga-btn-util sga-nav-ajuda shrink-0<?= $paginaAtual === 'ajuda.php' ? ' sga-nav-active' : '' ?>" title="Ajuda rápida e manuais do SGA">Ajuda</a>
+        <a href="ajuda" class="sga-btn-util sga-nav-ajuda shrink-0<?= ($rotaAtual === 'ajuda' || $paginaAtual === 'ajuda.php') ? ' sga-nav-active' : '' ?>" title="Ajuda rápida e manuais do SGA">Ajuda</a>
 
         <div class="h-4 w-px bg-gray-700/60 mx-1 hidden md:block sga-divider"></div>
 
         <div class="sga-header-user flex items-center gap-1.5 shrink-0 text-xs text-gray-400">
             <span>Olá, <strong class="text-white"><?= escapar($userName) ?></strong></span>
             <span class="text-gray-600 sga-bullet">•</span>
-            <a href="alterar_senha_obrigatorio.php" class="sga-user-link text-gray-400 hover:text-white underline text-xs" title="Alterar minha senha de acesso">Minha senha</a>
+            <a href="alterar_senha_obrigatorio" class="sga-user-link text-gray-400 hover:text-white underline text-xs" title="Alterar minha senha de acesso">Minha senha</a>
         </div>
 
-        <form method="POST" action="logout.php" class="sga-logout shrink-0 m-0">
+        <form method="POST" action="logout" class="sga-logout shrink-0 m-0">
             <?= csrfCampo() ?>
             <button type="submit" class="sga-btn-sair" title="Encerrar sessão no SGA">Sair</button>
         </form>

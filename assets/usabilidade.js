@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const limites={username:50,nome:location.pathname.endsWith('/salas.php')?50:100,perito:100,novo_perito:100,nome_avulso:100,yt_url:500};
+    const limites={username:50,nome:location.pathname.includes('/salas')?50:100,perito:100,novo_perito:100,nome_avulso:100,yt_url:500};
     for(const [nome,limite] of Object.entries(limites))
         for(const campo of document.querySelectorAll(`input[name="${nome}"]`)) campo.maxLength=limite;
     // CPF usa a mesma pontuação do importador; nenhum caractere inválido é descartado.
@@ -41,7 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     for (const campo of document.querySelectorAll('input[name="password"],input[name="nova_senha"],input[name="confirma_senha"]')) {
-        if (location.pathname.endsWith('/index.php')) continue;
+        const path = location.pathname.replace(/\/$/, '');
+        if (path.endsWith('/index.php') || path.endsWith('/index') || path === '') continue;
         const validar=()=>{
             const bytes=new TextEncoder().encode(campo.value).length;
             campo.setCustomValidity(campo.value==='' || (bytes>=12 && bytes<=72) ? '' : 'Use uma senha de 12 a 72 bytes; letras acentuadas podem ocupar mais de um byte.');
@@ -67,9 +68,10 @@ document.addEventListener('DOMContentLoaded', () => {
         input.addEventListener('keyup', e => { caps.hidden = !e.getModifierState?.('CapsLock'); });
         input.addEventListener('blur', () => { caps.hidden = true; });
     }
-    const pagina = location.pathname.split('/').pop() || 'index.php';
+    const pagina = (location.pathname.split('/').pop() || 'index').replace(/\.php$/, '');
     for (const link of document.querySelectorAll('header .sga-nav-bar a[href]')) {
-        if (link.getAttribute('href') === pagina) link.setAttribute('aria-current','page');
+        const hrefSlug = (link.getAttribute('href') || '').split('?')[0].replace(/\.php$/, '');
+        if (hrefSlug === pagina) link.setAttribute('aria-current','page');
     }
     for (const form of document.querySelectorAll('form[method="POST"],form[method="post"]')) {
         form.addEventListener('submit', event => {

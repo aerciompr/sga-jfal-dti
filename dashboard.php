@@ -112,7 +112,7 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
                 <!-- Recepção Card -->
-                <a href="recepcao.php" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                <a href="recepcao" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
                     <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         📋
                     </div>
@@ -126,7 +126,7 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
 
                 <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
                 <!-- Atendente (Perito) Card -->
-                <a href="atendente.php" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                <a href="atendente" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
                     <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         🧑‍⚕️
                     </div>
@@ -139,7 +139,7 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
                 <?php endif; ?>
 
                 <!-- TV Panel Card -->
-                <a href="painel.php" target="_blank" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                <a href="painel" target="_blank" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
                     <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         📺
                     </div>
@@ -152,7 +152,7 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
 
                 <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
                 <!-- Gerenciar Pautas Card -->
-                <a href="gerenciar_pauta.php" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                <a href="gerenciar_pauta" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
                     <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         📅
                     </div>
@@ -166,7 +166,7 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
 
                 <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
                 <!-- Salas de Atendimento Card -->
-                <a href="salas.php" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                <a href="salas" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
                     <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         🚪
                     </div>
@@ -180,7 +180,7 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
 
                 <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
                 <!-- Auditoria Card -->
-                <a href="auditoria.php" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                <a href="auditoria" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
                     <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         🔎
                     </div>
@@ -194,7 +194,7 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
 
                 <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
                 <!-- Perfis e Senhas Card -->
-                <a href="usuarios.php" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                <a href="usuarios" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
                     <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         🔑
                     </div>
@@ -227,7 +227,7 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
                         <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition">
                             Filtrar
                         </button>
-                        <a href="dashboard.php?exportar=metricas_csv&data_busca=<?= urlencode($dataBusca) ?>" class="bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/80 text-emerald-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-sm">
+                        <a href="dashboard?exportar=metricas_csv&data_busca=<?= urlencode($dataBusca) ?>" class="bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/80 text-emerald-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-sm">
                             📥 Exportar Relatório (.CSV)
                         </a>
                     </form>

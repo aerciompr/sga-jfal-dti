@@ -410,7 +410,7 @@ $fila_espera = $cont_aguardando;
                             </form>
                         <?php endif; ?>
                     </div>
-                    <a href="declaracao_comparecimento.php?id=<?= (int)$atendimento_atual['id'] ?>&print=1" target="_blank" class="w-full max-w-xl bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 font-semibold py-2.5 px-3 rounded-xl text-xs transition inline-flex items-center justify-center gap-1.5 mt-3">
+                    <a href="declaracao_comparecimento?id=<?= (int)$atendimento_atual['id'] ?>&print=1" target="_blank" class="w-full max-w-xl bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 font-semibold py-2.5 px-3 rounded-xl text-xs transition inline-flex items-center justify-center gap-1.5 mt-3">
                         🖨️ Emitir Declaração de Comparecimento
                     </a>
                 <?php else: ?>
@@ -434,7 +434,7 @@ $fila_espera = $cont_aguardando;
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
                     <h3 class="text-sm font-semibold uppercase text-gray-400 tracking-wider">Sua Pauta e Fila de Hoje</h3>
-                    <a href="atendente.php" class="sga-neutral text-xs">Atualizar</a>
+                    <a href="atendente" class="sga-neutral text-xs">Atualizar</a>
                 </div>
 
 
@@ -791,7 +791,7 @@ $fila_espera = $cont_aguardando;
                 acaoBotao = `
                     <div class="inline-flex items-center gap-1">
                         <span class="text-[10px] text-gray-500 font-mono">${escaparHtml(p.concluido)}</span>
-                        <a href="declaracao_comparecimento.php?id=${p.id}&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="text-[10px] bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 px-2 py-0.5 rounded transition">🖨️</a>
+                        <a href="declaracao_comparecimento?id=${p.id}&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="text-[10px] bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 px-2 py-0.5 rounded transition">🖨️</a>
                     </div>
                 `;
             } else if (p.status === 'desistente') {
@@ -802,7 +802,7 @@ $fila_espera = $cont_aguardando;
                 acaoBotao = `
                     <div class="inline-flex items-center gap-1">
                         <span class="text-[10px] text-blue-400 font-bold">Em curso</span>
-                        <a href="declaracao_comparecimento.php?id=${p.id}&print=1" target="_blank" title="Imprimir Declaração" class="text-[10px] bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 px-2 py-0.5 rounded transition">🖨️</a>
+                        <a href="declaracao_comparecimento?id=${p.id}&print=1" target="_blank" title="Imprimir Declaração" class="text-[10px] bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 px-2 py-0.5 rounded transition">🖨️</a>
                     </div>
                 `;
             }
@@ -992,7 +992,7 @@ $fila_espera = $cont_aguardando;
             <div class="flex flex-col sm:flex-row flex-wrap gap-2.5 w-full max-w-xl">
                 ${botoesAcao}
             </div>
-            <a href="declaracao_comparecimento.php?id=${atual.id}&print=1" target="_blank" class="w-full max-w-xl bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 font-semibold py-2.5 px-3 rounded-xl text-xs transition inline-flex items-center justify-center gap-1.5 mt-3">
+            <a href="declaracao_comparecimento?id=${atual.id}&print=1" target="_blank" class="w-full max-w-xl bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 font-semibold py-2.5 px-3 rounded-xl text-xs transition inline-flex items-center justify-center gap-1.5 mt-3">
                 🖨️ Emitir Declaração de Comparecimento
             </a>
             <hr class="w-full border-gray-800 my-6">

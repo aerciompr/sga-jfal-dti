@@ -1,4 +1,4 @@
-Options -Indexes
+Options -Indexes -MultiViews
 <FilesMatch "^(config|banco|youtube|seguranca|atendimento_service|pauta_service|usuarios_service|importacao_service|tv_autorizacao)\.php$">
     Require all denied
 </FilesMatch>
@@ -8,5 +8,25 @@ Options -Indexes
 <FilesMatch "^\.">
     Require all denied
 </FilesMatch>
+
+DirectoryIndex index.php
+
 RewriteEngine On
+
+# Bloqueio de pastas internas
 RewriteRule ^(?:scripts|tests|docker|node_modules)/ - [F,L]
+
+# 1. Redirecionamento canônico 301 para requisições diretas com .php no navegador (GET/HEAD)
+RewriteCond %{REQUEST_METHOD} ^(GET|HEAD)$ [NC]
+RewriteCond %{THE_REQUEST} ^[A-Z]{3,}\s/index\.php[?\s] [NC]
+RewriteRule ^index\.php$ / [R=301,L]
+
+RewriteCond %{REQUEST_METHOD} ^(GET|HEAD)$ [NC]
+RewriteCond %{THE_REQUEST} ^[A-Z]{3,}\s/([^.?\s]+)\.php(\?[^\s]*)?\sHTTP/ [NC]
+RewriteRule ^ /%1 [R=301,L,QSA]
+
+# 2. Resolução interna de URLs amigáveis: mapeia rota sem .php para o script .php correspondente
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME}.php -f
+RewriteRule ^(.+?)/?$ $1.php [L,QSA]

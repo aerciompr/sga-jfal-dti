@@ -523,7 +523,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                             <?php endif; ?>
                                         </td>
                                         <td class="py-3 text-right flex items-center justify-end gap-1.5">
-                                            <a href="declaracao_comparecimento.php?id=<?= $item['id'] ?>&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="bg-blue-950/70 hover:bg-blue-900 border border-blue-800/60 text-blue-300 text-xs px-2.5 py-1 rounded-lg transition flex items-center gap-1 font-semibold">
+                                            <a href="declaracao_comparecimento?id=<?= $item['id'] ?>&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="bg-blue-950/70 hover:bg-blue-900 border border-blue-800/60 text-blue-300 text-xs px-2.5 py-1 rounded-lg transition flex items-center gap-1 font-semibold">
                                                 🖨️ Declaração
                                             </a>
                                             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) && (int)$item['chamadas_count'] === 0): ?>
@@ -588,7 +588,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                             <div class="text-xs font-black text-blue-400 font-mono"><?= escapar($item['senha']) ?></div>
                                             <div class="text-[9px] text-gray-500">Fim: <?= date('H:i', strtotime($item['finalizado_em'] ?: $item['chamado_em'])) ?></div>
                                         </div>
-                                        <a href="declaracao_comparecimento.php?id=<?= $item['id'] ?>&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="bg-blue-950/70 hover:bg-blue-900 border border-blue-800/60 text-blue-300 text-xs px-2.5 py-1 rounded-lg transition flex items-center gap-1 font-semibold">
+                                        <a href="declaracao_comparecimento?id=<?= $item['id'] ?>&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="bg-blue-950/70 hover:bg-blue-900 border border-blue-800/60 text-blue-300 text-xs px-2.5 py-1 rounded-lg transition flex items-center gap-1 font-semibold">
                                             🖨️ Declaração
                                         </a>
                                     </div>
