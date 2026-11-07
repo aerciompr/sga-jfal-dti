@@ -10,7 +10,6 @@
  * - Exclusão de contas (impedindo o usuário atual de deletar a própria sessão).
  */
 
-
 require_once __DIR__ . '/banco.php';
 
 // Proteção de Acesso: Apenas administradores podem gerenciar perfis e senhas
@@ -42,7 +41,7 @@ $usuarios = $stmt->fetchAll();
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gerenciamento de Perfis e Senhas - <?= escapar($sys_name) ?></title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
     <link rel="stylesheet" href="assets/tailwind.css">
@@ -52,41 +51,54 @@ $usuarios = $stmt->fetchAll();
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md shrink-0">
-                <div class="flex items-center space-x-3">
-            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Painel Principal</a>
+        <div class="flex items-center space-x-3 shrink-0">
+            <a href="dashboard.php" class="flex items-center space-x-2.5 group hover:opacity-95 transition">
+                <img src="assets/catavento-jfal.png" alt="JFAL" class="h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-105">
+                <div class="hidden sm:block leading-tight">
+                    <h1 class="text-xs font-black tracking-wide text-blue-500 uppercase leading-none group-hover:text-blue-400 transition-colors">Justiça Federal em Alagoas</h1>
+                    <p class="text-[8px] text-gray-400 font-semibold tracking-widest uppercase mt-0.5">Seção Judiciária de Alagoas</p>
+                </div>
+            </a>
+            <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
+                <?= escapar(ucfirst($_SESSION['usuario_role'])) ?>
+            </span>
+        </div>
+        <div class="flex items-center space-x-1.5 sm:space-x-2 shrink-0 flex-nowrap overflow-x-auto">
+            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Painel Principal</a>
             
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
-                <a href="recepcao.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Recepção</a>
+                <a href="recepcao.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Recepção</a>
             <?php endif; ?>
 
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
-                <a href="atendente.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Atendimento</a>
+                <a href="atendente.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Atendimento</a>
             <?php endif; ?>
 
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                <a href="gerenciar_pauta.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Pautas</a>
-                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Salas</a>
-                <a href="auditoria.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Auditoria</a>
+                <a href="gerenciar_pauta.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Pautas</a>
+                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Salas</a>
+                <a href="auditoria.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Auditoria</a>
             <?php endif; ?>
 
             <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
-                <a href="usuarios.php" class="text-xs text-white font-bold bg-indigo-900/60 border border-indigo-500 shadow-sm ring-1 ring-indigo-500/30 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
+                <a href="usuarios.php" class="sga-nav-active text-xs text-white font-bold bg-blue-900/80 border border-blue-500 shadow-sm ring-1 ring-blue-500/30 px-2.5 py-1.5 rounded-lg transition shrink-0">Perfis & Senhas</a>
             <?php endif; ?>
 
-            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
-            <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
+            <span class="text-xs text-gray-400 hidden lg:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
+            <form method="POST" action="logout.php" class="sga-logout shrink-0"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-2.5 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
 
-    <main class="flex-1 max-w-5xl w-full mx-auto p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-        <!-- Formulário Lateral para Cadastro e Edição -->
-        <div class="md:col-span-1 space-y-6">
-            <?php if ($message): ?>
-                <div role="status" aria-live="polite" class="sga-feedback p-3 rounded-lg border text-xs text-center font-medium <?= $message_type === 'success' ? 'bg-green-950/40 border-green-900/80 text-green-300' : ($message_type === 'info' ? 'bg-blue-950/40 border-blue-900/80 text-blue-300' : 'bg-red-950/40 border-red-900/80 text-red-300') ?>">
-                    <?= escapar($message) ?>
-                </div>
-            <?php endif; ?>
+    <main class="flex-1 max-w-7xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Mensagem de Confirmação em Largura Total no Topo -->
+        <?php if ($message): ?>
+            <div role="status" aria-live="polite" class="col-span-full sga-feedback p-3.5 rounded-xl border text-xs text-center font-bold shadow-sm <?= $message_type === 'success' ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-300' : ($message_type === 'info' ? 'bg-blue-950/40 border-blue-800/80 text-blue-300' : 'bg-red-950/40 border-red-800/80 text-red-300') ?>">
+                <?= escapar($message) ?>
+            </div>
+        <?php endif; ?>
 
+        <!-- Formulário Lateral para Cadastro e Edição -->
+        <div class="lg:col-span-4 space-y-6">
             <!-- Card de Formulário -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl" id="form-card">
                 <h2 id="form-title" class="text-sm font-semibold uppercase text-blue-500 tracking-wider mb-4">
@@ -142,7 +154,7 @@ $usuarios = $stmt->fetchAll();
         </div>
 
         <!-- Grade de Usuários Cadastrados -->
-        <div class="md:col-span-2 space-y-6">
+        <div class="lg:col-span-8 space-y-6">
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                     <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider flex items-center gap-2">
@@ -162,11 +174,11 @@ $usuarios = $stmt->fetchAll();
                     </div>
                 </div>
 
-                <div class="overflow-x-auto max-h-[460px] overflow-y-auto pr-1">
+                <div class="overflow-x-auto max-h-[480px] overflow-y-auto pr-1">
                     <table class="w-full text-left text-sm text-gray-300">
                         <thead>
                             <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">
-                                <th class="pb-2">ID</th>
+                                <th class="pb-2 w-12">ID</th>
                                 <th class="pb-2">Nome de Usuário</th>
                                 <th class="pb-2">Nome Completo</th>
                                 <th class="pb-2">Perfil</th>
@@ -190,9 +202,9 @@ $usuarios = $stmt->fetchAll();
                                         <?php if ($u['role'] === 'admin'): ?>
                                             <span class="bg-blue-950 text-blue-400 text-[10px] px-2.5 py-0.5 rounded-full border border-blue-900/50 uppercase font-semibold">Administrador</span>
                                         <?php elseif ($u['role'] === 'supervisor'): ?>
-                                            <span class="bg-indigo-950 text-indigo-400 text-[10px] px-2.5 py-0.5 rounded-full border border-indigo-900/50 uppercase font-semibold">Supervisor</span>
+                                            <span class="bg-slate-800 text-slate-300 text-[10px] px-2.5 py-0.5 rounded-full border border-slate-700 uppercase font-semibold">Supervisor</span>
                                         <?php elseif ($u['role'] === 'perito'): ?>
-                                            <span class="bg-purple-950 text-purple-400 text-[10px] px-2.5 py-0.5 rounded-full border border-purple-900/50 uppercase font-semibold">Perito Médico</span>
+                                            <span class="bg-blue-950/60 text-blue-300 text-[10px] px-2.5 py-0.5 rounded-full border border-blue-800/60 uppercase font-semibold">Perito Médico</span>
                                         <?php else: ?>
                                             <span class="bg-emerald-950 text-emerald-400 text-[10px] px-2.5 py-0.5 rounded-full border border-emerald-900/50 uppercase font-semibold">Recepção</span>
                                         <?php endif; ?>
@@ -236,7 +248,6 @@ $usuarios = $stmt->fetchAll();
 
     <!-- Scripts de Interação das Ações CRUD no lado do Cliente -->
     <script>
-        // Transforma o formulário de Cadastro em formulário de Edição com preenchimento prévio
         function editUser(id, username, nome, role, mustChange = 1) {
             document.getElementById('form-title').textContent = "✏️ Editar Usuário";
             document.getElementById('form-action').value = "editar";
@@ -260,44 +271,35 @@ $usuarios = $stmt->fetchAll();
             document.getElementById('form-card').scrollIntoView({ behavior: 'smooth' });
         }
 
-        // Reseta o formulário para o estado padrão de criação
         function resetForm() {
             document.getElementById('form-title').textContent = "🆕 Cadastrar Novo Usuário";
             document.getElementById('form-action').value = "cadastrar";
             document.getElementById('user-id').value = "";
-            document.getElementById('form-username').value = "";
-            document.getElementById('form-nome').value = "";
+            document.getElementById('user-form').reset();
             
             const passInput = document.getElementById('form-password');
-            passInput.value = "";
             passInput.required = true;
             passInput.placeholder = "Digite a senha";
             document.getElementById('password-help').classList.add('hidden');
-            
-            document.getElementById('form-role').value = "recepcao";
             document.getElementById('form-must-change').checked = true;
             
             document.getElementById('submit-btn').textContent = "Cadastrar Usuário";
             document.getElementById('cancel-btn').classList.add('hidden');
         }
 
-        // Filtro em tempo real no cliente para evitar rolagem excessiva
         function filtrarUsuarios() {
-            const input = document.getElementById('busca-usuarios');
-            const filter = input.value.toLowerCase();
-            const rows = document.querySelectorAll('tbody tr');
+            const termo = document.getElementById('busca-usuarios').value.toLowerCase().trim();
+            const linhas = document.querySelectorAll('tbody tr');
             
-            rows.forEach(row => {
-                const usernameCell = row.cells[1];
-                const nomeCell = row.cells[2];
-                if (usernameCell && nomeCell) {
-                    const username = usernameCell.textContent.toLowerCase();
-                    const nome = nomeCell.textContent.toLowerCase();
-                    if (username.includes(filter) || nome.includes(filter)) {
-                        row.style.display = "";
-                    } else {
-                        row.style.display = "none";
-                    }
+            linhas.forEach(linha => {
+                const username = linha.children[1].textContent.toLowerCase();
+                const nome = linha.children[2].textContent.toLowerCase();
+                const cargo = linha.children[3].textContent.toLowerCase();
+                
+                if (username.includes(termo) || nome.includes(termo) || cargo.includes(termo)) {
+                    linha.style.display = '';
+                } else {
+                    linha.style.display = 'none';
                 }
             });
         }

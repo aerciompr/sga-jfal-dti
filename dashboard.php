@@ -95,30 +95,30 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
                 <?= escapar(ucfirst($_SESSION['usuario_role'])) ?>
             </span>
         </div>
-        <div class="flex items-center space-x-3">
-            <a href="dashboard.php" class="text-xs text-white font-bold bg-blue-900/60 border border-blue-500 shadow-sm ring-1 ring-blue-500/30 px-3 py-1.5 rounded-lg transition">Painel Principal</a>
+        <div class="flex items-center space-x-1.5 sm:space-x-2 shrink-0 flex-nowrap overflow-x-auto">
+            <a href="dashboard.php" class="sga-nav-active text-xs text-white font-bold bg-[#002F6C] border border-blue-500 shadow-sm px-2.5 py-1.5 rounded-lg transition shrink-0">Painel Principal</a>
             
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
-                <a href="recepcao.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Recepção</a>
+                <a href="recepcao.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Recepção</a>
             <?php endif; ?>
 
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
-                <a href="atendente.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Atendimento</a>
+                <a href="atendente.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Atendimento</a>
             <?php endif; ?>
 
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                <a href="gerenciar_pauta.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Pautas</a>
-                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Salas</a>
-                <a href="auditoria.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Auditoria</a>
+                <a href="gerenciar_pauta.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Pautas</a>
+                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Salas</a>
+                <a href="auditoria.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Auditoria</a>
             <?php endif; ?>
 
             <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
-                <a href="usuarios.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
+                <a href="usuarios.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Perfis & Senhas</a>
             <?php endif; ?>
 
-            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
-            <a href="alterar_senha_obrigatorio.php" class="text-xs text-gray-400 hover:text-white underline">Minha senha</a>
-            <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
+            <span class="text-xs text-gray-400 hidden sm:inline shrink-0">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
+            <a href="alterar_senha_obrigatorio.php" class="text-xs text-gray-400 hover:text-white underline shrink-0">Minha senha</a>
+            <form method="POST" action="logout.php" class="sga-logout shrink-0"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-2.5 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
 
@@ -137,7 +137,7 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
                 <?php endif; ?>
             </div>
             <div class="text-[11px] text-gray-500 hidden sm:flex items-center gap-1.5 font-medium">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span> Sistema Ativo • Justiça Federal em Alagoas
+                <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> Sistema Ativo • Justiça Federal em Alagoas
             </div>
         </div>
 
@@ -151,13 +151,13 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
                 <!-- Recepção Card -->
-                <a href="recepcao.php" class="bg-gray-900 border border-gray-800 hover:border-emerald-500/50 p-6 rounded-3xl shadow-xl hover:shadow-emerald-500/5 transition transform hover:-translate-y-1 group">
-                    <div class="w-12 h-12 bg-emerald-950/50 border border-emerald-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                <a href="recepcao.php" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                    <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         📋
                     </div>
-                    <h3 class="text-base font-bold text-white group-hover:text-emerald-400 transition-colors">Recepção</h3>
+                    <h3 class="text-base font-bold text-white group-hover:text-blue-400 transition-colors">Recepção</h3>
                     <p class="text-xs text-gray-400 mt-2 leading-relaxed">Confirmar chegada de periciados e gerenciar agendamentos do dia.</p>
-                    <div class="text-xs text-emerald-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                    <div class="text-xs text-blue-400 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                         Acessar Fila <span>→</span>
                     </div>
                 </a>
@@ -165,39 +165,39 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
 
                 <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
                 <!-- Atendente (Perito) Card -->
-                <a href="atendente.php" class="bg-gray-900 border border-gray-800 hover:border-blue-500/50 p-6 rounded-3xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                <a href="atendente.php" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
                     <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         🧑‍⚕️
                     </div>
                     <h3 class="text-base font-bold text-white group-hover:text-blue-400 transition-colors">Painel do Perito</h3>
                     <p class="text-xs text-gray-400 mt-2 leading-relaxed">Chamar periciados por ordem de chegada para a sua sala de atendimento.</p>
-                    <div class="text-xs text-blue-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                    <div class="text-xs text-blue-400 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                         Chamar Paciente <span>→</span>
                     </div>
                 </a>
                 <?php endif; ?>
 
                 <!-- TV Panel Card -->
-                <a href="painel.php" target="_blank" class="bg-gray-900 border border-gray-800 hover:border-amber-500/50 p-6 rounded-3xl shadow-xl hover:shadow-amber-500/5 transition transform hover:-translate-y-1 group">
-                    <div class="w-12 h-12 bg-amber-950/50 border border-amber-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                <a href="painel.php" target="_blank" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                    <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         📺
                     </div>
-                    <h3 class="text-base font-bold text-white group-hover:text-amber-400 transition-colors">Painel da TV</h3>
+                    <h3 class="text-base font-bold text-white group-hover:text-blue-400 transition-colors">Painel da TV</h3>
                     <p class="text-xs text-gray-400 mt-2 leading-relaxed">Tela de TV da recepção para exibição das chamadas de senhas e vídeo.</p>
-                    <div class="text-xs text-amber-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                    <div class="text-xs text-blue-400 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                         Abrir TV <span>→</span>
                     </div>
                 </a>
 
                 <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
                 <!-- Gerenciar Pautas Card -->
-                <a href="gerenciar_pauta.php" class="bg-gray-900 border border-gray-800 hover:border-sky-500/50 p-6 rounded-3xl shadow-xl hover:shadow-sky-500/5 transition transform hover:-translate-y-1 group">
-                    <div class="w-12 h-12 bg-sky-950/50 border border-sky-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                <a href="gerenciar_pauta.php" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                    <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         📅
                     </div>
-                    <h3 class="text-base font-bold text-white group-hover:text-sky-400 transition-colors">Gerenciar Pautas</h3>
+                    <h3 class="text-base font-bold text-white group-hover:text-blue-400 transition-colors">Gerenciar Pautas</h3>
                     <p class="text-xs text-gray-400 mt-2 leading-relaxed">Filtrar, excluir e transferir agendamentos de forma massiva por dia ou mês inteiro.</p>
-                    <div class="text-xs text-sky-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                    <div class="text-xs text-blue-400 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                         Gerenciar Pauta <span>→</span>
                     </div>
                 </a>
@@ -205,13 +205,13 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
 
                 <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
                 <!-- Salas de Atendimento Card -->
-                <a href="salas.php" class="bg-gray-900 border border-gray-800 hover:border-pink-500/50 p-6 rounded-3xl shadow-xl hover:shadow-pink-500/5 transition transform hover:-translate-y-1 group">
-                    <div class="w-12 h-12 bg-pink-950/50 border border-pink-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                <a href="salas.php" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                    <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         🚪
                     </div>
-                    <h3 class="text-base font-bold text-white group-hover:text-pink-400 transition-colors">Salas de Atendimento</h3>
-                    <p class="text-xs text-gray-400 mt-2 leading-relaxed">Cadastrar e gerenciar salas físicas que estarão disponíveis para escolha dos peritos.</p>
-                    <div class="text-xs text-pink-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                    <h3 class="text-base font-bold text-white group-hover:text-blue-400 transition-colors">Salas de Atendimento</h3>
+                    <p class="text-xs text-gray-400 mt-2 leading-relaxed">Cadastrar e gerenciar salas físicas com monitoramento de ocupação em tempo real.</p>
+                    <div class="text-xs text-blue-400 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                         Gerenciar Salas <span>→</span>
                     </div>
                 </a>
@@ -219,13 +219,13 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
 
                 <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
                 <!-- Auditoria Card -->
-                <a href="auditoria.php" class="bg-gray-900 border border-gray-800 hover:border-teal-500/50 p-6 rounded-3xl shadow-xl hover:shadow-teal-500/5 transition transform hover:-translate-y-1 group">
-                    <div class="w-12 h-12 bg-teal-950/50 border border-teal-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                <a href="auditoria.php" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                    <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         🔎
                     </div>
-                    <h3 class="text-base font-bold text-white group-hover:text-teal-400 transition-colors">Auditoria de Chamadas</h3>
+                    <h3 class="text-base font-bold text-white group-hover:text-blue-400 transition-colors">Auditoria de Chamadas</h3>
                     <p class="text-xs text-gray-400 mt-2 leading-relaxed">Histórico completo de atendimentos, logs de chamadas, filtros por perito e exportação CSV.</p>
-                    <div class="text-xs text-teal-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                    <div class="text-xs text-blue-400 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                         Ver Auditoria <span>→</span>
                     </div>
                 </a>
@@ -233,13 +233,13 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
 
                 <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
                 <!-- Perfis e Senhas Card -->
-                <a href="usuarios.php" class="bg-gray-900 border border-gray-800 hover:border-indigo-500/50 p-6 rounded-3xl shadow-xl hover:shadow-indigo-500/5 transition transform hover:-translate-y-1 group">
-                    <div class="w-12 h-12 bg-indigo-950/50 border border-indigo-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                <a href="usuarios.php" class="sga-dashboard-card bg-gray-900 border border-gray-800 border-t-2 border-t-blue-700 hover:border-blue-500/50 p-6 rounded-2xl shadow-xl hover:shadow-blue-500/5 transition transform hover:-translate-y-1 group">
+                    <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         🔑
                     </div>
-                    <h3 class="text-base font-bold text-white group-hover:text-indigo-400 transition-colors">Perfis e Senhas</h3>
+                    <h3 class="text-base font-bold text-white group-hover:text-blue-400 transition-colors">Perfis e Senhas</h3>
                     <p class="text-xs text-gray-400 mt-2 leading-relaxed">Gerenciar contas de acesso, senhas e perfis de recepção e administrador.</p>
-                    <div class="text-xs text-indigo-500 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                    <div class="text-xs text-blue-400 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                         Gerenciar Contas <span>→</span>
                     </div>
                 </a>

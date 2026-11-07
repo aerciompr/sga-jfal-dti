@@ -103,55 +103,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <script src="tema.js"></script>
     <style>
         body {
-            font-family: 'Inter', sans-serif;
-            background: radial-gradient(circle at top right, rgba(29, 78, 216, 0.12), transparent 45%),
-                        radial-gradient(circle at bottom left, rgba(30, 41, 59, 0.3), transparent 40%),
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: radial-gradient(circle at top right, rgba(0, 47, 108, 0.12), transparent 45%),
+                        radial-gradient(circle at bottom left, rgba(15, 23, 42, 0.3), transparent 40%),
                         #030712;
+        }
+        body.theme-jf {
+            background: #f8fafc !important;
         }
     </style>
 </head>
 <body class="text-gray-100 flex flex-col items-center justify-center min-h-screen px-4 py-8 gap-6">
-    <div class="bg-slate-900/60 backdrop-blur-xl p-8 rounded-3xl border border-slate-800/80 shadow-2xl w-full max-w-md transition-all duration-300 hover:border-blue-500/30">
+    <div class="login-card bg-gray-900 p-8 sm:p-10 rounded-3xl border border-gray-800 shadow-2xl w-full max-w-md transition-all duration-300">
         <!-- Logo Oficial da JFAL -->
-        <div class="flex flex-col items-center mb-8">
-            <div class="bg-white p-4 rounded-2xl shadow-xl mb-4 transition-transform duration-300 hover:scale-[1.02] w-full flex items-center justify-center">
-                <img src="assets/logo-jfal-completo.png" alt="Justiça Federal em Alagoas" class="h-14 max-w-full object-contain">
+        <div class="flex flex-col items-center mb-6">
+            <div class="w-full flex items-center justify-center mb-4 p-2.5 bg-white rounded-2xl shadow-sm border border-slate-200">
+                <img src="assets/logo-jfal-completo.png" alt="Justiça Federal em Alagoas" class="h-12 max-w-full object-contain">
             </div>
-            <h1 class="text-xl font-bold text-center bg-gradient-to-r from-blue-400 via-indigo-200 to-blue-400 bg-clip-text text-transparent mb-1">
+            <h1 class="login-title text-base sm:text-lg font-black text-center text-blue-500 uppercase tracking-wide leading-tight">
                 <?= escapar(SYS_NAME) ?>
             </h1>
-            <p class="text-[10px] text-blue-400 uppercase tracking-widest font-semibold">Sistema de Gestão de Atendimentos</p>
+            <p class="login-subtitle text-[10px] text-gray-400 uppercase tracking-widest font-semibold mt-1">Sistema de Gestão de Atendimentos</p>
         </div>
 
-        <?php if ($aviso): ?><p role="status" class="sga-helper mb-4"><?= escapar($aviso) ?></p><?php endif; ?>
-        <?php if ($error): ?>
-            <div role="alert" class="bg-red-500/10 border border-red-500/30 text-red-200 p-3.5 rounded-xl mb-6 text-center text-xs backdrop-blur-sm animate-pulse">
-                <?= escapar($error) ?>
+        <?php if ($aviso): ?>
+            <div role="status" class="login-aviso p-3.5 rounded-xl mb-5 text-center text-xs font-semibold bg-blue-950/40 border border-blue-900/60 text-blue-300">
+                ℹ️ <?= escapar($aviso) ?>
             </div>
         <?php endif; ?>
 
-        <form method="POST" class="space-y-5"><?= csrfCampo() ?>
+        <?php if ($error): ?>
+            <div role="alert" class="login-error p-3.5 rounded-xl mb-5 text-center text-xs font-semibold bg-red-950/40 border border-red-900/60 text-red-300">
+                ⚠️ <?= escapar($error) ?>
+            </div>
+        <?php endif; ?>
+
+        <form method="POST" class="space-y-4"><?= csrfCampo() ?>
             <div>
-                <label for="login-usuario" class="block text-[11px] uppercase font-semibold text-slate-400 mb-1.5 tracking-wider">Usuário</label>
+                <label for="login-usuario" class="block text-xs uppercase font-semibold text-gray-400 mb-1.5 tracking-wider">Usuário</label>
                 <input type="text" name="username" id="login-usuario" required autofocus autocomplete="username" autocapitalize="none" spellcheck="false"
-                       class="w-full bg-slate-950/40 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 text-white placeholder-slate-600 transition-all duration-200"
+                       class="w-full bg-gray-950/60 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 text-white placeholder-gray-500 transition-all duration-200"
                        placeholder="Digite seu usuário">
             </div>
             <div>
-                <label for="login-senha" class="block text-[11px] uppercase font-semibold text-slate-400 mb-1.5 tracking-wider">Senha</label>
+                <label for="login-senha" class="block text-xs uppercase font-semibold text-gray-400 mb-1.5 tracking-wider">Senha</label>
                 <input type="password" name="password" id="login-senha" required autocomplete="current-password"
-                       class="w-full bg-slate-950/40 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 text-white placeholder-slate-600 transition-all duration-200"
+                       class="w-full bg-gray-950/60 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 text-white placeholder-gray-500 transition-all duration-200"
                        placeholder="••••••••">
             </div>
             <button type="submit"
-                    class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-3 rounded-xl text-sm transition-all duration-300 transform active:scale-[0.98] shadow-lg shadow-blue-900/20 hover:shadow-blue-500/20 mt-2">
+                    class="login-btn w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm transition-all duration-200 shadow-md shadow-blue-900/20 mt-2">
                 Acessar Painel
             </button>
         </form>
-        <p class="sga-helper mt-4">Esqueceu a senha? Solicite a redefinição ao administrador do SGA.</p>
+        <p class="login-helper text-center text-xs text-gray-500 mt-5">Esqueceu a senha? Solicite a redefinição ao administrador do SGA.</p>
     </div>
     <!-- Rodapé Discreto -->
-    <footer class="text-center text-[10px] text-slate-500 tracking-wide">
+    <footer class="text-center text-[10px] text-gray-500 tracking-wide">
         &copy; <?= date('Y') ?> - Desenvolvido pela DTI - Justiça Federal em Alagoas
     </footer>
 <script src="assets/acessibilidade.js" defer></script>

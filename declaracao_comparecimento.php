@@ -116,7 +116,7 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
             min-height: 285mm;
             max-height: 297mm;
             margin: 0 auto;
-            padding: 18mm 20mm 15mm 20mm;
+            padding: 12mm 16mm 10mm 16mm;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
             display: flex;
             flex-direction: column;
@@ -145,7 +145,7 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
             transition: opacity 0.2s;
         }
         .btn:hover { opacity: 0.9; }
-        .btn-imprimir { background: #1e3a8a; color: #fff; }
+        .btn-imprimir { background: #002F6C; color: #fff; }
         .btn-fechar { background: #475569; color: #fff; }
         
         /* Cabeçalho */
@@ -153,7 +153,7 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
             text-align: center;
             border-bottom: 2px solid #000;
             padding-bottom: 8px;
-            margin-bottom: 18px;
+            margin-bottom: 10px;
         }
         .cabecalho img {
             height: 52px;
@@ -187,7 +187,7 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
             font-weight: bold;
             text-transform: uppercase;
             letter-spacing: 1px;
-            margin: 20px 0 20px 0;
+            margin: 12px 0 12px 0;
             text-decoration: underline;
         }
 
@@ -195,8 +195,8 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
         .corpo {
             text-align: justify;
             text-indent: 40px;
-            margin-bottom: 16px;
-            font-size: 12pt;
+            margin-bottom: 12px;
+            font-size: 11pt;
             line-height: 1.55;
         }
         .destaque {
@@ -205,7 +205,7 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
         
         /* Quadro com Dados Resumidos */
         .resumo-dados {
-            margin: 16px 0;
+            margin: 10px 0;
             border: 1px solid #444;
             border-radius: 4px;
             padding: 10px 14px;
@@ -238,12 +238,12 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
 
         /* Data e Assinatura */
         .fechamento {
-            margin-top: 22px;
+            margin-top: 14px;
             text-align: right;
             font-size: 11pt;
         }
         .bloco-assinaturas {
-            margin-top: 32px;
+            margin-top: 20px;
             display: flex;
             justify-content: space-around;
             text-align: center;
@@ -263,8 +263,8 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
         .rodape {
             border-top: 1px solid #999;
             padding-top: 6px;
-            margin-top: 20px;
-            font-size: 8pt;
+            margin-top: 12px;
+            font-size: 7.5pt;
             color: #444;
             display: flex;
             justify-content: space-between;
@@ -275,30 +275,30 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
 
         @media print {
             html, body {
-                background: #fff;
-                padding: 0;
-                margin: 0;
-                height: 100%;
-                overflow: hidden;
+                background: #fff !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                height: auto !important;
+                overflow: visible !important;
             }
             .barra-acoes, .no-print {
                 display: none !important;
             }
             .folha {
-                box-shadow: none;
-                margin: 0;
-                width: 100%;
-                min-height: 100%;
-                height: 100%;
-                max-height: 297mm;
-                padding: 10mm 16mm 10mm 16mm;
-                page-break-inside: avoid;
-                page-break-after: avoid;
-                justify-content: space-between;
+                box-shadow: none !important;
+                margin: 0 !important;
+                width: 100% !important;
+                min-height: auto !important;
+                height: auto !important;
+                max-height: none !important;
+                padding: 0 !important;
+                page-break-inside: avoid !important;
+                page-break-after: avoid !important;
+                justify-content: flex-start !important;
             }
             @page {
                 size: A4 portrait;
-                margin: 0;
+                margin: 12mm 15mm 10mm 15mm;
             }
         }
     </style>

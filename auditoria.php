@@ -190,29 +190,41 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md shrink-0">
-                <div class="flex items-center space-x-3">
-            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Painel Principal</a>
+        <div class="flex items-center space-x-3 shrink-0">
+            <a href="dashboard.php" class="flex items-center space-x-2.5 group hover:opacity-95 transition">
+                <img src="assets/catavento-jfal.png" alt="JFAL" class="h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-105">
+                <div class="hidden sm:block leading-tight">
+                    <h1 class="text-xs font-black tracking-wide text-blue-500 uppercase leading-none group-hover:text-blue-400 transition-colors">Justiça Federal em Alagoas</h1>
+                    <p class="text-[8px] text-gray-400 font-semibold tracking-widest uppercase mt-0.5">Seção Judiciária de Alagoas</p>
+                </div>
+            </a>
+            <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
+                <?= escapar(ucfirst($_SESSION['usuario_role'])) ?>
+            </span>
+        </div>
+        <div class="flex items-center space-x-1.5 sm:space-x-2 shrink-0 flex-nowrap overflow-x-auto">
+            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Painel Principal</a>
             
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
-                <a href="recepcao.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Recepção</a>
+                <a href="recepcao.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Recepção</a>
             <?php endif; ?>
 
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
-                <a href="atendente.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Atendimento</a>
+                <a href="atendente.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Atendimento</a>
             <?php endif; ?>
 
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                <a href="gerenciar_pauta.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Pautas</a>
-                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Salas</a>
-                <a href="auditoria.php" class="text-xs text-white font-bold bg-teal-900/60 border border-teal-500 shadow-sm ring-1 ring-teal-500/30 px-3 py-1.5 rounded-lg transition">Auditoria</a>
+                <a href="gerenciar_pauta.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Pautas</a>
+                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Salas</a>
+                <a href="auditoria.php" class="sga-nav-active text-xs text-white font-bold bg-[#002F6C] border border-blue-500 shadow-sm px-2.5 py-1.5 rounded-lg transition shrink-0">Auditoria</a>
             <?php endif; ?>
 
             <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
-                <a href="usuarios.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
+                <a href="usuarios.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Perfis & Senhas</a>
             <?php endif; ?>
 
-            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
-            <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
+            <span class="text-xs text-gray-400 hidden sm:inline shrink-0">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
+            <form method="POST" action="logout.php" class="sga-logout shrink-0"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-2.5 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
 

@@ -1,59 +1,61 @@
 /**
-* SISTEMA DE TEMAS DE CORES - JFAL
-* tema.js: Injeta e gerencia as cores oficiais do manual da Justiça Federal ou o tema escuro original.
-*/
+ * SISTEMA DE TEMAS DE CORES INSTITUCIONAL - JFAL
+ * tema.js: Injeta e gerencia as cores oficiais do manual da Justiça Federal ou o tema escuro original.
+ */
 
-// 1. Estilos CSS de Override para o Tema Claro (Light Mode) da Justiça Federal
-// De acordo com o Manual de Identidade Visual da JF (Página 42):
-// - Azul JF: #002F6C (usado em botões, preenchimentos e bordas)
-// - Azul JF Light: #003a85 (usado em links e títulos)
-// - Verde JF: #007A33 (usado em botões de sucesso)
-// - Verde JF Light: #00913d (usado em textos verdes)
-// - Cinza JF: #97999F (Padrão de apoio institucional)
+// Estilos CSS de Override para o Tema da Justiça Federal (Light Mode) e regras de alto contraste
 const themeStyles = `
-    /* Estilos de Override para o Tema da Justiça Federal (Light Mode) */
+    /* Variáveis Globais para o Tema Institucional da Justiça Federal */
     body.theme-jf {
-        background-color: #f3f4f6 !important;
-        color: #1e293b !important;
+        background-color: #f8fafc !important;
+        color: #0f172a !important;
         --color-jf-blue: #002F6C;
         --color-jf-blue-hover: #001f47;
         --color-jf-blue-light: #003a85;
         --color-jf-green: #007A33;
         --color-jf-green-hover: #005c26;
-        --color-jf-green-light: #00913d;
-        --color-jf-gray: #97999F;
+        --color-jf-green-light: #166534;
+        --color-jf-gray: #64748b;
     }
 
     /* Estrutura de Cores de Fundo (Light Mode) */
-    body.theme-jf .bg-gray-950 { background-color: #f3f4f6 !important; }
+    body.theme-jf .bg-gray-950 { background-color: #f8fafc !important; }
     body.theme-jf .bg-gray-900 { background-color: #ffffff !important; }
-    body.theme-jf .bg-gray-850 { background-color: #f8fafc !important; }
+    body.theme-jf .bg-gray-850 { background-color: #f1f5f9 !important; }
     body.theme-jf .bg-gray-800 { background-color: #f1f5f9 !important; }
     body.theme-jf .bg-gray-950\\/30 { background-color: #f1f5f9 !important; }
+    body.theme-jf .bg-gray-950\\/40 { background-color: #f1f5f9 !important; }
     body.theme-jf .bg-gray-950\\/50 { background-color: #ffffff !important; }
     body.theme-jf .bg-gray-900\\/50 { background-color: #f8fafc !important; }
+    body.theme-jf .bg-slate-900 { background-color: #ffffff !important; }
+    body.theme-jf .bg-slate-900\\/60 { background-color: #ffffff !important; }
+    body.theme-jf .bg-slate-950\\/40 { background-color: #ffffff !important; }
 
-    /* Bordas */
+    /* Bordas Corporativas */
     body.theme-jf .border-gray-900 { border-color: #cbd5e1 !important; }
     body.theme-jf .border-gray-850 { border-color: #e2e8f0 !important; }
     body.theme-jf .border-gray-800 { border-color: #cbd5e1 !important; }
     body.theme-jf .border-gray-750 { border-color: #cbd5e1 !important; }
     body.theme-jf .border-gray-700 { border-color: #cbd5e1 !important; }
+    body.theme-jf .border-slate-800 { border-color: #cbd5e1 !important; }
+    body.theme-jf .border-slate-800\\/80 { border-color: #cbd5e1 !important; }
 
-    /* Cores de Texto (Light Mode) */
-    body.theme-jf .text-gray-100 { color: #1e293b !important; }
-    body.theme-jf .text-gray-200 { color: #334155 !important; }
-    body.theme-jf .text-gray-300 { color: #475569 !important; }
-    body.theme-jf .text-gray-400 { color: #64748b !important; }
+    /* Cores de Texto de Alto Contraste (WCAG AA / AAA) */
+    body.theme-jf .text-gray-100 { color: #0f172a !important; }
+    body.theme-jf .text-gray-200 { color: #1e293b !important; }
+    body.theme-jf .text-gray-300 { color: #334155 !important; }
+    body.theme-jf .text-gray-400 { color: #475569 !important; }
     body.theme-jf .text-white { color: #0f172a !important; }
     body.theme-jf .text-gray-500 { color: #475569 !important; }
+    body.theme-jf .text-slate-400 { color: #334155 !important; }
+    body.theme-jf .text-slate-500 { color: #475569 !important; }
 
     /* Inputs e Controles */
     body.theme-jf input,
     body.theme-jf select,
     body.theme-jf textarea {
         background-color: #ffffff !important;
-        color: #1e293b !important;
+        color: #0f172a !important;
         border-color: #cbd5e1 !important;
     }
     body.theme-jf input::placeholder {
@@ -62,196 +64,178 @@ const themeStyles = `
     body.theme-jf input:focus,
     body.theme-jf select:focus {
         border-color: var(--color-jf-blue) !important;
+        box-shadow: 0 0 0 1px var(--color-jf-blue) !important;
         outline: none !important;
     }
 
     /* Tabelas e Hover de linhas */
-    body.theme-jf .hover\\:bg-gray-900\\/50:hover { background-color: #f1f5f9 !important; }
+    body.theme-jf .hover\\:bg-gray-900\\/50:hover,
+    body.theme-jf .hover\\:bg-gray-800\\/30:hover,
+    body.theme-jf .hover\\:bg-gray-800\\/50:hover { background-color: #f1f5f9 !important; }
     body.theme-jf tr:nth-child(even) { background-color: #f8fafc; }
     body.theme-jf thead tr.border-b { border-color: #cbd5e1 !important; }
-    body.theme-jf thead th { color: #475569 !important; }
+    body.theme-jf thead th { color: #334155 !important; background-color: #f1f5f9 !important; }
 
     /* Checkboxes */
     body.theme-jf input[type="checkbox"] {
         background-color: #ffffff !important;
-        border-color: #cbd5e1 !important;
+        border-color: #94a3b8 !important;
     }
     body.theme-jf input[type="checkbox"]:checked {
         background-color: var(--color-jf-blue) !important;
         border-color: var(--color-jf-blue) !important;
     }
 
-    /* Correções de Títulos da Recepção (Remoção do Amarelo feio no tema JF) */
-    body.theme-jf .text-amber-400 { color: var(--color-jf-blue) !important; }
-    body.theme-jf .text-amber-500 { color: var(--color-jf-blue) !important; }
-    body.theme-jf .text-emerald-500 { color: var(--color-jf-green) !important; }
-
-    /* Crachá de contagem superior */
-    body.theme-jf .bg-amber-950 {
-        background-color: #e0f2fe !important;
-        color: var(--color-jf-blue-light) !important;
+    /* Títulos e Destaques Institucionais */
+    body.theme-jf .text-blue-500,
+    body.theme-jf .text-blue-400 {
+        color: var(--color-jf-blue) !important;
+    }
+    body.theme-jf .text-amber-400,
+    body.theme-jf .text-amber-500 {
+        color: #92400e !important;
+    }
+    body.theme-jf .text-emerald-500,
+    body.theme-jf .text-emerald-400 {
+        color: #166534 !important;
     }
 
-    /* Ajustes Sóbrios para Botões de Ação em Lote (Sem amarelo/laranja) */
-    /* 1. Confirmar Selecionados (Verde JF) */
-    body.theme-jf .bg-emerald-950\\/40 {
+    /* Crachá e Badges Semânticos */
+    body.theme-jf .bg-amber-950,
+    body.theme-jf .bg-amber-950\\/40,
+    body.theme-jf .bg-amber-950\\/60 {
+        background-color: #fef3c7 !important;
+        border-color: #fde68a !important;
+        color: #92400e !important;
+    }
+    body.theme-jf .bg-emerald-950,
+    body.theme-jf .bg-emerald-950\\/40,
+    body.theme-jf .bg-emerald-950\\/60 {
         background-color: #dcfce7 !important;
         border-color: #86efac !important;
         color: #166534 !important;
-        opacity: 1 !important;
     }
-    body.theme-jf .bg-emerald-950\\/40:hover:not(:disabled) {
-        background-color: #bbf7d0 !important;
+    body.theme-jf .bg-blue-950,
+    body.theme-jf .bg-blue-950\\/40,
+    body.theme-jf .bg-blue-950\\/50 {
+        background-color: #eff6ff !important;
+        border-color: #bfdbfe !important;
+        color: #1e40af !important;
     }
-    
-    /* 2. Excluir Selecionados (Vermelho de Perigo) */
+    body.theme-jf .bg-red-950,
     body.theme-jf .bg-red-950\\/40 {
         background-color: #fee2e2 !important;
         border-color: #fca5a5 !important;
         color: #991b1b !important;
-        opacity: 1 !important;
-    }
-    body.theme-jf .bg-red-950\\/40:hover:not(:disabled) {
-        background-color: #fecaca !important;
-    }
-    
-    /* 3. Limpar Pauta (Substituído por Cinza Corporativo Sóbrio) */
-    body.theme-jf .bg-orange-950\\/40 {
-        background-color: #f1f5f9 !important;
-        border-color: #cbd5e1 !important;
-        color: #334155 !important;
-        opacity: 1 !important;
-    }
-    body.theme-jf .bg-orange-950\\/40:hover:not(:disabled) {
-        background-color: #e2e8f0 !important;
-    }
-    
-    /* 4. Voltar Selecionados para Agendados (Substituído por Azul JF Suave) */
-    body.theme-jf .bg-amber-950\\/40 {
-        background-color: #e0f2fe !important;
-        border-color: #bae6fd !important;
-        color: var(--color-jf-blue-light) !important;
-        opacity: 1 !important;
-    }
-    body.theme-jf .bg-amber-950\\/40:hover:not(:disabled) {
-        background-color: #bae6fd !important;
     }
 
-    /* Overrides de classes de destaque azul do Tailwind */
-    body.theme-jf .bg-blue-600 { background-color: var(--color-jf-blue) !important; color: #ffffff !important; }
-    body.theme-jf .hover\\:bg-blue-700:hover { background-color: var(--color-jf-blue-hover) !important; }
-    body.theme-jf .text-blue-500 { color: var(--color-jf-blue-light) !important; }
-    body.theme-jf .text-blue-400 { color: var(--color-jf-blue-light) !important; }
-    body.theme-jf .bg-blue-950\\/30 { background-color: #e0f2fe !important; }
-    body.theme-jf .bg-blue-950\\/40 { background-color: #bae6fd !important; }
-    body.theme-jf .bg-blue-950 { background-color: #f0f9ff !important; }
-    body.theme-jf .border-blue-900\\/60 { border-color: #bae6fd !important; }
-    body.theme-jf .border-blue-900\\/50 { border-color: #bae6fd !important; }
-    body.theme-jf .border-blue-900 { border-color: var(--color-jf-blue) !important; }
-
-    /* Overrides de classes de destaque verde (emerald) do Tailwind */
-    body.theme-jf .bg-emerald-600 { background-color: var(--color-jf-green) !important; color: #ffffff !important; }
-    body.theme-jf .hover\\:bg-emerald-700:hover { background-color: var(--color-jf-green-hover) !important; }
-    body.theme-jf .text-emerald-400 { color: var(--color-jf-green-light) !important; }
-    body.theme-jf .bg-emerald-950\\/40 { background-color: #dcfce7 !important; }
-    body.theme-jf .border-emerald-900\\/60 { border-color: #bbf7d0 !important; }
-
-    /* Overrides de botões secundários do cabeçalho (indigo, pink) */
-    body.theme-jf .text-indigo-400 { color: var(--color-jf-blue-light) !important; }
-    body.theme-jf .border-indigo-900\\/60 { border-color: #cbd5e1 !important; }
-    body.theme-jf .bg-indigo-950\\/30 { background-color: #f1f5f9 !important; }
-
-    body.theme-jf .text-pink-400 { color: var(--color-jf-green-light) !important; }
-    body.theme-jf .border-pink-900\\/60 { border-color: #cbd5e1 !important; }
-    body.theme-jf .bg-pink-950\\/30 { background-color: #f1f5f9 !important; }
-
-    /* --- OVERRIDES DA DASHBOARD (dashboard.php) --- */
-    /* 1. Cards de estilo Verde (Recepção e Salas) -> Verde JF */
-    body.theme-jf .hover\\:border-emerald-500\\/50:hover,
-    body.theme-jf .hover\\:border-pink-500\\/50:hover {
-        border-color: var(--color-jf-green) !important;
+    /* Botões Primários e Secundários */
+    body.theme-jf .bg-blue-600 {
+        background-color: var(--color-jf-blue) !important;
+        color: #ffffff !important;
     }
-    body.theme-jf .hover\\:shadow-emerald-500\\/5:hover,
-    body.theme-jf .hover\\:shadow-pink-500\\/5:hover {
-        box-shadow: 0 10px 15px -3px rgba(0, 122, 51, 0.1) !important;
+    body.theme-jf .hover\\:bg-blue-700:hover {
+        background-color: var(--color-jf-blue-hover) !important;
     }
-    body.theme-jf .bg-emerald-950\\/50,
-    body.theme-jf .bg-pink-950\\/50 {
-        background-color: #f0fdf4 !important;
+    body.theme-jf .bg-emerald-600 {
+        background-color: var(--color-jf-green) !important;
+        color: #ffffff !important;
     }
-    body.theme-jf .border-emerald-900\\/40,
-    body.theme-jf .border-pink-900\\/40 {
-        border-color: #bbf7d0 !important;
-    }
-    body.theme-jf .group:hover .group-hover\\:text-emerald-400,
-    body.theme-jf .group:hover .group-hover\\:text-pink-400 {
-        color: var(--color-jf-green-light) !important;
-    }
-    body.theme-jf .text-emerald-500,
-    body.theme-jf .text-pink-500 {
-        color: var(--color-jf-green-light) !important;
+    body.theme-jf .hover\\:bg-emerald-700:hover,
+    body.theme-jf .hover\\:bg-emerald-500:hover {
+        background-color: var(--color-jf-green-hover) !important;
     }
 
-    /* 2. Cards de estilo Azul (Painel do Perito e Perfis) -> Azul JF */
-    body.theme-jf .hover\\:border-blue-500\\/50:hover,
-    body.theme-jf .hover\\:border-indigo-500\\/50:hover {
-        border-color: var(--color-jf-blue) !important;
+    /* Menu Superior Unificado */
+    .sga-nav-active {
+        background-color: #002F6C !important;
+        color: #ffffff !important;
+        border-color: #002F6C !important;
+        font-weight: 700 !important;
     }
-    body.theme-jf .hover\\:shadow-blue-500\\/5:hover,
-    body.theme-jf .hover\\:shadow-indigo-500\\/5:hover {
+
+    /* Cards do Dashboard no Tema JF */
+    body.theme-jf .sga-dashboard-card {
+        background-color: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        border-top: 3px solid #002F6C !important;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06) !important;
+    }
+    body.theme-jf .sga-dashboard-card:hover {
+        border-color: #002F6C !important;
+        border-top-color: #002F6C !important;
         box-shadow: 0 10px 15px -3px rgba(0, 47, 108, 0.1) !important;
     }
-    body.theme-jf .bg-blue-950\\/50,
-    body.theme-jf .bg-indigo-950\\/50 {
-        background-color: #f0f9ff !important;
+    body.theme-jf .sga-dashboard-card .sga-icon-box {
+        background-color: #eff6ff !important;
+        border: 1px solid #bfdbfe !important;
+        color: #002F6C !important;
     }
-    body.theme-jf .border-blue-900\\/40,
-    body.theme-jf .border-indigo-900\\/40 {
-        border-color: #bae6fd !important;
+    body.theme-jf .sga-dashboard-card h3 {
+        color: #0f172a !important;
     }
-    body.theme-jf .group:hover .group-hover\\:text-blue-400,
-    body.theme-jf .group:hover .group-hover\\:text-indigo-400 {
-        color: var(--color-jf-blue-light) !important;
+    body.theme-jf .sga-dashboard-card p {
+        color: #475569 !important;
     }
-
-    /* 3. Cards secundários (TV e Auditoria) -> Cinza JF */
-    body.theme-jf .hover\\:border-amber-500\\/50:hover,
-    body.theme-jf .hover\\:border-teal-500\\/50:hover {
-        border-color: var(--color-jf-gray) !important;
-    }
-    body.theme-jf .hover\\:shadow-amber-500\\/5:hover,
-    body.theme-jf .hover\\:shadow-teal-500\\/5:hover {
-        box-shadow: 0 10px 15px -3px rgba(151, 153, 159, 0.1) !important;
-    }
-    body.theme-jf .bg-amber-950\\/50,
-    body.theme-jf .bg-teal-950\\/50 {
-        background-color: #f8fafc !important;
-    }
-    body.theme-jf .border-amber-900\\/40,
-    body.theme-jf .border-teal-900\\/40 {
-        border-color: #cbd5e1 !important;
-    }
-    body.theme-jf .group:hover .group-hover\\:text-amber-400,
-    body.theme-jf .group:hover .group-hover\\:text-teal-400 {
-        color: var(--color-jf-gray) !important;
-    }
-    body.theme-jf .text-amber-500,
-    body.theme-jf .text-teal-500 {
-        color: var(--color-jf-gray) !important;
-    }
-    
-    #logo-menu {
-        filter: brightness(0) invert(1) !important;
-    }
-    body.theme-jf #logo-menu {
-        filter: none !important;
+    body.theme-jf .sga-dashboard-card .sga-card-link {
+        color: #002F6C !important;
+        font-weight: 700 !important;
     }
 
-    /* --- AJUSTES DO PAINEL DA TV (painel.php) NO TEMA JF --- */
-    body.theme-jf.sga-tv header {
+    /* Abas do Dashboard no Tema JF */
+    body.theme-jf .tab-btn.tab-ativo {
+        background-color: #002F6C !important;
+        color: #ffffff !important;
+        border-color: #002F6C !important;
+    }
+    body.theme-jf .tab-btn:not(.tab-ativo) {
         background-color: #ffffff !important;
+        color: #475569 !important;
         border-color: #cbd5e1 !important;
     }
+
+    /* Tela de Login (index.php) no Tema JF */
+    body.theme-jf .login-card {
+        background-color: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        box-shadow: 0 20px 25px -5px rgba(0, 47, 108, 0.08), 0 8px 10px -6px rgba(0, 47, 108, 0.04) !important;
+    }
+    body.theme-jf .login-title {
+        color: #002F6C !important;
+    }
+    body.theme-jf .login-subtitle {
+        color: #475569 !important;
+    }
+    body.theme-jf .login-aviso {
+        background-color: #eff6ff !important;
+        border: 1px solid #bfdbfe !important;
+        color: #1e40af !important;
+    }
+    body.theme-jf .login-error {
+        background-color: #fef2f2 !important;
+        border: 1px solid #fca5a5 !important;
+        color: #991b1b !important;
+    }
+    body.theme-jf .login-btn {
+        background-color: #002F6C !important;
+        background-image: none !important;
+        color: #ffffff !important;
+    }
+    body.theme-jf .login-btn:hover {
+        background-color: #001f47 !important;
+    }
+    body.theme-jf .login-helper {
+        color: #475569 !important;
+    }
+
+    /* Eliminação do piscar (animate-pulse) em alertas e status */
+    .animate-pulse,
+    body.theme-jf .animate-pulse {
+        animation: none !important;
+    }
+
+    /* TV Panel no Tema JF */
+    body.theme-jf.sga-tv header,
     body.theme-jf.sga-tv footer {
         background-color: #ffffff !important;
         border-color: #cbd5e1 !important;
@@ -267,12 +251,10 @@ const themeStyles = `
         border-color: #cbd5e1 !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
     }
-    body.theme-jf.sga-tv #rodape-senhas > div.border-blue-500\/70,
     body.theme-jf.sga-tv #rodape-senhas > div:first-child:not(:empty) {
         background-color: #eff6ff !important;
         border-color: #002F6C !important;
         border-width: 2px !important;
-        box-shadow: 0 4px 6px -1px rgba(0, 47, 108, 0.15) !important;
     }
     body.theme-jf.sga-tv #rodape-senhas .text-white {
         color: #0f172a !important;
@@ -282,16 +264,6 @@ const themeStyles = `
         color: #007A33 !important;
         font-weight: 700 !important;
     }
-    body.theme-jf.sga-tv #rodape-senhas .text-gray-600 {
-        color: #94a3b8 !important;
-        font-weight: 600 !important;
-    }
-    body.theme-jf.sga-tv #rodape-senhas .bg-gray-950\/20 {
-        background-color: #f1f5f9 !important;
-        border-color: #e2e8f0 !important;
-    }
-
-    /* Modal de Chamada da TV no tema JF */
     body.theme-jf.sga-tv #chamada-overlay .bg-gray-900 {
         background-color: #ffffff !important;
         border-color: #002F6C !important;
@@ -300,31 +272,12 @@ const themeStyles = `
     body.theme-jf.sga-tv #chamada-overlay #overlay-nome {
         color: #002F6C !important;
     }
-    body.theme-jf.sga-tv #chamada-overlay .bg-gray-800\/50 {
+    body.theme-jf.sga-tv #chamada-overlay .bg-gray-800\\/50 {
         background-color: #f0fdf4 !important;
         border-color: #86efac !important;
     }
     body.theme-jf.sga-tv #chamada-overlay #overlay-sala {
         color: #007A33 !important;
-    }
-
-    /* Abas do Dashboard no tema JF */
-    body.theme-jf .tab-btn.tab-ativo {
-        background-color: var(--color-jf-blue) !important;
-        color: #ffffff !important;
-        border-color: var(--color-jf-blue) !important;
-    }
-    body.theme-jf .tab-btn:not(.tab-ativo) {
-        background-color: #ffffff !important;
-        color: #475569 !important;
-        border-color: #cbd5e1 !important;
-    }
-
-    /* Regras da Fila (Widget Sidebar) no tema JF */
-    body.theme-jf #grupo-criterio-fila,
-    body.theme-jf #grupo-prioridade-fila {
-        background-color: #f1f5f9 !important;
-        border-color: #cbd5e1 !important;
     }
 `;
 
@@ -369,7 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.id = 'btn-toggle-theme';
-        btn.className = 'text-xs border px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 font-semibold';
+        btn.className = 'text-xs border px-2.5 py-1.5 rounded-lg transition flex items-center gap-1.5 font-semibold shrink-0';
         
         if (currentTheme === 'modern') {
             btn.innerHTML = '🎨 Cores JF';
@@ -377,7 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.title = 'Mudar para o padrão claro institucional da Justiça Federal';
         } else {
             btn.innerHTML = '🎨 Tema Original';
-            btn.className += ' text-gray-750 border-gray-300 bg-gray-100 hover:bg-gray-200 shadow-sm';
+            btn.className += ' text-gray-700 border-gray-300 bg-white hover:bg-gray-100 shadow-sm';
             btn.title = 'Mudar para o padrão moderno escuro';
         }
         
@@ -390,7 +343,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         if (!headerRight.querySelector('a[href="ajuda.php"]') && location.pathname.split('/').pop() !== 'ajuda.php') {
-            const ajuda = document.createElement('a'); ajuda.href = 'ajuda.php'; ajuda.textContent = 'Ajuda'; ajuda.className = 'sga-neutral'; headerRight.appendChild(ajuda);
+            const ajuda = document.createElement('a');
+            ajuda.href = 'ajuda.php';
+            ajuda.textContent = 'Ajuda';
+            ajuda.className = 'text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0';
+            headerRight.appendChild(ajuda);
         }
         // Insere o botão de alternar tema como primeiro item do cabeçalho direito
         headerRight.insertBefore(btn, headerRight.firstChild);

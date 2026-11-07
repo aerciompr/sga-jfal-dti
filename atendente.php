@@ -194,46 +194,36 @@ $fila_espera = $cont_aguardando;
     <div id="toast-container-perito" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none *:pointer-events-auto"></div>
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md shrink-0">
-        <div class="flex items-center space-x-3">
-            <a href="dashboard.php" class="flex items-center space-x-3 group hover:opacity-95 transition">
-                <img src="assets/catavento-jfal.png" alt="JFAL" class="h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-105">
-                <div class="hidden sm:block">
-                    <h1 class="text-xs font-black tracking-wide text-blue-500 uppercase leading-none group-hover:text-blue-400 transition-colors">Justiça Federal em Alagoas</h1>
-                    <p class="text-[8px] text-gray-400 font-semibold tracking-widest uppercase mt-0.5">Seção Judiciária de Alagoas</p>
-                </div>
-            </a>
-            <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
-                <?= escapar(ucfirst($user_role)) ?>
-            </span>
-        </div>
-        <div class="flex items-center space-x-3">
-            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Painel Principal</a>
+        <div class="flex items-center space-x-1.5 sm:space-x-2 shrink-0 flex-nowrap overflow-x-auto">
+            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Painel Principal</a>
             
-            <?php if (in_array($user_role, ['admin', 'supervisor', 'recepcao'])): ?>
-                <a href="recepcao.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Recepção</a>
+            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
+                <a href="recepcao.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Recepção</a>
             <?php endif; ?>
 
-            <?php if (in_array($user_role, ['admin', 'perito'])): ?>
-                <a href="atendente.php" class="text-xs text-white font-bold bg-blue-900/60 border border-blue-500 shadow-sm ring-1 ring-blue-500/30 px-3 py-1.5 rounded-lg transition">Atendimento</a>
+            <a href="atendente.php" class="sga-nav-active text-xs text-white font-bold bg-[#002F6C] border border-blue-500 shadow-sm px-2.5 py-1.5 rounded-lg transition shrink-0">Atendimento</a>
+
+            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
+                <a href="gerenciar_pauta.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Pautas</a>
+                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Salas</a>
+                <a href="auditoria.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Auditoria</a>
             <?php endif; ?>
 
-            <?php if (in_array($user_role, ['admin', 'supervisor'])): ?>
-                <a href="gerenciar_pauta.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Pautas</a>
-                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Salas</a>
-                <a href="auditoria.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Auditoria</a>
+            <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
+                <a href="usuarios.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Perfis & Senhas</a>
             <?php endif; ?>
 
-            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($user_name) ?></strong></span>
-            <button id="btn-toggle-som-perito" type="button" class="text-xs px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-900 text-emerald-400 hover:bg-gray-800 transition flex items-center gap-1.5" title="Ativar ou silenciar alerta sonoro na chegada de periciados">
-                <span id="icone-som">🔊</span> <span id="texto-som">Som Ativo</span>
+            <span class="text-xs text-gray-400 hidden sm:inline shrink-0">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
+            <button type="button" id="btn-audio-perito" onclick="toggleAudioPerito()" class="text-xs text-blue-400 hover:text-blue-300 border border-blue-900/60 bg-blue-950/40 px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 shrink-0">
+                <span id="icone-audio-perito">🔊</span> <span id="texto-audio-perito">Som Ativo</span>
             </button>
-            <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
+            <form method="POST" action="logout.php" class="sga-logout shrink-0"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-2.5 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
 
     <main class="flex-1 max-w-6xl w-full mx-auto p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
         <!-- Controles Lateral (Identificação, Trava de Sala e Contadores) -->
-        <div class="space-y-6">
+        <div class="space-y-6 order-2 md:order-1">
             <!-- Seleção de Nome do Perito -->
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
                 <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider mb-4">Identificação do Perito</h2>
@@ -331,7 +321,7 @@ $fila_espera = $cont_aguardando;
                         <span>⚙️</span> Regras da Sua Fila
                     </h2>
                     <span id="criterio-aviso-sync" class="text-[10px] text-emerald-400 flex items-center gap-1 font-semibold">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span> Sincronizada
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span> Sincronizada
                     </span>
                 </div>
                 
@@ -502,7 +492,7 @@ $fila_espera = $cont_aguardando;
                     </div>
                 </div>
 
-                <div class="overflow-x-auto max-h-[350px] overflow-y-auto">
+                <div class="overflow-x-auto sga-touch-scroll max-h-[420px] overflow-y-auto">
                     <table class="w-full text-left text-sm text-gray-300">
                         <thead>
                             <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">

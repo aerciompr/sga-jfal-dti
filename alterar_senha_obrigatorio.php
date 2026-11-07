@@ -6,7 +6,6 @@
  * usuário crie uma senha segura diferente do CPF/credencial inicial padrão.
  */
 
-
 require_once __DIR__ . '/banco.php';
 
 // Segurança: Se o usuário sequer está logado, redireciona para a página de login
@@ -129,18 +128,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet" href="assets/usabilidade.css">
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex items-center justify-center p-4">
-    <div class="max-w-md w-full bg-gray-900 rounded-2xl border border-gray-800 p-8 shadow-2xl relative overflow-hidden">
+    <div class="login-card max-w-md w-full bg-gray-900 rounded-3xl border border-gray-800 p-8 sm:p-10 shadow-2xl relative overflow-hidden">
 
         <!-- Header da Caixa de Login -->
         <div class="text-center mb-6 flex flex-col items-center">
-            <div class="bg-white/95 p-2 rounded-xl shadow-md border border-slate-200 mb-4 transition-transform duration-300 hover:scale-105 inline-block">
+            <div class="w-full flex items-center justify-center mb-4 p-2 bg-white rounded-2xl shadow-sm border border-slate-200">
                 <img src="assets/logo-jfal-completo.png" alt="Justiça Federal" class="h-10 object-contain">
             </div>
-            <h1 class="text-lg font-black text-blue-500 uppercase leading-none">Segurança da Informação</h1>
-            <p class="text-[9px] text-gray-400 uppercase tracking-widest font-semibold mt-1">Alteração de Senha Obrigatória</p>
+            <h1 class="login-title text-base sm:text-lg font-black text-blue-500 uppercase leading-none">Segurança da Informação</h1>
+            <p class="login-subtitle text-[9px] text-gray-400 uppercase tracking-widest font-semibold mt-1">Alteração de Senha Obrigatória</p>
         </div>
 
-        <div class="bg-blue-950/30 border border-blue-900/60 rounded-xl p-4 mb-6">
+        <div class="login-aviso bg-blue-950/40 border border-blue-900/60 rounded-xl p-4 mb-5">
             <p class="text-xs text-blue-300 leading-relaxed">
                 Olá, <strong class="text-white"><?= escapar($username) ?></strong>. Identificamos que este é o seu primeiro acesso ou que você está utilizando a credencial padrão do sistema.
                 Para garantir a integridade dos atendimentos, você precisa definir uma senha pessoal segura.
@@ -149,13 +148,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <!-- Alertas de Sucesso / Erro -->
         <?php if (!empty($error_msg)): ?>
-            <div class="p-3 bg-red-950/45 border border-red-900/60 text-red-400 rounded-lg text-xs mb-4 font-semibold">
+            <div class="login-error p-3.5 bg-red-950/40 border border-red-900/60 text-red-300 rounded-xl text-xs mb-4 font-semibold text-center">
                 ⚠️ <?= escapar($error_msg) ?>
             </div>
         <?php endif; ?>
 
         <?php if (!empty($success_msg)): ?>
-            <div class="p-3 bg-emerald-950/45 border border-emerald-900/60 text-emerald-400 rounded-lg text-xs mb-4 font-semibold">
+            <div class="p-3.5 bg-emerald-950/40 border border-emerald-900/60 text-emerald-300 rounded-xl text-xs mb-4 font-semibold text-center">
                 ✔️ <?= $success_msg ?>
             </div>
         <?php endif; ?>
@@ -165,20 +164,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php if (!$trocaObrigatoria): ?>
             <div>
                 <label class="block text-xs text-gray-400 uppercase font-semibold mb-1">Senha Atual</label>
-                <input type="password" name="senha_atual" required autocomplete="current-password" placeholder="Digite sua senha atual" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                <input type="password" name="senha_atual" required autocomplete="current-password" placeholder="Digite sua senha atual" class="w-full bg-gray-950/60 border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
             </div>
             <?php endif; ?>
             <div>
                 <label class="block text-xs text-gray-400 uppercase font-semibold mb-1">Nova Senha</label>
-                <input type="password" name="nova_senha" required minlength="12" maxlength="72" autocomplete="new-password" placeholder="Mínimo 12 caracteres" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                <input type="password" name="nova_senha" required minlength="12" maxlength="72" autocomplete="new-password" placeholder="Mínimo 12 caracteres" class="w-full bg-gray-950/60 border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
             </div>
 
             <div>
                 <label class="block text-xs text-gray-400 uppercase font-semibold mb-1">Confirme a Nova Senha</label>
-                <input type="password" name="confirma_senha" required placeholder="Repita a nova senha" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                <input type="password" name="confirma_senha" required placeholder="Repita a nova senha" class="w-full bg-gray-950/60 border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
             </div>
 
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-750 text-white font-bold text-sm py-2.5 rounded-lg shadow transition">
+            <button type="submit" class="login-btn w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-3 rounded-xl shadow-md transition">
                 Salvar nova senha
             </button>
         </form>

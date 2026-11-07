@@ -113,29 +113,41 @@ try {
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md shrink-0">
-                <div class="flex items-center space-x-3">
-            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Painel Principal</a>
+        <div class="flex items-center space-x-3 shrink-0">
+            <a href="dashboard.php" class="flex items-center space-x-2.5 group hover:opacity-95 transition">
+                <img src="assets/catavento-jfal.png" alt="JFAL" class="h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-105">
+                <div class="hidden sm:block leading-tight">
+                    <h1 class="text-xs font-black tracking-wide text-blue-500 uppercase leading-none group-hover:text-blue-400 transition-colors">Justiça Federal em Alagoas</h1>
+                    <p class="text-[8px] text-gray-400 font-semibold tracking-widest uppercase mt-0.5">Seção Judiciária de Alagoas</p>
+                </div>
+            </a>
+            <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
+                <?= escapar(ucfirst($_SESSION['usuario_role'])) ?>
+            </span>
+        </div>
+        <div class="flex items-center space-x-1.5 sm:space-x-2 shrink-0 flex-nowrap overflow-x-auto">
+            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Painel Principal</a>
             
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
-                <a href="recepcao.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Recepção</a>
+                <a href="recepcao.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Recepção</a>
             <?php endif; ?>
 
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
-                <a href="atendente.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Atendimento</a>
+                <a href="atendente.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Atendimento</a>
             <?php endif; ?>
 
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                <a href="gerenciar_pauta.php" class="text-xs text-white font-bold bg-sky-900/60 border border-sky-500 shadow-sm ring-1 ring-sky-500/30 px-3 py-1.5 rounded-lg transition">Pautas</a>
-                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Salas</a>
-                <a href="auditoria.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Auditoria</a>
+                <a href="gerenciar_pauta.php" class="sga-nav-active text-xs text-white font-bold bg-[#002F6C] border border-blue-500 shadow-sm px-2.5 py-1.5 rounded-lg transition shrink-0">Pautas</a>
+                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Salas</a>
+                <a href="auditoria.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Auditoria</a>
             <?php endif; ?>
 
             <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
-                <a href="usuarios.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
+                <a href="usuarios.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Perfis & Senhas</a>
             <?php endif; ?>
 
-            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
-            <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
+            <span class="text-xs text-gray-400 hidden sm:inline shrink-0">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
+            <form method="POST" action="logout.php" class="sga-logout shrink-0"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-2.5 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
 
@@ -149,8 +161,13 @@ try {
                     <input type="hidden" name="action" value="importar_excel">
                     
                     <div>
-                        <label class="block text-xs text-gray-400 mb-1">Selecione o arquivo (.xlsx)</label>
-                        <input type="file" name="arquivo_excel" accept=".xlsx" required class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white file:bg-blue-600 file:border-none file:text-white file:text-xs file:font-semibold file:px-2.5 file:py-1 file:rounded-md file:mr-2 file:hover:bg-blue-750 file:cursor-pointer focus:outline-none">
+                        <label class="block text-xs text-gray-300 font-semibold mb-1.5">Selecione a Planilha (.xlsx)</label>
+                        <div class="border border-dashed border-gray-700 hover:border-blue-500 rounded-xl p-3 text-center bg-gray-950/60 transition cursor-pointer group" onclick="document.getElementById('arquivo_excel_input').click()">
+                            <span class="text-base block">📊</span>
+                            <span id="excel_file_label" class="block text-xs text-gray-300 mt-1 font-medium truncate group-hover:text-blue-400 transition">Clique para escolher o arquivo</span>
+                            <span class="block text-[10px] text-gray-500 mt-0.5">Formato oficial PJe (.xlsx)</span>
+                            <input type="file" id="arquivo_excel_input" name="arquivo_excel" accept=".xlsx" required class="hidden" onchange="const l=document.getElementById('excel_file_label'); if(this.files && this.files[0]){ l.textContent=this.files[0].name; l.classList.add('text-blue-400','font-bold'); }">
+                        </div>
                     </div>
 
                     <div>
@@ -322,26 +339,26 @@ try {
                     <?php
                     $pauta_liberada = isPautaLiberada($pdo, $data_busca);
                     ?>
-                    <div class="mb-6 p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 <?= $pauta_liberada ? 'bg-emerald-950/20 border-emerald-900/50 text-emerald-300' : 'bg-amber-950/20 border-amber-900/50 text-amber-300' ?>">
+                    <div class="mb-6 p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 <?= $pauta_liberada ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-200' : 'bg-amber-950/40 border-amber-800/60 text-amber-200' ?> sga-pauta-status-banner">
                         <div class="flex items-center gap-3">
-                            <span class="text-xl"><?= $pauta_liberada ? '🟢' : '⚠️' ?></span>
+                            <span class="text-2xl"><?= $pauta_liberada ? '🟢' : '⚠️' ?></span>
                             <div>
-                                <h4 class="text-xs uppercase font-bold tracking-wider">Status da Pauta - <?= date('d/m/Y', strtotime($data_busca)) ?></h4>
-                                <p class="text-[11px] <?= $pauta_liberada ? 'text-emerald-400' : 'text-amber-400' ?> mt-0.5 font-medium">
+                                <h4 class="text-xs uppercase font-black tracking-wider <?= $pauta_liberada ? 'text-emerald-300' : 'text-amber-300' ?>">Status da Pauta • <?= date('d/m/Y', strtotime($data_busca)) ?></h4>
+                                <p class="text-xs <?= $pauta_liberada ? 'text-emerald-300' : 'text-amber-200' ?> mt-0.5 font-medium">
                                     <?= $pauta_liberada ? 'Homologada e liberada. A recepção comum pode confirmar a chegada dos pacientes.' : 'Pendente de homologação. O check-in da recepção está bloqueado para este dia.' ?>
                                 </p>
                             </div>
                         </div>
-                        <form method="POST" action="gerenciar_pauta.php?filtro_tipo=dia&data_busca=<?= $data_busca ?>" class="w-full sm:w-auto"><?= csrfCampo() ?>
+                        <form method="POST" action="gerenciar_pauta.php?filtro_tipo=dia&data_busca=<?= $data_busca ?>" class="w-full sm:w-auto shrink-0"><?= csrfCampo() ?>
                             <input type="hidden" name="data_alvo" value="<?= escapar($data_busca) ?>">
                             <?php if ($pauta_liberada): ?>
                                 <input type="hidden" name="action" value="bloquear_pauta">
-                                <button type="submit" class="w-full sm:w-auto bg-amber-950/60 hover:bg-amber-900 border border-amber-900/50 text-amber-300 text-xs font-bold py-2 px-4 rounded-lg transition">
+                                <button type="submit" class="w-full sm:w-auto bg-amber-900/60 hover:bg-amber-800/80 border border-amber-700/80 text-amber-200 text-xs font-bold py-2 px-4 rounded-lg transition shadow-sm">
                                     🔒 Bloquear Pauta
                                 </button>
                             <?php else: ?>
                                 <input type="hidden" name="action" value="liberar_pauta">
-                                <button type="submit" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-4 rounded-lg shadow-lg transition">
+                                <button type="submit" class="w-full sm:w-auto bg-[#007A33] hover:bg-[#006028] text-white text-xs font-bold py-2.5 px-5 rounded-lg shadow-md transition">
                                     🔓 Homologar e Liberar Pauta
                                 </button>
                             <?php endif; ?>
@@ -391,8 +408,14 @@ try {
                             <tbody class="divide-y divide-gray-800/50">
                                 <?php if (empty($atendimentos)): ?>
                                     <tr>
-                                        <td colspan="6" class="py-8 text-center text-xs text-gray-500">
-                                            Nenhum agendamento encontrado para o período selecionado.
+                                        <td colspan="6" class="py-12 text-center">
+                                            <div class="flex flex-col items-center justify-center space-y-2">
+                                                <div class="w-10 h-10 rounded-full bg-gray-800/60 border border-gray-700/60 flex items-center justify-center text-lg text-gray-400">
+                                                    📅
+                                                </div>
+                                                <p class="text-sm font-semibold text-gray-300">Nenhum agendamento encontrado para o período</p>
+                                                <p class="text-xs text-gray-500">Utilize o formulário ao lado para importar a planilha (.xlsx) da pauta pericial.</p>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php else: ?>

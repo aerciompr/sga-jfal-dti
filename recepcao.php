@@ -193,41 +193,29 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
     <div id="toast-container-recepcao" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none *:pointer-events-auto"></div>
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md shrink-0">
-        <div class="flex items-center space-x-3">
-            <a href="dashboard.php" class="flex items-center space-x-3 group hover:opacity-95 transition">
-                <img src="assets/catavento-jfal.png" alt="JFAL" class="h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-105">
-                <div class="hidden sm:block">
-                    <h1 class="text-xs font-black tracking-wide text-blue-500 uppercase leading-none group-hover:text-blue-400 transition-colors">Justiça Federal em Alagoas</h1>
-                    <p class="text-[8px] text-gray-400 font-semibold tracking-widest uppercase mt-0.5">Seção Judiciária de Alagoas</p>
-                </div>
-            </a>
-            <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
-                <?= escapar(ucfirst($_SESSION['usuario_role'])) ?>
-            </span>
-        </div>
-        <div class="flex items-center space-x-3">
-            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Painel Principal</a>
+        <div class="flex items-center space-x-1.5 sm:space-x-2 shrink-0 flex-nowrap overflow-x-auto">
+            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Painel Principal</a>
             
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
-                <a href="recepcao.php" class="text-xs text-white font-bold bg-emerald-900/60 border border-emerald-500 shadow-sm ring-1 ring-emerald-500/30 px-3 py-1.5 rounded-lg transition">Recepção</a>
+                <a href="recepcao.php" class="sga-nav-active text-xs text-white font-bold bg-[#002F6C] border border-blue-500 shadow-sm px-2.5 py-1.5 rounded-lg transition shrink-0">Recepção</a>
             <?php endif; ?>
 
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
-                <a href="atendente.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Atendimento</a>
+                <a href="atendente.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Atendimento</a>
             <?php endif; ?>
 
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                <a href="gerenciar_pauta.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Pautas</a>
-                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Salas</a>
-                <a href="auditoria.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Auditoria</a>
+                <a href="gerenciar_pauta.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Pautas</a>
+                <a href="salas.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Salas</a>
+                <a href="auditoria.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Auditoria</a>
             <?php endif; ?>
 
             <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
-                <a href="usuarios.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-3 py-1.5 rounded-lg transition">Perfis & Senhas</a>
+                <a href="usuarios.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Perfis & Senhas</a>
             <?php endif; ?>
 
-            <span class="text-xs text-gray-400 hidden sm:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
-            <form method="POST" action="logout.php" class="sga-logout"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg transition">Sair</button></form>
+            <span class="text-xs text-gray-400 hidden sm:inline shrink-0">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
+            <form method="POST" action="logout.php" class="sga-logout shrink-0"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-2.5 py-1.5 rounded-lg transition">Sair</button></form>
         </div>
     </header>
 
@@ -470,9 +458,9 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
             <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl" id="bloco-presentes">
                 <form method="POST" id="form-presentes"><?= csrfCampo() ?>
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                    <h2 class="text-sm font-semibold uppercase text-emerald-400 tracking-wider flex items-center gap-2">
+                    <h2 class="text-sm font-semibold uppercase text-white tracking-wider flex items-center gap-2">
                         <span>Aguardando Chamada (Fila de Espera)</span>
-                        <span class="bg-emerald-950 text-emerald-400 text-xs px-2.5 py-0.5 rounded-full" id="contador-presentes"><?= count($presentes) ?></span>
+                        <span class="bg-blue-950/70 border border-blue-900/60 text-blue-300 text-xs px-2.5 py-0.5 rounded-full font-bold" id="contador-presentes"><?= count($presentes) ?></span>
                     </h2>
                     <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
                     <button type="submit" name="action" value="remover_multiplos" id="btn-remover-presentes" disabled onclick="return confirm('Retornar todos os periciados selecionados para a lista de agendados?');" class="bg-amber-950/40 hover:bg-amber-900/40 border border-amber-900/60 text-amber-400 text-xs px-3.5 py-1.5 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
@@ -530,7 +518,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                             <div class="font-bold text-white"><?= (int)($item['posicao_perito'] ?? 1) ?>º lugar</div>
                                             <div class="text-[10px]">
                                                 <?= (int)($item['pessoas_na_frente'] ?? 0) === 0 
-                                                    ? '<span class="text-emerald-400 font-semibold">Próximo (0 na frente)</span>' 
+                                                    ? '<span class="text-blue-400 font-semibold">Próximo (0 na frente)</span>' 
                                                     : "<span class=\"text-gray-400\">{$item['pessoas_na_frente']} na frente</span>" ?>
                                             </div>
                                         </td>
@@ -547,7 +535,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                             <div class="text-[10px] text-gray-500 font-mono">
                                                 <?= escapar($item['processo'] ?: 'Sem processo') ?>
                                                 <?php if (!empty($item['cpf'])): ?>
-                                                    <span class="text-emerald-400 ml-1.5">| CPF: <?= escapar($item['cpf']) ?></span>
+                                                    <span class="text-gray-400 ml-1.5 font-mono">| CPF: <?= escapar($item['cpf']) ?></span>
                                                 <?php endif; ?>
                                             </div>
                                         </td>
@@ -561,7 +549,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                             <?php endif; ?>
                                         </td>
                                         <td class="py-3 text-right flex items-center justify-end gap-1.5">
-                                            <a href="declaracao_comparecimento.php?id=<?= $item['id'] ?>&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 text-xs px-2 py-1 rounded transition flex items-center gap-1">
+                                            <a href="declaracao_comparecimento.php?id=<?= $item['id'] ?>&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="bg-blue-950/70 hover:bg-blue-900 border border-blue-800/60 text-blue-300 text-xs px-2.5 py-1 rounded-lg transition flex items-center gap-1 font-semibold">
                                                 🖨️ Declaração
                                             </a>
                                             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) && (int)$item['chamadas_count'] === 0): ?>
@@ -626,7 +614,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                             <div class="text-xs font-black text-blue-400 font-mono"><?= escapar($item['senha']) ?></div>
                                             <div class="text-[9px] text-gray-500">Fim: <?= date('H:i', strtotime($item['finalizado_em'] ?: $item['chamado_em'])) ?></div>
                                         </div>
-                                        <a href="declaracao_comparecimento.php?id=<?= $item['id'] ?>&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/70 text-indigo-300 text-xs px-2.5 py-1 rounded-lg transition flex items-center gap-1 font-semibold">
+                                        <a href="declaracao_comparecimento.php?id=<?= $item['id'] ?>&print=1" target="_blank" title="Imprimir Declaração de Comparecimento" class="bg-blue-950/70 hover:bg-blue-900 border border-blue-800/60 text-blue-300 text-xs px-2.5 py-1 rounded-lg transition flex items-center gap-1 font-semibold">
                                             🖨️ Declaração
                                         </a>
                                     </div>
@@ -861,6 +849,102 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 }
             } catch (e) {}
         }
+
+        
+        // Intercepta confirmação em lote via AJAX (sem recarregar página)
+        document.getElementById('form-agendados')?.addEventListener('submit', async function(e) {
+            const submitter = e.submitter;
+            if (submitter && submitter.value === 'confirmar_multiplos') {
+                e.preventDefault();
+                const chks = Array.from(this.querySelectorAll('.chk-item:checked'));
+                if (chks.length === 0) return;
+                
+                submitter.disabled = true;
+                const originalText = submitter.innerHTML;
+                submitter.innerHTML = '⏳ Confirmando...';
+                
+                const formData = new FormData(this);
+                formData.set('action', 'confirmar_multiplos');
+                
+                try {
+                    const resp = await fetch(window.location.href, {
+                        method: 'POST',
+                        body: formData,
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+                    const res = await resp.json();
+                    if (res.csrf_token) {
+                        document.querySelectorAll('input[name="csrf"]').forEach(i => i.value = res.csrf_token);
+                    }
+                    if (res.success) {
+                        exibirToastRecepcao(res.message, 'success');
+                        chks.forEach(chk => {
+                            const r = chk.closest('tr');
+                            if (r) r.remove();
+                        });
+                        const badgeAgendados = document.querySelector('#form-agendados h2 span:last-child');
+                        if (badgeAgendados) {
+                            const val = Math.max(0, (parseInt(badgeAgendados.textContent.trim(), 10) || 0) - chks.length);
+                            badgeAgendados.textContent = val;
+                        }
+                        if (typeof recarregarFilaPresentes === 'function') await recarregarFilaPresentes();
+                        if (typeof sincronizarPeritosRecepcao === 'function') sincronizarPeritosRecepcao();
+                    } else {
+                        exibirToastRecepcao(res.message || 'Erro ao confirmar.', 'error');
+                    }
+                } catch(err) {
+                    this.submit();
+                } finally {
+                    submitter.disabled = false;
+                    submitter.innerHTML = originalText;
+                }
+            }
+        });
+
+        // Intercepta retorno em lote da fila via AJAX
+        document.getElementById('form-presentes')?.addEventListener('submit', async function(e) {
+            const submitter = e.submitter;
+            if (submitter && submitter.value === 'remover_multiplos') {
+                e.preventDefault();
+                const chks = Array.from(this.querySelectorAll('.chk-presente-item:checked'));
+                if (chks.length === 0) return;
+                
+                submitter.disabled = true;
+                const originalText = submitter.innerHTML;
+                submitter.innerHTML = '⏳ Retornando...';
+                
+                const formData = new FormData(this);
+                formData.set('action', 'remover_multiplos');
+                
+                try {
+                    const resp = await fetch(window.location.href, {
+                        method: 'POST',
+                        body: formData,
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+                    const res = await resp.json();
+                    if (res.csrf_token) {
+                        document.querySelectorAll('input[name="csrf"]').forEach(i => i.value = res.csrf_token);
+                    }
+                    if (res.success) {
+                        exibirToastRecepcao(res.message, 'info');
+                        chks.forEach(chk => {
+                            const r = chk.closest('tr');
+                            if (r) r.remove();
+                        });
+                        if (typeof recarregarFilaPresentes === 'function') await recarregarFilaPresentes();
+                        if (typeof sincronizarPeritosRecepcao === 'function') sincronizarPeritosRecepcao();
+                    } else {
+                        exibirToastRecepcao(res.message || 'Erro ao retornar.', 'error');
+                    }
+                } catch(err) {
+                    this.submit();
+                } finally {
+                    submitter.disabled = false;
+                    submitter.innerHTML = originalText;
+                }
+            }
+        });
 
         // Confirma chegada individual via AJAX com feedback instantâneo
         async function confirmarChegada(id, btn) {

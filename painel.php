@@ -137,7 +137,7 @@ $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_cham
                 <!-- Sala de Destino -->
                 <div class="bg-gray-800/50 p-8 rounded-2xl border border-gray-700/50">
                     <div class="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">Dirija-se ao Local</div>
-                    <div id="overlay-sala" class="text-4xl md:text-5xl font-black text-emerald-400">--</div>
+                    <div id="overlay-sala" class="text-4xl md:text-5xl font-black text-blue-400">--</div>
                 </div>
             </div>
         </div>
@@ -166,7 +166,7 @@ $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_cham
                             <div class="text-left truncate flex-1">
                                 <div class="text-sm font-black text-white truncate"><?= escapar($item['nome'] ?: 'Sem Nome') ?></div>
                                 <div class="flex items-center gap-1.5 mt-0.5">
-                                    <span class="text-[10px] text-emerald-400 font-semibold truncate"><?= escapar($item['sala']) ?></span>
+                                    <span class="text-[10px] text-blue-400 font-semibold truncate"><?= escapar($item['sala']) ?></span>
                                     <?php if ($count > 1): ?>
                                         <span class="text-[9px] font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-1.5 py-0.2 rounded"><?= $count ?>ª chamada</span>
                                     <?php endif; ?>
