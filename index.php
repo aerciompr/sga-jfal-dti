@@ -98,9 +98,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - <?= escapar(SYS_NAME) ?></title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
-    <link rel="stylesheet" href="assets/tailwind.css">
-    <link rel="stylesheet" href="assets/usabilidade.css">
-    <script src="tema.js"></script>
+    <link rel="stylesheet" href="assets/tailwind.css?v=2.5">
+    <link rel="stylesheet" href="assets/usabilidade.css?v=2.5">
+    <script src="tema.js?v=2.5"></script>
     <style>
         body {
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -113,11 +113,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     </style>
 </head>
-<body class="text-gray-100 flex flex-col items-center justify-center min-h-screen px-4 py-8 gap-6">
+<body class="text-gray-100 flex flex-col items-center justify-center min-h-screen px-4 py-8 gap-6 relative <?= ($_COOKIE['tema_sga'] ?? '') === 'jf' ? 'theme-jf' : '' ?>">
+    <!-- Alternador de Tema na Tela de Login -->
+    <div class="fixed top-4 right-4 z-10">
+        <button type="button" id="btn-toggle-theme" class="sga-btn-util text-xs px-3 py-1.5 rounded-lg border shadow-xs cursor-pointer" title="Alternar tema visual">
+            🌙 <span class="sga-theme-label">Escuro</span>
+        </button>
+    </div>
     <div class="login-card bg-gray-900 p-8 sm:p-10 rounded-3xl border border-gray-800 shadow-2xl w-full max-w-md transition-all duration-300">
         <!-- Logo Oficial da JFAL -->
         <div class="flex flex-col items-center mb-6">
-            <div class="w-full flex items-center justify-center mb-4 p-2.5 bg-white rounded-2xl shadow-sm border border-slate-200">
+            <div class="login-logo-container w-full flex items-center justify-center mb-4 p-2.5 rounded-2xl">
                 <img src="assets/logo-jfal-completo.png" alt="Justiça Federal em Alagoas" class="h-12 max-w-full object-contain">
             </div>
             <h1 class="login-title text-base sm:text-lg font-black text-center text-blue-500 uppercase tracking-wide leading-tight">
@@ -163,6 +169,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         &copy; <?= date('Y') ?> - Desenvolvido pela DTI - Justiça Federal em Alagoas
     </footer>
 <script src="assets/acessibilidade.js" defer></script>
-<script src="assets/usabilidade.js" defer></script>
+<script src="assets/usabilidade.js?v=2.5" defer></script>
 </body>
 </html>

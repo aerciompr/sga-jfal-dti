@@ -311,30 +311,34 @@ styleTag.id = 'theme-override-styles';
 styleTag.innerHTML = themeStyles;
 document.head.appendChild(styleTag);
 
-// Injeta o botão de alternância no header e aplica a classe no body
+// Aplica a classe do tema e inicializa o botão de alternância padronizado
 document.addEventListener('DOMContentLoaded', () => {
-    // Aplica a classe correspondente ao body
     if (currentTheme === 'jf') {
         document.body.classList.add('theme-jf');
+        if (document.documentElement) document.documentElement.classList.add('theme-jf');
     } else {
         document.body.classList.remove('theme-jf');
+        if (document.documentElement) document.documentElement.classList.remove('theme-jf');
     }
 
-            const utilsGroup = document.body.classList.contains('sga-tv') ? null : (document.querySelector('.sga-header-utils') || document.querySelector('header > div:last-child'));
-    if (utilsGroup) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.id = 'btn-toggle-theme';
-        btn.className = 'sga-btn-util shrink-0 cursor-pointer';
-        
-        if (currentTheme === 'modern') {
-            btn.innerHTML = '☀️ <span class="sga-theme-label">Claro</span>';
-            btn.title = 'Mudar para o tema claro institucional da Justiça Federal';
-        } else {
-            btn.innerHTML = '🌙 <span class="sga-theme-label">Escuro</span>';
-            btn.title = 'Mudar para o tema escuro moderno';
+    let btn = document.getElementById('btn-toggle-theme');
+    if (!btn) {
+        const utilsGroup = document.body.classList.contains('sga-tv') ? null : (document.querySelector('.sga-header-utils') || document.querySelector('header > div:last-child'));
+        if (utilsGroup) {
+            btn = document.createElement('button');
+            btn.type = 'button';
+            btn.id = 'btn-toggle-theme';
+            btn.className = 'sga-btn-util shrink-0 cursor-pointer';
+            utilsGroup.insertBefore(btn, utilsGroup.firstChild);
         }
-        
+    }
+
+    if (btn) {
+        const updateBtn = () => {
+            btn.innerHTML = currentTheme === 'jf' ? '🌙 <span class="sga-theme-label">Escuro</span>' : '☀️ <span class="sga-theme-label">Claro</span>';
+            btn.title = currentTheme === 'jf' ? 'Mudar para o tema escuro moderno' : 'Mudar para o tema claro institucional da Justiça Federal';
+        };
+        updateBtn();
         btn.addEventListener('click', () => {
             const nextTheme = currentTheme === 'modern' ? 'jf' : 'modern';
             setCookie('tema_sga', nextTheme);
@@ -342,20 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentTheme = nextTheme;
             document.body.classList.toggle('theme-jf', nextTheme === 'jf');
             if (document.documentElement) document.documentElement.classList.toggle('theme-jf', nextTheme === 'jf');
-            btn.innerHTML = nextTheme === 'jf' ? '🌙 <span class="sga-theme-label">Escuro</span>' : '☀️ <span class="sga-theme-label">Claro</span>';
-            btn.title = nextTheme === 'jf' ? 'Mudar para o tema escuro moderno' : 'Mudar para o tema claro institucional da Justiça Federal';
+            updateBtn();
         });
-        
-        // Insere o botão de alternar tema no início dos utilitários
-        utilsGroup.insertBefore(btn, utilsGroup.firstChild);
-
-        // Insere o link de Ajuda logo após o botão de tema (antes do divisor)
-        if (!utilsGroup.querySelector('a[href="ajuda.php"]') && location.pathname.split('/').pop() !== 'ajuda.php') {
-            const ajuda = document.createElement('a');
-            ajuda.href = 'ajuda.php';
-            ajuda.textContent = 'Ajuda';
-            ajuda.className = 'sga-btn-util sga-nav-ajuda shrink-0';
-            btn.after(ajuda);
-        }
     }
 });

@@ -38,9 +38,9 @@ $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_cham
     <title>Painel de Chamadas - JFAL</title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
     <!-- Tailwind CSS para estilização moderna -->
-    <link rel="stylesheet" href="assets/tailwind.css">
-    <link rel="stylesheet" href="assets/usabilidade.css">
-    <script src="tema.js"></script>
+    <link rel="stylesheet" href="assets/tailwind.css?v=2.5">
+    <link rel="stylesheet" href="assets/usabilidade.css?v=2.5">
+    <script src="tema.js?v=2.5"></script>
     <style>
         /* Animação suave para surgimento do modal de chamada */
         @keyframes slide-in {
@@ -207,6 +207,6 @@ $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_cham
     <script src="assets/app.js"></script>
     <script src="assets/preparacao-tv.js"></script>
 <script src="assets/acessibilidade.js" defer></script>
-<script src="assets/usabilidade.js" defer></script>
+<script src="assets/usabilidade.js?v=2.5" defer></script>
 </body>
 </html>

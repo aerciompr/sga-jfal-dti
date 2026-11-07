@@ -183,75 +183,18 @@ $fila_espera = $cont_aguardando;
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel do Perito - <?= escapar(defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal') ?></title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
-    <link rel="stylesheet" href="assets/tailwind.css?v=2.3">
-    <link rel="stylesheet" href="assets/usabilidade.css?v=2.3">
-    <script src="tema.js?v=2.3"></script>
+    <link rel="stylesheet" href="assets/tailwind.css?v=2.5">
+    <link rel="stylesheet" href="assets/usabilidade.css?v=2.5">
+    <script src="tema.js?v=2.5"></script>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
 
     <!-- Container de Toasts de Notificação do Perito -->
 
     <div id="toast-container-perito" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none *:pointer-events-auto"></div>
-    <!-- Header Institucional Unificado JFAL -->
-    <header class="sga-header bg-gray-900 border-b border-gray-800 px-4 py-2.5 flex items-center justify-between shadow-xs shrink-0">
-        <!-- 1. Identidade Oficial JFAL -->
-        <div class="sga-brand-area flex items-center space-x-2 shrink-0">
-            <a href="dashboard.php" class="sga-brand-link flex items-center space-x-2 group">
-                <img src="assets/catavento-jfal.png" alt="JFAL" class="h-7 w-auto object-contain transition-transform duration-200 group-hover:scale-105">
-                <div class="sga-brand-text leading-tight hidden sm:block">
-                    <h1 class="text-xs font-black tracking-wide sga-brand-title uppercase leading-none">Justiça Federal em Alagoas</h1>
-                    <p class="text-[8px] sga-brand-sub font-semibold tracking-widest uppercase mt-0.5">Seção Judiciária de Alagoas</p>
-                </div>
-            </a>
-            <span class="sga-role-badge bg-gray-800 text-gray-400 text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider border border-gray-700">
-                <?= escapar(ucfirst($_SESSION['usuario_role'])) ?>
-            </span>
-        </div>
+    <?php require_once __DIR__ . '/header_menu.php'; ?>
 
-        <!-- 2. Barra de Navegação Central (Abas Limpas) -->
-        <nav class="sga-nav-bar sga-nav-bar-clean flex items-center gap-0.5 shrink-1 min-w-0 overflow-x-auto">
-            <a href="dashboard.php" class="sga-nav-link sga-nav-item">Painel Principal</a>
-            
-            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
-                <a href="recepcao.php" class="sga-nav-link sga-nav-item">Recepção</a>
-            <?php endif; ?>
-
-            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
-                <a href="atendente.php" class="sga-nav-link sga-nav-item sga-nav-active">Atendimento</a>
-            <?php endif; ?>
-
-            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                <a href="gerenciar_pauta.php" class="sga-nav-link sga-nav-item">Pautas</a>
-                <a href="salas.php" class="sga-nav-link sga-nav-item">Salas</a>
-                <a href="auditoria.php" class="sga-nav-link sga-nav-item">Auditoria</a>
-            <?php endif; ?>
-
-            <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
-                <a href="usuarios.php" class="sga-nav-link sga-nav-item">Perfis & Senhas</a>
-            <?php endif; ?>
-        </nav>
-
-        <!-- 3. Grupo de Utilitários (Direita) -->
-        <div class="sga-header-utils flex items-center space-x-1.5 shrink-0">
-            <button type="button" id="btn-audio-perito" onclick="toggleAudioPerito()" class="text-xs text-blue-400 hover:text-blue-300 border border-blue-900/60 bg-blue-950/40 px-2 py-1 rounded-md transition flex items-center gap-1 shrink-0 sga-btn-audio">
-                <span id="icone-audio-perito">🔊</span> <span id="texto-audio-perito" class="hidden sm:inline">Som Ativo</span>
-            </button>
-            <div class="h-4 w-px bg-gray-700/60 mx-1 hidden md:block sga-divider"></div>
-
-            <div class="sga-header-user flex items-center gap-1.5 shrink-0 text-xs text-gray-400">
-                <span>Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
-                <span class="text-gray-600 sga-bullet">•</span>
-                <a href="alterar_senha_obrigatorio.php" class="sga-user-link text-gray-400 hover:text-white underline text-xs">Minha senha</a>
-            </div>
-
-            <form method="POST" action="logout.php" class="sga-logout shrink-0 m-0">
-                <?= csrfCampo() ?>
-                <button type="submit" class="sga-btn-sair">Sair</button>
-            </form>
-        </div>
-    </header>
-
-    <main class="flex-1 max-w-6xl w-full mx-auto p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+    <main class="flex-1 w-full max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 md:grid-cols-3 gap-6">
         <!-- Controles Lateral (Identificação, Trava de Sala e Contadores) -->
         <div class="space-y-6 order-2 md:order-1">
             <!-- Seleção de Nome do Perito -->
@@ -410,14 +353,14 @@ $fila_espera = $cont_aguardando;
             <?php endif; ?>
 
             <!-- Informações do Paciente em Atendimento na Sala -->
-            <div id="card-atendimento-container" class="bg-gray-900 p-8 rounded-3xl border border-gray-800 shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden">
+            <div id="card-atendimento-container" class="bg-gray-900 p-5 sm:p-8 rounded-3xl border border-gray-800 shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden">
                 <div class="absolute top-0 left-0 right-0 h-1.5 bg-blue-600"></div>
                 <h2 class="text-xs uppercase font-bold text-gray-400 tracking-wider mb-4">Periciado em Atendimento</h2>
                 <div id="conteudo-atendimento-atual" class="w-full flex flex-col items-center">
                 
                 <?php if ($atendimento_atual): ?>
                     <div class="flex items-center gap-2 mb-2 flex-wrap">
-                        <span class="text-4xl font-black text-white"><?= escapar($atendimento_atual['nome'] ?: 'Sem Nome') ?></span>
+                        <span class="text-2xl sm:text-3xl md:text-4xl font-black text-white break-words"><?= escapar($atendimento_atual['nome'] ?: 'Sem Nome') ?></span>
                         <?php if (($atendimento_atual['prioridade'] ?? 'normal') === 'superprioridade'): ?>
                             <span class="bg-amber-950/80 text-amber-300 border border-amber-600/60 text-xs px-2.5 py-1 rounded-full font-black uppercase tracking-wider">⭐ Superprioridade (80+)</span>
                         <?php elseif (($atendimento_atual['prioridade'] ?? 'normal') === 'prioridade'): ?>
@@ -560,7 +503,7 @@ $fila_espera = $cont_aguardando;
         &copy; <?= date('Y') ?> - Desenvolvido pela DTI - Justiça Federal em Alagoas
     </footer>
 <script src="assets/acessibilidade.js" defer></script>
-<script src="assets/usabilidade.js?v=2.3" defer></script>
+<script src="assets/usabilidade.js?v=2.5" defer></script>
 <script>
 (function() {
     let filtroAtual = 'presente';

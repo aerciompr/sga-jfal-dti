@@ -123,16 +123,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Troca de Senha Obrigatória - <?= escapar($sys_name) ?></title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
-    <script src="tema.js"></script>
-    <link rel="stylesheet" href="assets/tailwind.css">
-    <link rel="stylesheet" href="assets/usabilidade.css">
+    <script src="tema.js?v=2.5"></script>
+    <link rel="stylesheet" href="assets/tailwind.css?v=2.5">
+    <link rel="stylesheet" href="assets/usabilidade.css?v=2.5">
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen flex items-center justify-center p-4">
+<body class="bg-gray-950 text-gray-100 min-h-screen flex items-center justify-center p-4 relative <?= ($_COOKIE['tema_sga'] ?? '') === 'jf' ? 'theme-jf' : '' ?>">
+    <!-- Alternador de Tema -->
+    <div class="fixed top-4 right-4 z-10">
+        <button type="button" id="btn-toggle-theme" class="sga-btn-util text-xs px-3 py-1.5 rounded-lg border shadow-xs cursor-pointer" title="Alternar tema visual">
+            🌙 <span class="sga-theme-label">Escuro</span>
+        </button>
+    </div>
     <div class="login-card max-w-md w-full bg-gray-900 rounded-3xl border border-gray-800 p-8 sm:p-10 shadow-2xl relative overflow-hidden">
 
         <!-- Header da Caixa de Login -->
         <div class="text-center mb-6 flex flex-col items-center">
-            <div class="w-full flex items-center justify-center mb-4 p-2 bg-white rounded-2xl shadow-sm border border-slate-200">
+            <div class="login-logo-container w-full flex items-center justify-center mb-4 p-2.5 rounded-2xl">
                 <img src="assets/logo-jfal-completo.png" alt="Justiça Federal" class="h-10 object-contain">
             </div>
             <h1 class="login-title text-base sm:text-lg font-black text-blue-500 uppercase leading-none">Segurança da Informação</h1>
@@ -183,6 +189,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
     </div>
 <script src="assets/acessibilidade.js" defer></script>
-<script src="assets/usabilidade.js" defer></script>
+<script src="assets/usabilidade.js?v=2.5" defer></script>
 </body>
 </html>
