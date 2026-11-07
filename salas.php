@@ -58,48 +58,64 @@ $salasOcupadas = obterSalasOcupadasHoje($pdo);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gerenciamento de Salas - <?= escapar($sys_name) ?></title>
     <link rel="icon" type="image/png" href="assets/catavento-jfal.png">
-    <link rel="stylesheet" href="assets/tailwind.css">
-    <link rel="stylesheet" href="assets/usabilidade.css">
-    <script src="tema.js"></script>
+    <link rel="stylesheet" href="assets/tailwind.css?v=2.3">
+    <link rel="stylesheet" href="assets/usabilidade.css?v=2.3">
+    <script src="tema.js?v=2.3"></script>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
-    <!-- Header -->
-    <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-md shrink-0">
-        <div class="flex items-center space-x-3 shrink-0">
-            <a href="dashboard.php" class="flex items-center space-x-2.5 group hover:opacity-95 transition">
-                <img src="assets/catavento-jfal.png" alt="JFAL" class="h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-105">
-                <div class="hidden sm:block leading-tight">
-                    <h1 class="text-xs font-black tracking-wide text-blue-500 uppercase leading-none group-hover:text-blue-400 transition-colors">Justiça Federal em Alagoas</h1>
-                    <p class="text-[8px] text-gray-400 font-semibold tracking-widest uppercase mt-0.5">Seção Judiciária de Alagoas</p>
+    <!-- Header Institucional Unificado JFAL -->
+    <header class="sga-header bg-gray-900 border-b border-gray-800 px-4 py-2.5 flex items-center justify-between shadow-xs shrink-0">
+        <!-- 1. Identidade Oficial JFAL -->
+        <div class="sga-brand-area flex items-center space-x-2 shrink-0">
+            <a href="dashboard.php" class="sga-brand-link flex items-center space-x-2 group">
+                <img src="assets/catavento-jfal.png" alt="JFAL" class="h-7 w-auto object-contain transition-transform duration-200 group-hover:scale-105">
+                <div class="sga-brand-text leading-tight hidden sm:block">
+                    <h1 class="text-xs font-black tracking-wide sga-brand-title uppercase leading-none">Justiça Federal em Alagoas</h1>
+                    <p class="text-[8px] sga-brand-sub font-semibold tracking-widest uppercase mt-0.5">Seção Judiciária de Alagoas</p>
                 </div>
             </a>
-            <span class="bg-gray-800 text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-semibold">
+            <span class="sga-role-badge bg-gray-800 text-gray-400 text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider border border-gray-700">
                 <?= escapar(ucfirst($_SESSION['usuario_role'])) ?>
             </span>
         </div>
-        <div class="flex items-center space-x-1.5 sm:space-x-2 shrink-0 flex-nowrap overflow-x-auto">
-            <a href="dashboard.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Painel Principal</a>
+
+        <!-- 2. Barra de Navegação Central (Abas Limpas) -->
+        <nav class="sga-nav-bar sga-nav-bar-clean flex items-center gap-0.5 shrink-1 min-w-0 overflow-x-auto">
+            <a href="dashboard.php" class="sga-nav-link sga-nav-item">Painel Principal</a>
             
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
-                <a href="recepcao.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Recepção</a>
+                <a href="recepcao.php" class="sga-nav-link sga-nav-item">Recepção</a>
             <?php endif; ?>
 
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'perito'])): ?>
-                <a href="atendente.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Atendimento</a>
+                <a href="atendente.php" class="sga-nav-link sga-nav-item">Atendimento</a>
             <?php endif; ?>
 
             <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
-                <a href="gerenciar_pauta.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Pautas</a>
-                <a href="salas.php" class="sga-nav-active text-xs text-white font-bold bg-blue-900/80 border border-blue-500 shadow-sm ring-1 ring-blue-500/30 px-2.5 py-1.5 rounded-lg transition shrink-0">Salas</a>
-                <a href="auditoria.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Auditoria</a>
+                <a href="gerenciar_pauta.php" class="sga-nav-link sga-nav-item">Pautas</a>
+                <a href="salas.php" class="sga-nav-link sga-nav-item sga-nav-active">Salas</a>
+                <a href="auditoria.php" class="sga-nav-link sga-nav-item">Auditoria</a>
             <?php endif; ?>
 
             <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
-                <a href="usuarios.php" class="text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0">Perfis & Senhas</a>
+                <a href="usuarios.php" class="sga-nav-link sga-nav-item">Perfis & Senhas</a>
             <?php endif; ?>
+        </nav>
 
-            <span class="text-xs text-gray-400 hidden lg:inline">Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
-            <form method="POST" action="logout.php" class="sga-logout shrink-0"><?= csrfCampo() ?><button type="submit" class="bg-red-950/40 hover:bg-red-900/40 border border-red-900/60 text-red-400 text-xs px-2.5 py-1.5 rounded-lg transition">Sair</button></form>
+        <!-- 3. Grupo de Utilitários (Direita) -->
+        <div class="sga-header-utils flex items-center space-x-1.5 shrink-0">
+            <div class="h-4 w-px bg-gray-700/60 mx-1 hidden md:block sga-divider"></div>
+
+            <div class="sga-header-user flex items-center gap-1.5 shrink-0 text-xs text-gray-400">
+                <span>Olá, <strong class="text-white"><?= escapar($_SESSION['usuario_name']) ?></strong></span>
+                <span class="text-gray-600 sga-bullet">•</span>
+                <a href="alterar_senha_obrigatorio.php" class="sga-user-link text-gray-400 hover:text-white underline text-xs">Minha senha</a>
+            </div>
+
+            <form method="POST" action="logout.php" class="sga-logout shrink-0 m-0">
+                <?= csrfCampo() ?>
+                <button type="submit" class="sga-btn-sair">Sair</button>
+            </form>
         </div>
     </header>
 
@@ -206,6 +222,6 @@ $salasOcupadas = obterSalasOcupadasHoje($pdo);
         <span>&copy; <?= date('Y') ?> - Desenvolvido pela DTI - Justiça Federal em Alagoas</span>
     </footer>
 <script src="assets/acessibilidade.js" defer></script>
-<script src="assets/usabilidade.js" defer></script>
+<script src="assets/usabilidade.js?v=2.3" defer></script>
 </body>
 </html>

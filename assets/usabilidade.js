@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
         input.addEventListener('blur', () => { caps.hidden = true; });
     }
     const pagina = location.pathname.split('/').pop() || 'index.php';
-    for (const link of document.querySelectorAll('header a[href]')) {
+    for (const link of document.querySelectorAll('header .sga-nav-bar a[href]')) {
         if (link.getAttribute('href') === pagina) link.setAttribute('aria-current','page');
     }
     for (const form of document.querySelectorAll('form[method="POST"],form[method="post"]')) {
@@ -80,7 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (event.submitter) { event.submitter.setAttribute('aria-disabled','true'); event.submitter.textContent = 'Aguarde…'; }
         });
     }
-    for (const area of document.querySelectorAll('.overflow-x-auto')) {
+    for (const area of document.querySelectorAll('main .overflow-x-auto')) {
+        if (!area.querySelector('table')) continue;
         const dica=document.createElement('p'); dica.className='sga-helper'; dica.textContent='Deslize a tabela para ver todas as colunas.';
         area.after(dica);
         const atualizar=()=>{ dica.hidden=area.scrollWidth<=area.clientWidth+1; };

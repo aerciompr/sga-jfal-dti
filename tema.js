@@ -297,7 +297,10 @@ function setCookie(name, value, days = 365) {
 }
 
 // Carrega o tema atual
-let currentTheme = getCookie('tema_sga') || 'modern';
+let currentTheme = getCookie('tema_sga') || (typeof localStorage !== 'undefined' ? localStorage.getItem('tema_sga') : null);
+if (!currentTheme) {
+    currentTheme = (document.documentElement && document.documentElement.classList.contains('theme-jf')) || (document.body && document.body.classList.contains('theme-jf')) ? 'jf' : 'modern';
+}
 if (currentTheme !== 'modern' && currentTheme !== 'jf') {
     currentTheme = 'modern';
 }
@@ -317,39 +320,42 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.classList.remove('theme-jf');
     }
 
-    const headerRight = document.body.classList.contains('sga-tv') ? null : document.querySelector('header > div:last-child');
-    if (headerRight) {
+            const utilsGroup = document.body.classList.contains('sga-tv') ? null : (document.querySelector('.sga-header-utils') || document.querySelector('header > div:last-child'));
+    if (utilsGroup) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.id = 'btn-toggle-theme';
-        btn.className = 'text-xs border px-2.5 py-1.5 rounded-lg transition flex items-center gap-1.5 font-semibold shrink-0';
+        btn.className = 'sga-btn-util shrink-0 cursor-pointer';
         
         if (currentTheme === 'modern') {
-            btn.innerHTML = '🎨 Cores JF';
-            btn.className += ' text-gray-300 border-gray-750 bg-gray-900 hover:bg-gray-800';
-            btn.title = 'Mudar para o padrão claro institucional da Justiça Federal';
+            btn.innerHTML = '☀️ <span class="sga-theme-label">Claro</span>';
+            btn.title = 'Mudar para o tema claro institucional da Justiça Federal';
         } else {
-            btn.innerHTML = '🎨 Tema Original';
-            btn.className += ' text-gray-700 border-gray-300 bg-white hover:bg-gray-100 shadow-sm';
-            btn.title = 'Mudar para o padrão moderno escuro';
+            btn.innerHTML = '🌙 <span class="sga-theme-label">Escuro</span>';
+            btn.title = 'Mudar para o tema escuro moderno';
         }
         
         btn.addEventListener('click', () => {
             const nextTheme = currentTheme === 'modern' ? 'jf' : 'modern';
             setCookie('tema_sga', nextTheme);
+            try { localStorage.setItem('tema_sga', nextTheme); } catch(e){}
             currentTheme = nextTheme;
             document.body.classList.toggle('theme-jf', nextTheme === 'jf');
-            btn.textContent = nextTheme === 'jf' ? '🎨 Tema Original' : '🎨 Cores JF';
+            if (document.documentElement) document.documentElement.classList.toggle('theme-jf', nextTheme === 'jf');
+            btn.innerHTML = nextTheme === 'jf' ? '🌙 <span class="sga-theme-label">Escuro</span>' : '☀️ <span class="sga-theme-label">Claro</span>';
+            btn.title = nextTheme === 'jf' ? 'Mudar para o tema escuro moderno' : 'Mudar para o tema claro institucional da Justiça Federal';
         });
         
-        if (!headerRight.querySelector('a[href="ajuda.php"]') && location.pathname.split('/').pop() !== 'ajuda.php') {
+        // Insere o botão de alternar tema no início dos utilitários
+        utilsGroup.insertBefore(btn, utilsGroup.firstChild);
+
+        // Insere o link de Ajuda logo após o botão de tema (antes do divisor)
+        if (!utilsGroup.querySelector('a[href="ajuda.php"]') && location.pathname.split('/').pop() !== 'ajuda.php') {
             const ajuda = document.createElement('a');
             ajuda.href = 'ajuda.php';
             ajuda.textContent = 'Ajuda';
-            ajuda.className = 'text-xs text-gray-400 hover:text-white border border-gray-800 bg-gray-950/40 hover:bg-gray-800/60 px-2.5 py-1.5 rounded-lg transition shrink-0';
-            headerRight.appendChild(ajuda);
+            ajuda.className = 'sga-btn-util sga-nav-ajuda shrink-0';
+            btn.after(ajuda);
         }
-        // Insere o botão de alternar tema como primeiro item do cabeçalho direito
-        headerRight.insertBefore(btn, headerRight.firstChild);
     }
 });
