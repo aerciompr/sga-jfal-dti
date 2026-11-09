@@ -180,7 +180,7 @@ function falarSenha(nome, sala, count = 1, prioridade = 'normal') {
             let prefixoPrio = '';
             if (prioridade === 'superprioridade') prefixoPrio = 'Superprioridade: ';
             else if (prioridade === 'prioridade') prefixoPrio = 'Atendimento prioritário: ';
-            const prefixo = Number(count) > 1 ? `${prefixoPrio}${count}ª chamada: ` : `${prefixoPrio}Atenção: `;
+            const prefixo = `${prefixoPrio}Atenção: `;
             const fala = new SpeechSynthesisUtterance(`${prefixo}${nome || 'Atendimento'}. Dirija-se à ${sala}`);
             fala.lang = 'pt-BR'; fala.rate = 0.95;
             const voz = speechSynthesis.getVoices().find(v => v.lang.startsWith('pt-'));
@@ -256,7 +256,7 @@ async function verificarNovaSenha() {
                 }
             }
             if (elTitulo) {
-                elTitulo.textContent = count > 1 ? `🔔 Atenção! ${count}ª Chamada...` : '🔔 Atenção! Chamando...';
+                elTitulo.textContent = '🔔 Atenção! Chamando...';
             }
             document.getElementById('overlay-nome').textContent = evento.nome || 'Atendimento';
             document.getElementById('overlay-sala').textContent = evento.sala;

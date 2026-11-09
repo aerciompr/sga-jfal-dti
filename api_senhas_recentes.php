@@ -42,9 +42,6 @@ for ($i = 0; $i < 4; $i++) {
         if ($badgePrio !== '') {
             echo "  $badgePrio";
         }
-        if ($count > 1) {
-            echo "  <span class='text-[9px] font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-1.5 py-0.2 rounded'>{$count}ª chamada</span>";
-        }
         echo "    </div>";
         echo "  </div>";
         echo "  <div class='text-lg font-bold text-blue-400 ml-4'>📢</div>";

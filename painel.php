@@ -167,9 +167,6 @@ $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_cham
                                 <div class="text-sm font-black text-white truncate"><?= escapar($item['nome'] ?: 'Sem Nome') ?></div>
                                 <div class="flex items-center gap-1.5 mt-0.5">
                                     <span class="text-[10px] text-blue-400 font-semibold truncate"><?= escapar($item['sala']) ?></span>
-                                    <?php if ($count > 1): ?>
-                                        <span class="text-[9px] font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-1.5 py-0.2 rounded"><?= $count ?>ª chamada</span>
-                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>
