@@ -23,7 +23,7 @@ COPY tema.js /var/www/html/tema.js
 COPY docker/php.ini /usr/local/etc/php/conf.d/sga.ini
 COPY docker/apache.conf /etc/apache2/conf-available/sga.conf
 RUN mkdir -p /var/lib/php/sessions && chown www-data:www-data /var/lib/php/sessions && chmod 700 /var/lib/php/sessions
-RUN a2enmod rewrite headers && a2enconf sga \
+RUN a2enmod rewrite headers remoteip && a2enconf sga \
     && sed -i 's/80/3020/g' /etc/apache2/ports.conf /etc/apache2/sites-available/000-default.conf \
     && chown -R root:root /var/www/html /opt/sga && chmod -R a-w /var/www/html /opt/sga
 EXPOSE 3020
