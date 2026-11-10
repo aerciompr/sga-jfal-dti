@@ -41,7 +41,13 @@ function validarAgendamento(PDO $pdo, array $dados, string $data, ?int $ignorar 
 }
 
 function operarPauta(PDO $pdo, string $acao, array $dados, string $dataFiltro): string {
-    if (!in_array($_SESSION['usuario_role'], ['admin','supervisor'], true)) throw new DomainException('Acesso negado.');
+    $rolesGeral = ['admin', 'supervisor'];
+    $acoesRecepcao = ['agendar_unico', 'editar_atendimento', 'set_yt_url'];
+    if (in_array($acao, $acoesRecepcao, true)) {
+        if (!in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'], true)) throw new DomainException('Acesso negado.');
+    } else {
+        if (!in_array($_SESSION['usuario_role'], $rolesGeral, true)) throw new DomainException('Acesso negado.');
+    }
     if ($acao==='mover_pauta' && ($dados['mover_tipo']??'')==='mes' && dataValida((string)($dados['nova_data']??''),'Y-m')) $dados['nova_data'].='-01';
     if ($acao === 'mover_pauta' && !dataValida((string)($dados['nova_data'] ?? ''))) throw new DomainException('Data de destino inválida.');
     if (!$pdo->query("SELECT GET_LOCK('sga_importacao', 15)")->fetchColumn()) throw new DomainException('Pauta em atualização. Tente novamente.');
@@ -55,7 +61,7 @@ function operarPauta(PDO $pdo, string $acao, array $dados, string $dataFiltro): 
             } else { $s = $pdo->prepare('DELETE FROM pautas_liberadas WHERE data_pauta = ?'); $s->execute([$data]); }
             registrarLog($pdo, $acao, "Data: $data"); $mensagem = 'Homologação atualizada.';
         } elseif ($acao === 'set_yt_url') {
-            if ($_SESSION['usuario_role'] !== 'admin') throw new DomainException('Apenas administrador pode alterar o vídeo.');
+            if (!in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'], true)) throw new DomainException('Acesso negado.');
             $url = trim((string)($dados['yt_url'] ?? ''));
             if (fonteYouTube($url)===null) throw new DomainException('Use um link HTTPS válido de vídeo ou playlist do YouTube.');
             set_config($pdo, 'youtube_url', $url); registrarLog($pdo, $acao, 'Vídeo ou playlist da TV atualizado.'); $mensagem = 'Conteúdo da TV atualizado.';
@@ -90,15 +96,15 @@ function operarPauta(PDO $pdo, string $acao, array $dados, string $dataFiltro): 
             foreach ($itens as $item) {
                 $estado = $item['status']; $id = (int)$item['id'];
                 if ($acao === 'editar_atendimento') {
-                    if ($estado !== 'agendado') throw new DomainException('Só é possível editar agendamentos ainda não confirmados.');
+                    if (!in_array($estado, ['agendado', 'presente'], true) || ($estado === 'presente' && (int)$item['chamadas_count'] > 0)) throw new DomainException('Só é possível editar agendamentos ainda não chamados.');
                     [$nome,$processo,$perito,$cpf,$peritoId] = validarAgendamento($pdo,$dados,$item['data_pauta'],$id);
                     $prioridade = in_array((string)($dados['prioridade'] ?? 'normal'), ['normal', 'prioridade', 'superprioridade'], true) ? (string)$dados['prioridade'] : 'normal';
                     $temPrio = colunaExiste($pdo, 'atendimentos', 'prioridade');
                     if ($temPrio) {
-                        $u = $pdo->prepare("UPDATE atendimentos SET nome=?, processo=?, perito=?, cpf=?, perito_id=?, prioridade=? WHERE id=? AND status='agendado'");
+                        $u = $pdo->prepare("UPDATE atendimentos SET nome=?, processo=?, perito=?, cpf=?, perito_id=?, prioridade=? WHERE id=? AND status IN ('agendado', 'presente')");
                         $u->execute([$nome,$processo,$perito,$cpf,$peritoId,$prioridade,$id]);
                     } else {
-                        $u = $pdo->prepare("UPDATE atendimentos SET nome=?, processo=?, perito=?, cpf=?, perito_id=? WHERE id=? AND status='agendado'");
+                        $u = $pdo->prepare("UPDATE atendimentos SET nome=?, processo=?, perito=?, cpf=?, perito_id=? WHERE id=? AND status IN ('agendado', 'presente')");
                         $u->execute([$nome,$processo,$perito,$cpf,$peritoId,$id]);
                     }
                 } elseif ($acao === 'mover_pauta' || $acao === 'alterar_perito_lote') {

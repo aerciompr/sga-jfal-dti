@@ -161,7 +161,30 @@ A emissão e entrega da **Declaração de Comparecimento** é uma das atribuiç�
 
 ---
 
-## 8. Dúvidas Frequentes da Recepção (FAQ)
+## 8. Inclusão Manual, Edição de Periciados e Vídeo da TV
+
+O perfil de Recepção possui autonomia operacional na barra lateral direita para garantir agilidade no atendimento:
+
+### 8.1. Adicionar Periciado Manualmente (Encaixes e Urgências)
+1. Na barra lateral direita, localize o card **Adicionar Periciado Manual**.
+2. Preencha o **Nome Completo**, **Número do Processo**, **CPF** e selecione o **Nome do Perito** médico.
+3. Clique em **Agendar**.
+4. O periciado é imediatamente incluído na lista de agendados do dia, pronto para o procedimento de check-in normal.
+
+### 8.2. Edição de Dados do Periciado (Ícone ✏️)
+1. Caso seja identificado algum erro de digitação no nome, processo, CPF ou perito vinculado:
+2. Localize o registro na tabela de agendados (ou aguardando) e clique no botão **✏️ (Editar)** na coluna de ações.
+3. O modal **📝 Editar Periciado** será aberto com os dados atuais pré-preenchidos.
+4. Faça as correções necessárias, ajuste a prioridade se aplicável e clique em **Salvar Alterações**.
+
+### 8.3. Configuração do Vídeo ou Playlist da TV
+1. No card **📺 Vídeo ou Playlist da TV** da barra lateral, a recepção pode alterar o conteúdo institucional reproduzido no painel de espera.
+2. Insira a URL completa de um vídeo ou playlist do YouTube (ex: `https://www.youtube.com/watch?v=...` ou link contendo `list=...`).
+3. Clique em **Atualizar conteúdo**. A TV da sala de espera atualizará a transmissão automaticamente.
+
+---
+
+## 9. Dúvidas Frequentes da Recepção (FAQ)
 
 | Situação | Ação Recomendada |
 | :--- | :--- |
@@ -172,4 +195,4 @@ A emissão e entrega da **Declaração de Comparecimento** é uma das atribuiç�
 | **A TV da recepção não está chamando com som** | Verifique se a aba do Painel TV está aberta e se o volume do televisor ou caixa de som está ligado. O navegador necessita de ao menos um clique na página para habilitar o som automático. |
 
 ---
-*Manual homologado para o SGA JFAL — Seção Judiciária de Alagoas — Versão 2.4*
+*Manual homologado para o SGA JFAL — Seção Judiciária de Alagoas — Versão 2.5*

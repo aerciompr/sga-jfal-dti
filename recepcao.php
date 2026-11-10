@@ -193,9 +193,9 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
     <div id="toast-container-recepcao" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none *:pointer-events-auto"></div>
     <?php require_once __DIR__ . '/header_menu.php'; ?>
 
-    <main class="flex-1 max-w-[96rem] w-full mx-auto p-6 <?= in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) ? 'grid grid-cols-1 lg:grid-cols-3 gap-6' : 'space-y-6' ?>">
+    <main class="flex-1 max-w-[96rem] w-full mx-auto p-6 <?= in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao']) ? 'grid grid-cols-1 lg:grid-cols-3 gap-6' : 'space-y-6' ?>">
         <!-- Área de Listas (Fila de Hoje) -->
-        <div class="sga-queue <?= in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) ? 'lg:col-span-2' : '' ?> space-y-6">
+        <div class="sga-queue <?= in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao']) ? 'lg:col-span-2' : '' ?> space-y-6">
             <?php if ($message): ?>
                 <div role="status" aria-live="polite" class="sga-feedback p-3 rounded-lg border text-xs text-center font-medium <?= $message_type === 'success' ? 'bg-green-950/40 border-green-900/80 text-green-300' : ($message_type === 'info' ? 'bg-blue-950/40 border-blue-900/80 text-blue-300' : 'bg-red-950/40 border-red-900/80 text-red-300') ?>">
                     <?= escapar($message) ?>
@@ -321,6 +321,8 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                                     <button type="button" onclick="removerIndividual(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['status']) ?>)" class="bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
                                                         <?= $item['status'] === 'agendado' ? 'Cancelar' : 'Desfazer presença' ?>
                                                     </button>
+                                                <?php endif; ?>
+                                                <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
                                                     <button type="button" onclick="iniciarEdicao(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['processo']) ?>, <?= jsValor($item['perito']) ?>, <?= jsValor($item['cpf'] ?? '') ?>, <?= jsValor($item['prioridade'] ?? 'normal') ?>)" aria-label="Editar agendamento de <?= escapar($item['nome']) ?>" title="Editar dados" class="bg-gray-800 hover:bg-gray-750 text-gray-300 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
                                                         ✏️
                                                     </button>
@@ -531,6 +533,11 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                                                     Desfazer presença
                                                 </button>
                                             <?php endif; ?>
+                                            <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao']) && (int)$item['chamadas_count'] === 0): ?>
+                                                <button type="button" onclick="iniciarEdicao(<?= $item['id'] ?>, <?= jsValor($item['nome']) ?>, <?= jsValor($item['processo']) ?>, <?= jsValor($item['perito']) ?>, <?= jsValor($item['cpf'] ?? '') ?>, <?= jsValor($item['prioridade'] ?? 'normal') ?>)" aria-label="Editar dados de <?= escapar($item['nome']) ?>" title="Editar dados" class="bg-gray-800 hover:bg-gray-750 text-gray-300 text-xs px-2.5 py-1 rounded border border-gray-700 transition">
+                                                    ✏️
+                                                </button>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -648,7 +655,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
             </form>
         </div>
     </div>
-        <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor'])): ?>
+        <?php if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'])): ?>
         <!-- Sidebar de Operações (Importação e Cadastro Manual) -->
         <div class="sga-operations space-y-6">
             <?php if ($_SESSION['usuario_role'] === 'admin'): ?>
