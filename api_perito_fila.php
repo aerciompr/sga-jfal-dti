@@ -17,7 +17,7 @@ try {
     $ownerAdmin = $user_role === 'admin' ? 1 : 0;
 
     if ($user_role === 'perito') {
-        $perito_selecionado = (string)($_SESSION['usuario_nome'] ?? $_SESSION['usuario_name']);
+        $perito_selecionado = (string)($_SESSION['perito_selecionado'] ?? $_SESSION['usuario_nome'] ?? $_SESSION['usuario_name'] ?? '');
     } else {
         $perito_selecionado = (string)($_SESSION['perito_selecionado'] ?? '');
     }
@@ -36,9 +36,12 @@ try {
     $temPrioridade = colunaExiste($pdo, 'atendimentos', 'prioridade');
     $colPrioridade = $temPrioridade ? ", prioridade" : "";
 
+    $clausulaPerito = ($user_role === 'admin') ? "perito = ?" : "(perito_id = ? OR perito = ?)";
+    $paramsPerito = ($user_role === 'admin') ? [$perito_selecionado] : [$ownerId, $perito_selecionado];
+
     // Atendimento atual (sendo chamado ou atendido agora nesta sala)
-    $stmtAtual = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chamado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE status IN ('chamada', 'atendimento') AND sala = ? AND data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?)) ORDER BY chamado_em DESC LIMIT 1");
-    $stmtAtual->execute([$sala, $ownerId, $ownerAdmin, $perito_selecionado]);
+    $stmtAtual = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chamado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE status IN ('chamada', 'atendimento') AND sala = ? AND data_pauta = CURRENT_DATE() AND $clausulaPerito ORDER BY chamado_em DESC LIMIT 1");
+    $stmtAtual->execute(array_merge([$sala], $paramsPerito));
     $atendimentoAtual = $stmtAtual->fetch(PDO::FETCH_ASSOC);
 
     // Critério de ordenação da fila
@@ -54,8 +57,8 @@ try {
 
     // Consulta todos os agendamentos deste perito hoje
     if ($perito_selecionado !== '') {
-        $stmtTodos = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?)) $orderClausula");
-        $stmtTodos->execute([$ownerId, $ownerAdmin, $perito_selecionado]);
+        $stmtTodos = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND $clausulaPerito $orderClausula");
+        $stmtTodos->execute($paramsPerito);
         $todosRegistros = $stmtTodos->fetchAll(PDO::FETCH_ASSOC);
     } else {
         $stmtTodos = $pdo->query("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE data_pauta = CURRENT_DATE() $orderClausula");

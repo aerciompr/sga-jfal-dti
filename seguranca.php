@@ -25,9 +25,13 @@ function ipCliente(): string {
     return in_array($origem, $proxies, true) && filter_var($encaminhado, FILTER_VALIDATE_IP) ? $encaminhado : $origem;
 }
 
-function csrfCampo(): string {
+function csrfToken(): string {
     $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
-    return '<input type="hidden" name="csrf" value="' . $_SESSION['csrf'] . '">';
+    return (string)$_SESSION['csrf'];
+}
+
+function csrfCampo(): string {
+    return '<input type="hidden" name="csrf" value="' . csrfToken() . '">';
 }
 
 function dataValida(string $valor, string $formato = 'Y-m-d'): bool {

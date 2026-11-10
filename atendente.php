@@ -132,10 +132,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 unset($_SESSION['flash_atendimento']);
 
 // Consulta se o perito possui agendamentos hoje
+$temHora = colunaExiste($pdo, 'atendimentos', 'hora_pericia');
+$colHora = $temHora ? ", hora_pericia" : "";
+$temPrioridade = colunaExiste($pdo, 'atendimentos', 'prioridade');
+$colPrioridade = $temPrioridade ? ", prioridade" : "";
+
+$clausulaPerito = ($user_role === 'admin') ? "perito = ?" : "(perito_id = ? OR perito = ?)";
+$paramsPerito = ($user_role === 'admin') ? [$perito_selecionado] : [$ownerId, $perito_selecionado];
+
+$criterio_fila = $perito_selecionado !== '' ? obterCriterioFilaPerito($pdo, $perito_selecionado) : 'chegada';
+$atende_prioridade = $perito_selecionado !== '' ? obterAtenderPrioridadePerito($pdo, $perito_selecionado) : false;
+
 $nome_nao_encontrado_pauta = false;
 if ($user_role === 'perito' && $perito_selecionado) {
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?))");
-    $stmt->execute([$ownerId, $ownerAdmin, $perito_selecionado]);
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND $clausulaPerito");
+    $stmt->execute($paramsPerito);
     if ($stmt->fetchColumn() == 0) {
         $nome_nao_encontrado_pauta = true;
     }
@@ -145,9 +156,20 @@ if ($user_role === 'perito' && $perito_selecionado) {
 $peritos_lista = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE perito IS NOT NULL AND perito != '' AND data_pauta = CURRENT_DATE() ORDER BY perito ASC")->fetchAll(PDO::FETCH_COLUMN);
 
 // Atendimento atual nesta sala/médico
-$stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status IN ('chamada', 'atendimento') AND sala = ? AND data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?)) ORDER BY chamado_em DESC LIMIT 1");
-$stmt->execute([$sala, $ownerId, $ownerAdmin, $perito_selecionado]);
+$stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status IN ('chamada', 'atendimento') AND sala = ? AND data_pauta = CURRENT_DATE() AND $clausulaPerito ORDER BY chamado_em DESC LIMIT 1");
+$stmt->execute(array_merge([$sala], $paramsPerito));
 $atendimento_atual = $stmt->fetch();
+
+// Ordenação da fila (idêntica à api_perito_fila.php)
+$orderSecundario = ($criterio_fila === 'horario' && $temHora)
+    ? "COALESCE(hora_pericia, '23:59:59') ASC, fila_em ASC, id ASC"
+    : "fila_em ASC, id ASC";
+
+$orderFilaPresentes = ($atende_prioridade && $temPrioridade)
+    ? "CASE WHEN prioridade = 'superprioridade' THEN 1 WHEN prioridade = 'prioridade' THEN 2 ELSE 3 END ASC, " . $orderSecundario
+    : $orderSecundario;
+
+$orderClausula = "ORDER BY CASE WHEN status = 'presente' THEN 1 WHEN status IN ('chamada','atendimento') THEN 2 WHEN status = 'agendado' THEN 3 WHEN status = 'concluido' THEN 4 ELSE 5 END, " . $orderFilaPresentes;
 
 // Contadores e Pauta completa do perito hoje
 $todos_agendamentos = [];
@@ -155,26 +177,91 @@ $cont_aguardando = 0;
 $cont_pendentes = 0;
 $cont_concluidos = 0;
 $cont_desistentes = 0;
+$cont_prioritarios = 0;
+$filaFormatada = [];
+$todosFormatados = [];
 
-if ($perito_selecionado) {
+if ($perito_selecionado !== '') {
     $stmtTodos = $pdo->prepare("
-        SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count 
+        SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count $colHora $colPrioridade 
         FROM atendimentos 
-        WHERE data_pauta = CURRENT_DATE() AND (perito_id = ? OR (? = 1 AND perito = ?))
-        ORDER BY CASE WHEN status = 'presente' THEN 1 WHEN status IN ('chamada','atendimento') THEN 2 WHEN status = 'agendado' THEN 3 WHEN status = 'concluido' THEN 4 ELSE 5 END, fila_em ASC, id ASC
+        WHERE data_pauta = CURRENT_DATE() AND $clausulaPerito
+        $orderClausula
     ");
-    $stmtTodos->execute([$ownerId, $ownerAdmin, $perito_selecionado]);
+    $stmtTodos->execute($paramsPerito);
     $todos_agendamentos = $stmtTodos->fetchAll(PDO::FETCH_ASSOC);
 
-    foreach ($todos_agendamentos as $it) {
-        if ($it['status'] === 'presente') $cont_aguardando++;
-        elseif ($it['status'] === 'agendado') $cont_pendentes++;
-        elseif ($it['status'] === 'concluido') $cont_concluidos++;
-        elseif ($it['status'] === 'desistente') $cont_desistentes++;
+    $posFila = 1;
+    foreach ($todos_agendamentos as $p) {
+        $st = (string)$p['status'];
+        $prio = (string)($p['prioridade'] ?? 'normal');
+        if ($st === 'presente' && in_array($prio, ['prioridade', 'superprioridade'], true)) $cont_prioritarios++;
+        if ($st === 'presente') $cont_aguardando++;
+        elseif ($st === 'agendado') $cont_pendentes++;
+        elseif ($st === 'concluido') $cont_concluidos++;
+        elseif ($st === 'desistente') $cont_desistentes++;
+
+        $posAtual = null;
+        if ($st === 'presente') {
+            $posAtual = $posFila;
+            $posFila++;
+        }
+
+        $horaFormatada = (!empty($p['hora_pericia'])) ? date('H:i', strtotime($p['hora_pericia'])) : null;
+
+        $itemFormatado = [
+            'id' => (int)$p['id'],
+            'senha' => (string)($p['senha'] ?: '---'),
+            'nome' => (string)($p['nome'] ?: 'Sem Nome'),
+            'processo' => (string)($p['processo'] ?: 'Sem processo'),
+            'cpf' => (string)($p['cpf'] ?? ''),
+            'status' => $st,
+            'sala' => (string)($p['sala'] ?? ''),
+            'posicao_fila' => $posAtual,
+            'prioridade' => $prio,
+            'hora_pericia' => $horaFormatada,
+            'chamadas_count' => (int)$p['chamadas_count'],
+            'chegada' => !empty($p['chegada_em']) ? date('H:i:s', strtotime($p['chegada_em'])) : '--:--:--',
+            'chamado' => !empty($p['chamado_em']) ? date('H:i:s', strtotime($p['chamado_em'])) : '--:--:--',
+            'concluido' => !empty($p['finalizado_em']) ? date('H:i:s', strtotime($p['finalizado_em'])) : '--:--:--',
+        ];
+
+        $todosFormatados[] = $itemFormatado;
+        if ($st === 'presente') {
+            $filaFormatada[] = $itemFormatado;
+        }
     }
 }
 
 $fila_espera = $cont_aguardando;
+
+$dados_iniciais_json = [
+    'success' => true,
+    'criterio_fila' => $criterio_fila,
+    'atender_prioridade' => $atende_prioridade,
+    'total_aguardando' => $cont_aguardando,
+    'totais' => [
+        'aguardando' => $cont_aguardando,
+        'pendentes' => $cont_pendentes,
+        'atendidos' => $cont_concluidos,
+        'desistentes' => $cont_desistentes,
+        'prioritarios' => $cont_prioritarios,
+        'total' => count($todosFormatados),
+    ],
+    'fila' => $filaFormatada,
+    'todos' => $todosFormatados,
+    'atendimento_atual_id' => $atendimento_atual ? (int)$atendimento_atual['id'] : 0,
+    'atendimento_atual' => $atendimento_atual ? [
+        'id' => (int)$atendimento_atual['id'],
+        'nome' => (string)$atendimento_atual['nome'],
+        'processo' => (string)$atendimento_atual['processo'],
+        'senha' => (string)$atendimento_atual['senha'],
+        'status' => (string)$atendimento_atual['status'],
+        'hora_pericia' => !empty($atendimento_atual['hora_pericia']) ? date('H:i', strtotime($atendimento_atual['hora_pericia'])) : null,
+        'chamadas_count' => (int)$atendimento_atual['chamadas_count'],
+        'prioridade' => (string)($atendimento_atual['prioridade'] ?? 'normal'),
+    ] : null,
+];
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -301,10 +388,10 @@ $fila_espera = $cont_aguardando;
                 <div>
                     <label class="block text-[11px] font-bold uppercase text-gray-400 mb-1.5 tracking-wider">Critério de Ordenação</label>
                     <div class="grid grid-cols-2 gap-1 rounded-xl border border-gray-750 bg-gray-950 p-1" id="grupo-criterio-fila">
-                        <button type="button" id="btn-crit-chegada" class="px-2 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white transition text-center shadow-sm">
+                        <button type="button" id="btn-crit-chegada" class="px-2 py-1.5 text-xs rounded-lg transition text-center <?= $criterio_fila === 'chegada' ? 'bg-blue-600 text-white font-bold shadow-sm' : 'text-gray-400 hover:text-white font-medium' ?>">
                             🏃 Chegada
                         </button>
-                        <button type="button" id="btn-crit-horario" class="px-2 py-1.5 text-xs font-medium rounded-lg text-gray-400 hover:text-white transition text-center">
+                        <button type="button" id="btn-crit-horario" class="px-2 py-1.5 text-xs rounded-lg transition text-center <?= $criterio_fila === 'horario' ? 'bg-blue-600 text-white font-bold shadow-sm' : 'text-gray-400 hover:text-white font-medium' ?>">
                             🕒 Horário PJe
                         </button>
                     </div>
@@ -313,10 +400,10 @@ $fila_espera = $cont_aguardando;
                 <div>
                     <label class="block text-[11px] font-bold uppercase text-gray-400 mb-1.5 tracking-wider">Prioridade no Topo</label>
                     <div class="grid grid-cols-2 gap-1 rounded-xl border border-gray-750 bg-gray-950 p-1" id="grupo-prioridade-fila">
-                        <button type="button" id="btn-prio-desativado" class="px-2 py-1.5 text-xs font-bold rounded-lg bg-gray-800 text-gray-300 transition text-center" title="Fila segue ordem normal sem priorização automática">
+                        <button type="button" id="btn-prio-desativado" class="px-2 py-1.5 text-xs rounded-lg transition text-center <?= !$atende_prioridade ? 'bg-gray-800 text-gray-300 font-bold shadow-sm' : 'text-gray-400 hover:text-white font-medium' ?>" title="Fila segue ordem normal sem priorização automática">
                             ⚪ Não
                         </button>
-                        <button type="button" id="btn-prio-ativado" class="px-2 py-1.5 text-xs font-medium rounded-lg text-gray-400 hover:text-white transition text-center" title="Prioridades Legais sobem automaticamente">
+                        <button type="button" id="btn-prio-ativado" class="px-2 py-1.5 text-xs rounded-lg transition text-center <?= $atende_prioridade ? 'bg-amber-600 text-white font-bold shadow-sm' : 'text-gray-400 hover:text-white font-medium' ?>" title="Prioridades Legais sobem automaticamente">
                             ♿ Sim (Topo)
                         </button>
                     </div>
@@ -477,7 +564,63 @@ $fila_espera = $cont_aguardando;
                             </tr>
                         </thead>
                         <tbody id="corpo-fila-espera" class="divide-y divide-gray-800/50">
-                            <!-- Injetado dinamicamente via JavaScript com base no filtro e na busca -->
+                            <?php
+                            $filtrados_iniciais = array_values(array_filter($todosFormatados, fn($item) => $item['status'] === 'presente'));
+                            if (empty($filtrados_iniciais)): ?>
+                                <tr><td colspan="5" class="py-6 text-center text-xs text-gray-500">Nenhum periciado encontrado para este filtro.</td></tr>
+                            <?php else: ?>
+                                <?php foreach ($filtrados_iniciais as $p): ?>
+                                    <?php
+                                    $pos = $p['posicao_fila'] ? "{$p['posicao_fila']}º na fila" : 'Na fila';
+                                    $chamadoTag = $p['chamadas_count'] > 0 ? '<span class="bg-amber-950/70 border border-amber-800/60 text-amber-400 text-[9px] px-1.5 py-0.2 rounded ml-1">Já chamado ' . (int)$p['chamadas_count'] . 'x</span>' : '';
+                                    $statusBadge = '<span class="bg-emerald-950/60 text-emerald-400 border border-emerald-900/50 text-[10px] font-semibold px-2 py-0.5 rounded-full">🟢 ' . $pos . '</span>' . $chamadoTag;
+
+                                    $prioBadge = '';
+                                    if ($p['prioridade'] === 'superprioridade') {
+                                        $prioBadge = '<span class="bg-amber-950/80 text-amber-300 border border-amber-600/60 text-[9px] px-1.5 py-0.2 rounded-full font-black uppercase tracking-wider">⭐ 80+ Superprioridade</span>';
+                                    } elseif ($p['prioridade'] === 'prioridade') {
+                                        $prioBadge = '<span class="bg-sky-950/80 text-sky-300 border border-sky-600/60 text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider">♿ Prioridade</span>';
+                                    }
+                                    ?>
+                                    <tr class="hover:bg-gray-800/30 transition">
+                                        <td class="py-3 font-mono font-bold text-blue-400 text-xs"><?= escapar($p['senha']) ?></td>
+                                        <td class="py-3">
+                                            <div class="font-semibold text-white text-xs flex items-center gap-1.5 flex-wrap">
+                                                <span><?= escapar($p['nome']) ?></span>
+                                                <?= $prioBadge ?>
+                                            </div>
+                                            <div class="text-[10px] text-gray-500 font-mono">
+                                                <?= escapar($p['processo']) ?>
+                                                <?php if (!empty($p['cpf'])): ?>
+                                                    <span class="text-blue-400/80 ml-1">| CPF: <?= escapar($p['cpf']) ?></span>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
+                                        <td class="py-3">
+                                            <?php if (!empty($p['hora_pericia'])): ?>
+                                                <span class="bg-blue-950/70 border border-blue-900 text-blue-300 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded block w-max mb-0.5">🕒 <?= escapar($p['hora_pericia']) ?></span>
+                                            <?php endif; ?>
+                                            <?php if ($p['chegada'] !== '--:--:--'): ?>
+                                                <span class="text-[10px] text-gray-400 font-mono">Entrada: <?= escapar($p['chegada']) ?></span>
+                                            <?php else: ?>
+                                                <span class="text-[10px] text-gray-600 font-mono">Aguardando</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="py-3"><?= $statusBadge ?></td>
+                                        <td class="py-3 text-right">
+                                            <form method="POST" class="inline" onsubmit="return confirm('Chamar este periciado para a sala?');">
+                                                <?= csrfCampo() ?>
+                                                <input type="hidden" name="atendimento_id" value="<?= (int)($atendimento_atual['id'] ?? 0) ?>">
+                                                <input type="hidden" name="action" value="chamar_especifico">
+                                                <input type="hidden" name="id" value="<?= (int)$p['id'] ?>">
+                                                <button type="submit" <?= !$sala_confirmada ? 'disabled title="Confirme a sala primeiro"' : '' ?> class="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-[10px] font-bold px-2.5 py-1 rounded transition">
+                                                    Chamar
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
@@ -508,7 +651,7 @@ $fila_espera = $cont_aguardando;
 (function() {
     let filtroAtual = 'presente';
     let buscaTexto = '';
-    let dadosCache = null;
+    let dadosCache = <?= json_encode($dados_iniciais_json, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
     let anteriorTotalAguardando = null;
     let filaIdsConhecidos = new Set();
     const salaConfirmada = <?= json_encode($sala_confirmada) ?>;
@@ -522,9 +665,9 @@ $fila_espera = $cont_aguardando;
     const btnCritHorario = document.getElementById('btn-crit-horario');
     const btnPrioDesativado = document.getElementById('btn-prio-desativado');
     const btnPrioAtivado = document.getElementById('btn-prio-ativado');
-    const btnToggleSom = document.getElementById('btn-toggle-som-perito');
-    const iconeSom = document.getElementById('icone-som');
-    const textoSom = document.getElementById('texto-som');
+    const btnToggleSom = document.getElementById('btn-audio-perito') || document.getElementById('btn-toggle-som-perito');
+    const iconeSom = document.getElementById('icone-audio-perito') || document.getElementById('icone-som');
+    const textoSom = document.getElementById('texto-audio-perito') || document.getElementById('texto-som');
     const toastContainer = document.getElementById('toast-container-perito');
 
     function escaparHtml(texto) {
@@ -536,29 +679,31 @@ $fila_espera = $cont_aguardando;
     // Configuração de Som (Web Audio API)
     let somHabilitado = localStorage.getItem('sga_som_perito') !== '0';
     function atualizarUiSom() {
-        if (somHabilitado) {
-            iconeSom.textContent = '🔊';
-            textoSom.textContent = 'Som Ativo';
-            btnToggleSom.classList.remove('text-gray-400', 'border-gray-800');
-            btnToggleSom.classList.add('text-emerald-400', 'border-gray-700');
-        } else {
-            iconeSom.textContent = '🔇';
-            textoSom.textContent = 'Silencioso';
-            btnToggleSom.classList.remove('text-emerald-400', 'border-gray-700');
-            btnToggleSom.classList.add('text-gray-400', 'border-gray-800');
+        if (iconeSom) iconeSom.textContent = somHabilitado ? '🔊' : '🔇';
+        if (textoSom) textoSom.textContent = somHabilitado ? 'Som Ativo' : 'Silencioso';
+        if (btnToggleSom) {
+            if (somHabilitado) {
+                btnToggleSom.classList.remove('text-gray-400', 'border-gray-800');
+                btnToggleSom.classList.add('text-blue-400', 'border-blue-900/60');
+            } else {
+                btnToggleSom.classList.remove('text-blue-400', 'border-blue-900/60');
+                btnToggleSom.classList.add('text-gray-400', 'border-gray-800');
+            }
         }
     }
     atualizarUiSom();
 
+    window.toggleAudioPerito = function() {
+        somHabilitado = !somHabilitado;
+        localStorage.setItem('sga_som_perito', somHabilitado ? '1' : '0');
+        atualizarUiSom();
+        if (somHabilitado) {
+            tocarChimeChegada();
+        }
+    };
+
     if (btnToggleSom) {
-        btnToggleSom.addEventListener('click', function() {
-            somHabilitado = !somHabilitado;
-            localStorage.setItem('sga_som_perito', somHabilitado ? '1' : '0');
-            atualizarUiSom();
-            if (somHabilitado) {
-                tocarChimeChegada();
-            }
-        });
+        btnToggleSom.addEventListener('click', window.toggleAudioPerito);
     }
 
     function tocarChimeChegada() {
@@ -632,6 +777,7 @@ $fila_espera = $cont_aguardando;
 
     // Configuração do alternador de critério
     async function alternarCriterioFila(novoCriterio) {
+        atualizarUiCriterio(novoCriterio);
         const csrfToken = document.querySelector('input[name="csrf"]')?.value || '';
         try {
             const formData = new FormData();
@@ -639,29 +785,31 @@ $fila_espera = $cont_aguardando;
             formData.append('action', 'alternar_criterio_fila');
             formData.append('criterio_fila', novoCriterio);
 
-            await fetch('atendente.php', {
+            const resp = await fetch('atendente.php', {
                 method: 'POST',
                 body: formData,
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
-            atualizarUiCriterio(novoCriterio);
-            atualizarFilaPerito();
+            if (resp.ok) {
+                const res = await resp.json().catch(() => null);
+                if (res && res.csrf_token) {
+                    document.querySelectorAll('input[name="csrf"]').forEach(i => i.value = res.csrf_token);
+                }
+            }
+            await atualizarFilaPerito();
         } catch (e) {
             // Silencioso
         }
     }
 
     function atualizarUiCriterio(criterio) {
+        if (!btnCritHorario || !btnCritChegada) return;
         if (criterio === 'horario') {
-            btnCritHorario.classList.remove('text-gray-400');
-            btnCritHorario.classList.add('bg-blue-600', 'text-white', 'font-bold');
-            btnCritChegada.classList.remove('bg-blue-600', 'text-white', 'font-bold');
-            btnCritChegada.classList.add('text-gray-400');
+            btnCritHorario.className = 'px-2 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white transition text-center shadow-sm';
+            btnCritChegada.className = 'px-2 py-1.5 text-xs font-medium rounded-lg text-gray-400 hover:text-white transition text-center';
         } else {
-            btnCritChegada.classList.remove('text-gray-400');
-            btnCritChegada.classList.add('bg-blue-600', 'text-white', 'font-bold');
-            btnCritHorario.classList.remove('bg-blue-600', 'text-white', 'font-bold');
-            btnCritHorario.classList.add('text-gray-400');
+            btnCritChegada.className = 'px-2 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white transition text-center shadow-sm';
+            btnCritHorario.className = 'px-2 py-1.5 text-xs font-medium rounded-lg text-gray-400 hover:text-white transition text-center';
         }
     }
 
@@ -670,6 +818,7 @@ $fila_espera = $cont_aguardando;
 
     // Configuração do alternador de priorização na fila
     async function alternarAtenderPrioridade(ativar) {
+        atualizarUiPrioridade(ativar);
         const csrfToken = document.querySelector('input[name="csrf"]')?.value || '';
         try {
             const formData = new FormData();
@@ -677,13 +826,18 @@ $fila_espera = $cont_aguardando;
             formData.append('action', 'alternar_atender_prioridade');
             formData.append('atender_prioridade', ativar ? '1' : '0');
 
-            await fetch('atendente.php', {
+            const resp = await fetch('atendente.php', {
                 method: 'POST',
                 body: formData,
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
-            atualizarUiPrioridade(ativar);
-            atualizarFilaPerito();
+            if (resp.ok) {
+                const res = await resp.json().catch(() => null);
+                if (res && res.csrf_token) {
+                    document.querySelectorAll('input[name="csrf"]').forEach(i => i.value = res.csrf_token);
+                }
+            }
+            await atualizarFilaPerito();
         } catch (e) {
             // Silencioso
         }
@@ -692,15 +846,11 @@ $fila_espera = $cont_aguardando;
     function atualizarUiPrioridade(ativar) {
         if (!btnPrioDesativado || !btnPrioAtivado) return;
         if (ativar) {
-            btnPrioAtivado.classList.remove('text-gray-400', 'hover:text-white', 'font-medium');
-            btnPrioAtivado.classList.add('bg-amber-600', 'text-white', 'font-bold');
-            btnPrioDesativado.classList.remove('bg-gray-800', 'text-gray-300', 'font-bold');
-            btnPrioDesativado.classList.add('text-gray-400', 'font-medium');
+            btnPrioAtivado.className = 'px-2 py-1.5 text-xs font-bold rounded-lg bg-amber-600 text-white transition text-center shadow-sm';
+            btnPrioDesativado.className = 'px-2 py-1.5 text-xs font-medium rounded-lg text-gray-400 hover:text-white transition text-center';
         } else {
-            btnPrioDesativado.classList.remove('text-gray-400', 'font-medium');
-            btnPrioDesativado.classList.add('bg-gray-800', 'text-gray-300', 'font-bold');
-            btnPrioAtivado.classList.remove('bg-amber-600', 'text-white', 'font-bold');
-            btnPrioAtivado.classList.add('text-gray-400', 'hover:text-white', 'font-medium');
+            btnPrioDesativado.className = 'px-2 py-1.5 text-xs font-bold rounded-lg bg-gray-800 text-gray-300 transition text-center shadow-sm';
+            btnPrioAtivado.className = 'px-2 py-1.5 text-xs font-medium rounded-lg text-gray-400 hover:text-white transition text-center';
         }
     }
 
@@ -1055,6 +1205,15 @@ $fila_espera = $cont_aguardando;
         } catch (err) {
             form.submit();
         }
+    }
+
+    // Renderização imediata da fila com os dados pré-carregados (zero delay)
+    if (dadosCache) {
+        if (dadosCache.fila) {
+            filaIdsConhecidos = new Set(dadosCache.fila.map(f => f.id));
+        }
+        anteriorTotalAguardando = dadosCache.totais?.aguardando || 0;
+        renderizarTabela();
     }
 
     // Consulta inicial e polling a cada 3 segundos

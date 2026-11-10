@@ -190,7 +190,6 @@ function agirAtendimento(PDO $pdo, string $acao, string $perito, string $sala, a
         $novo = isset($dados['atender_prioridade']) ? (bool)$dados['atender_prioridade'] : !$atual;
         salvarAtenderPrioridadePerito($pdo, $perito, $novo);
         return $novo ? 'Fila configurada para priorizar atendimentos preferenciais no topo.' : 'Fila configurada para seguir a ordem normal (priorização automática desativada).';
-        return $criterio === 'horario' ? 'Fila alternada para ordenação por Horário Agendado (PJe).' : 'Fila alternada para ordenação por Ordem de Chegada.';
     }
 
     $pdo->beginTransaction();
