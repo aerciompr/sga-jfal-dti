@@ -314,17 +314,18 @@ function salvarAtenderPrioridadePerito(PDO $pdo, string $perito, bool $atender):
     registrarLog($pdo, 'Alterar Priorizacao Perito', "Perito: $perito; Atender Prioridade: $desc");
 }
 
-function agirAtendimento(PDO $pdo, string $acao, string $perito, string $sala, array $dados): string {
+function agirAtendimento(PDO $pdo, string $acao, string $perito, string $sala, array $dados, ?int $subsecaoId = null): string {
     if ($perito === '') throw new DomainException('Selecione o perito.');
     $profissionalId = ($_SESSION['usuario_role'] ?? '') === 'perito' ? (int)$_SESSION['usuario_id'] : peritoId($pdo, $perito);
+    $subId = $subsecaoId ?? subsecaoAtivaId($pdo);
     
     // Tratamento direto de trava / liberação de sala
     if ($acao === 'travar_sala') {
-        travarSalaPerito($pdo, $perito, $sala);
+        travarSalaPerito($pdo, $perito, $sala, $subId);
         return "Sala {$sala} confirmada e travada com sucesso para seus atendimentos de hoje.";
     }
     if ($acao === 'liberar_sala') {
-        liberarSalaPerito($pdo, $perito, $sala);
+        liberarSalaPerito($pdo, $perito, $sala, $subId);
         return "Sala {$sala} liberada com sucesso.";
     }
     if ($acao === 'alternar_criterio_fila') {
@@ -339,7 +340,6 @@ function agirAtendimento(PDO $pdo, string $acao, string $perito, string $sala, a
         return $novo ? 'Fila configurada para priorizar atendimentos preferenciais no topo.' : 'Fila configurada para seguir a ordem normal (priorização automática desativada).';
     }
 
-    $subId = subsecaoAtivaId($pdo);
     if (colunaExiste($pdo, 'locks_peritos', 'subsecao_id')) {
         $pdo->prepare('INSERT IGNORE INTO locks_peritos (perito, subsecao_id) VALUES (?, ?)')->execute([$perito, $subId]);
     } else {
