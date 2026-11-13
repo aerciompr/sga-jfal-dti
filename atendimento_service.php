@@ -21,6 +21,7 @@ function alterarPrioridadeAtendimento(PDO $pdo, int $id, string $prioridade): vo
 
 function confirmarPresencas(PDO $pdo, array $ids, string $role, ?string $prioridade = null): int {
     $ids = array_values(array_unique(array_map('intval', $ids))); sort($ids);
+    if (empty($ids)) return 0;
     $pdo->beginTransaction();
     try {
         $total = 0;
@@ -30,11 +31,18 @@ function confirmarPresencas(PDO $pdo, array $ids, string $role, ?string $priorid
         $update = $comPrio
             ? $pdo->prepare("UPDATE atendimentos SET status = 'presente', senha = ?, prioridade = ?, chegada_em = CURRENT_TIMESTAMP, fila_em = CURRENT_TIMESTAMP(6) WHERE id = ? AND status = 'agendado'")
             : $pdo->prepare("UPDATE atendimentos SET status = 'presente', senha = ?, chegada_em = CURRENT_TIMESTAMP, fila_em = CURRENT_TIMESTAMP(6) WHERE id = ? AND status = 'agendado'");
+        $pautaLiberadaCache = [];
         foreach ($ids as $id) {
             $check->execute([$id]); $item = $check->fetch();
             if (!$item) throw new DomainException('Agendamento inexistente.');
             if ($item['data_pauta'] !== date('Y-m-d')) throw new DomainException('Presença só pode ser confirmada no dia da pauta.');
-            if ($role === 'recepcao' && !isPautaLiberada($pdo, $item['data_pauta'])) throw new DomainException('Pauta ainda não homologada.');
+            if ($role === 'recepcao') {
+                $dp = (string)$item['data_pauta'];
+                if (!isset($pautaLiberadaCache[$dp])) {
+                    $pautaLiberadaCache[$dp] = isPautaLiberada($pdo, $dp);
+                }
+                if (!$pautaLiberadaCache[$dp]) throw new DomainException('Pauta ainda não homologada.');
+            }
             if ($item['status'] !== 'agendado') continue; // Repetição é idempotente.
             $senha = getNextSenha($pdo);
             if ($comPrio) {

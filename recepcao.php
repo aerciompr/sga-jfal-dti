@@ -766,7 +766,9 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
         // Alterna a disponibilidade dos botões em lote com base na seleção
         function toggleBulkDeleteButton() {
             const checkedCount = document.querySelectorAll('.chk-item:checked').length;
-            btnExcluir.disabled = checkedCount === 0;
+            if (btnExcluir) {
+                btnExcluir.disabled = checkedCount === 0;
+            }
             if (btnConfirmar) {
                 btnConfirmar.disabled = checkedCount === 0;
             }
@@ -788,11 +790,11 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
         chkItems.forEach(item => {
             item.addEventListener('change', function() {
                 if (!this.checked) {
-                    chkSelectAll.checked = false;
+                    if (chkSelectAll) chkSelectAll.checked = false;
                 } else {
                     const visiveis = [...chkItems].filter(c => c.closest('tr').style.display !== 'none');
                     const allChecked = visiveis.length > 0 && visiveis.every(c => c.checked);
-                    chkSelectAll.checked = allChecked;
+                    if (chkSelectAll) chkSelectAll.checked = allChecked;
                 }
                 toggleBulkDeleteButton();
             });
