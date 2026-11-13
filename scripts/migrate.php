@@ -4,6 +4,10 @@ if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 require_once dirname(__DIR__) . '/banco.php';
 $lock = $pdo->query("SELECT GET_LOCK('sga_schema_migration', 30)")->fetchColumn();
 if (!$lock) throw new RuntimeException('Outra migração está em execução.');
+function tabelaExiste(PDO $pdo, string $tabela): bool {
+    $s = $pdo->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?');
+    $s->execute([$tabela]); return (bool)$s->fetchColumn();
+}
 function colunaExiste(PDO $pdo, string $tabela, string $coluna): bool {
     $s = $pdo->prepare('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?');
     $s->execute([$tabela, $coluna]); return (bool)$s->fetchColumn();
@@ -65,6 +69,17 @@ try {
             valor TEXT,
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS eventos_chamada (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, atendimento_id INT NOT NULL,
+            nome VARCHAR(100) NOT NULL, senha VARCHAR(20), sala VARCHAR(50) NOT NULL,
+            perito VARCHAR(100), prioridade VARCHAR(20) NOT NULL DEFAULT 'normal', data_pauta DATE NOT NULL, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_evento_data (data_pauta, id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS locks_peritos (perito VARCHAR(100) PRIMARY KEY) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS login_tentativas (
+            chave CHAR(64) PRIMARY KEY, tentativas INT NOT NULL DEFAULT 0,
+            janela DATETIME NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     if (!colunaExiste($pdo, 'atendimentos', 'processo')) $pdo->exec("ALTER TABLE atendimentos ADD COLUMN processo VARCHAR(50) DEFAULT NULL");
     if (!colunaExiste($pdo, 'atendimentos', 'chegada_em')) $pdo->exec("ALTER TABLE atendimentos ADD COLUMN chegada_em TIMESTAMP NULL DEFAULT NULL");
     if (!colunaExiste($pdo, 'atendimentos', 'perito')) $pdo->exec("ALTER TABLE atendimentos ADD COLUMN perito VARCHAR(100) DEFAULT NULL");
@@ -92,20 +107,11 @@ try {
         ['eventos_chamada','prioridade',"VARCHAR(20) NOT NULL DEFAULT 'normal'"],
     ];
     foreach ($add as [$table, $column, $definition]) {
-        if (!colunaExiste($pdo, $table, $column)) $pdo->exec("ALTER TABLE $table ADD COLUMN $column $definition");
+        if (tabelaExiste($pdo, $table) && !colunaExiste($pdo, $table, $column)) {
+            $pdo->exec("ALTER TABLE $table ADD COLUMN $column $definition");
+        }
     }
     $pdo->exec("UPDATE atendimentos a JOIN (SELECT MIN(id) AS id, nome FROM usuarios WHERE role='perito' AND nome IS NOT NULL AND nome<>'' GROUP BY nome HAVING COUNT(*)=1) u ON a.perito=u.nome SET a.perito_id=u.id WHERE a.perito_id IS NULL");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS eventos_chamada (
-        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, atendimento_id INT NOT NULL,
-        nome VARCHAR(100) NOT NULL, senha VARCHAR(20), sala VARCHAR(50) NOT NULL,
-        perito VARCHAR(100), prioridade VARCHAR(20) NOT NULL DEFAULT 'normal', data_pauta DATE NOT NULL, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_evento_data (data_pauta, id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS locks_peritos (perito VARCHAR(100) PRIMARY KEY) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS login_tentativas (
-        chave CHAR(64) PRIMARY KEY, tentativas INT NOT NULL DEFAULT 0,
-        janela DATETIME NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $indices = [
         ['atendimentos','idx_fila','data_pauta, perito, status, chegada_em, id'],
         ['atendimentos','idx_sala','data_pauta, sala, status, chamado_em'],
@@ -114,7 +120,9 @@ try {
         ['logs_auditoria','idx_log_data','criado_em, id'],
     ];
     foreach ($indices as [$table, $name, $columns]) {
-        if (!indiceExiste($pdo, $table, $name)) $pdo->exec("ALTER TABLE $table ADD INDEX $name ($columns)");
+        if (tabelaExiste($pdo, $table) && !indiceExiste($pdo, $table, $name)) {
+            $pdo->exec("ALTER TABLE $table ADD INDEX $name ($columns)");
+        }
     }
     if ((int)$pdo->query('SELECT COUNT(*) FROM salas')->fetchColumn()===0) $pdo->exec("INSERT INTO salas (nome) VALUES ('Sala 1'), ('Sala 2'), ('Sala 3'), ('Sala 4')");
     $pdo->exec('UPDATE atendimentos SET fila_em=chegada_em WHERE fila_em IS NULL AND chegada_em IS NOT NULL');
