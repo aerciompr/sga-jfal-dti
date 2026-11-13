@@ -82,7 +82,7 @@ function prepararImportacao(array $arquivo, string $janela = 'dia'): array {
     ];
 }
 
-function calcularResumoPrevia(PDO $pdo, array $registros, array $datasEscopo, bool $sincronizar = true): array {
+function calcularResumoPrevia(PDO $pdo, array $registros, array $datasEscopo, bool $sincronizar = true, ?int $subsecaoId = null): array {
     if (empty($datasEscopo)) {
         $datasEscopo = array_values(array_unique(array_filter(array_column($registros, 'data_pericia'))));
     }
@@ -97,9 +97,15 @@ function calcularResumoPrevia(PDO $pdo, array $registros, array $datasEscopo, bo
         ];
     }
 
+    $subId = $subsecaoId ?? subsecaoAtivaId($pdo);
     $inPlaceholders = implode(',', array_fill(0, count($datasEscopo), '?'));
-    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE data_pauta IN ($inPlaceholders) AND status <> 'cancelado'");
-    $stmt->execute($datasEscopo);
+    if (colunaExiste($pdo, 'atendimentos', 'subsecao_id')) {
+        $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE subsecao_id = ? AND data_pauta IN ($inPlaceholders) AND status <> 'cancelado'");
+        $stmt->execute([$subId, ...$datasEscopo]);
+    } else {
+        $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE data_pauta IN ($inPlaceholders) AND status <> 'cancelado'");
+        $stmt->execute($datasEscopo);
+    }
     $existentesNoBanco = $stmt->fetchAll();
 
     $bancoIndexado = [];
@@ -156,8 +162,9 @@ function calcularResumoPrevia(PDO $pdo, array $registros, array $datasEscopo, bo
     ];
 }
 
-function importarRegistros(PDO $pdo, array $registros, array $datasEscopo = [], bool $sincronizar = true): array {
+function importarRegistros(PDO $pdo, array $registros, array $datasEscopo = [], bool $sincronizar = true, ?int $subsecaoId = null): array {
     @set_time_limit(300);
+    $subId = $subsecaoId ?? subsecaoAtivaId($pdo);
     $lock = $pdo->query("SELECT GET_LOCK('sga_importacao', 15)")->fetchColumn();
     if (!$lock) throw new DomainException('Outra importação está em andamento. Tente novamente.');
     $pdo->beginTransaction();
@@ -165,18 +172,33 @@ function importarRegistros(PDO $pdo, array $registros, array $datasEscopo = [], 
         $novos = $atualizados = $preservados = $usuarios = $cancelados = 0;
         $processadosIds = [];
 
-        $buscar = $pdo->prepare("SELECT * FROM atendimentos WHERE LOWER(REPLACE(REPLACE(REPLACE(REPLACE(processo, '.', ''), '-', ''), '/', ''), ' ', '')) = ? AND data_pauta = ? AND perito = ? AND status <> 'cancelado' FOR UPDATE");
+        $temSub = colunaExiste($pdo, 'atendimentos', 'subsecao_id');
+        if ($temSub) {
+            $buscar = $pdo->prepare("SELECT * FROM atendimentos WHERE subsecao_id = ? AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE(processo, '.', ''), '-', ''), '/', ''), ' ', '')) = ? AND data_pauta = ? AND perito = ? AND status <> 'cancelado' FOR UPDATE");
+        } else {
+            $buscar = $pdo->prepare("SELECT * FROM atendimentos WHERE LOWER(REPLACE(REPLACE(REPLACE(REPLACE(processo, '.', ''), '-', ''), '/', ''), ' ', '')) = ? AND data_pauta = ? AND perito = ? AND status <> 'cancelado' FOR UPDATE");
+        }
         $temColunaHora = colunaExiste($pdo, 'atendimentos', 'hora_pericia');
-        if ($temColunaHora) {
+        if ($temSub && $temColunaHora) {
+            $inserir = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, status, data_pauta, cpf, hora_pericia, subsecao_id) VALUES (?, ?, ?, 'agendado', ?, ?, ?, ?)");
+            $atualizar = $pdo->prepare("UPDATE atendimentos SET nome = ?, cpf = ?, hora_pericia = COALESCE(?, hora_pericia) WHERE id = ? AND status = 'agendado'");
+        } elseif ($temColunaHora) {
             $inserir = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, status, data_pauta, cpf, hora_pericia) VALUES (?, ?, ?, 'agendado', ?, ?, ?)");
             $atualizar = $pdo->prepare("UPDATE atendimentos SET nome = ?, cpf = ?, hora_pericia = COALESCE(?, hora_pericia) WHERE id = ? AND status = 'agendado'");
+        } elseif ($temSub) {
+            $inserir = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, status, data_pauta, cpf, subsecao_id) VALUES (?, ?, ?, 'agendado', ?, ?, ?)");
+            $atualizar = $pdo->prepare("UPDATE atendimentos SET nome = ?, cpf = ? WHERE id = ? AND status = 'agendado'");
         } else {
             $inserir = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, status, data_pauta, cpf) VALUES (?, ?, ?, 'agendado', ?, ?)");
             $atualizar = $pdo->prepare("UPDATE atendimentos SET nome = ?, cpf = ? WHERE id = ? AND status = 'agendado'");
         }
         $vincularAtendimento = $pdo->prepare("UPDATE atendimentos SET perito_id = ? WHERE id = ? AND status = 'agendado'");
         $buscarUsuarioCpf = $pdo->prepare("SELECT id, nome, role, cpf FROM usuarios WHERE username = ? OR REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = ? FOR UPDATE");
-        $inserirUsuarioPerito = $pdo->prepare("INSERT INTO usuarios (username, password, role, nome, cpf, must_change_password) VALUES (?, ?, 'perito', ?, ?, 1)");
+        if (colunaExiste($pdo, 'usuarios', 'subsecao_id')) {
+            $inserirUsuarioPerito = $pdo->prepare("INSERT INTO usuarios (username, password, role, nome, cpf, must_change_password, subsecao_id) VALUES (?, ?, 'perito', ?, ?, 1, NULL)");
+        } else {
+            $inserirUsuarioPerito = $pdo->prepare("INSERT INTO usuarios (username, password, role, nome, cpf, must_change_password) VALUES (?, ?, 'perito', ?, ?, 1)");
+        }
         $atualizarCpfUsuario = $pdo->prepare("UPDATE usuarios SET cpf = ? WHERE id = ? AND (cpf IS NULL OR cpf = '')");
         $cachePeritos = [];
 
@@ -184,7 +206,11 @@ function importarRegistros(PDO $pdo, array $registros, array $datasEscopo = [], 
             $item = null;
             if (!dataValida($r['data_pericia']) || $r['data_pericia'] < date('Y-m-d')) throw new DomainException('Data inválida no agendamento. Reimporte o arquivo.');
             $nome = $r['periciado'] ?: '(Nome pendente — conferir documento)';
-            $buscar->execute([simplifyName($r['processo']), $r['data_pericia'], $r['perito']]);
+            if ($temSub) {
+                $buscar->execute([$subId, simplifyName($r['processo']), $r['data_pericia'], $r['perito']]);
+            } else {
+                $buscar->execute([simplifyName($r['processo']), $r['data_pericia'], $r['perito']]);
+            }
             $existentes = $buscar->fetchAll();
             $item = encontrarAtendimentoCorrespondente($existentes, $r, $nome);
 
@@ -207,8 +233,12 @@ function importarRegistros(PDO $pdo, array $registros, array $datasEscopo = [], 
                 }
             } else {
                 $hora = !empty($r['hora_pericia']) ? $r['hora_pericia'] : null;
-                if ($temColunaHora) {
+                if ($temSub && $temColunaHora) {
+                    $inserir->execute([$nome, $r['processo'], $r['perito'], $r['data_pericia'], $r['cpf'] ?: null, $hora, $subId]);
+                } elseif ($temColunaHora) {
                     $inserir->execute([$nome, $r['processo'], $r['perito'], $r['data_pericia'], $r['cpf'] ?: null, $hora]);
+                } elseif ($temSub) {
+                    $inserir->execute([$nome, $r['processo'], $r['perito'], $r['data_pericia'], $r['cpf'] ?: null, $subId]);
                 } else {
                     $inserir->execute([$nome, $r['processo'], $r['perito'], $r['data_pericia'], $r['cpf'] ?: null]);
                 }
@@ -291,8 +321,13 @@ function importarRegistros(PDO $pdo, array $registros, array $datasEscopo = [], 
 
         if ($sincronizar && !empty($datasEscopo)) {
             $inPlaceholders = implode(',', array_fill(0, count($datasEscopo), '?'));
-            $buscarEscopo = $pdo->prepare("SELECT id, nome, processo, perito, data_pauta, status FROM atendimentos WHERE data_pauta IN ($inPlaceholders) AND status <> 'cancelado' FOR UPDATE");
-            $buscarEscopo->execute($datasEscopo);
+            if ($temSub) {
+                $buscarEscopo = $pdo->prepare("SELECT id, nome, processo, perito, data_pauta, status FROM atendimentos WHERE subsecao_id = ? AND data_pauta IN ($inPlaceholders) AND status <> 'cancelado' FOR UPDATE");
+                $buscarEscopo->execute([$subId, ...$datasEscopo]);
+            } else {
+                $buscarEscopo = $pdo->prepare("SELECT id, nome, processo, perito, data_pauta, status FROM atendimentos WHERE data_pauta IN ($inPlaceholders) AND status <> 'cancelado' FOR UPDATE");
+                $buscarEscopo->execute($datasEscopo);
+            }
             $existentesEscopo = $buscarEscopo->fetchAll();
 
             $cancelar = $pdo->prepare("UPDATE atendimentos SET status = 'cancelado' WHERE id = ? AND status = 'agendado'");

@@ -36,6 +36,18 @@ if (!function_exists('colunaExiste')) {
     }
 }
 
+if (!function_exists('tabelaExiste')) {
+    function tabelaExiste(PDO $pdo, string $tabela): bool {
+        static $cache = [];
+        if (!isset($cache[$tabela])) {
+            $s = $pdo->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?');
+            $s->execute([$tabela]);
+            $cache[$tabela] = (bool)$s->fetchColumn();
+        }
+        return $cache[$tabela];
+    }
+}
+
 
 function simplifyName($name) {
     $name = mb_strtolower($name, 'UTF-8');
@@ -79,12 +91,18 @@ function simplifyNameWithSpaces($name) {
 /**
  * Função para registrar ações no log de auditoria
  */
-function registrarLog($pdo, $acao, $detalhes, $atendimentoId = null) {
+function registrarLog($pdo, $acao, $detalhes, $atendimentoId = null, ?int $subsecaoId = null) {
     $userId = isset($_SESSION['usuario_id']) ? $_SESSION['usuario_id'] : null;
     $userName = isset($_SESSION['usuario_name']) ? $_SESSION['usuario_name'] : 'sistema';
+    $subId = $subsecaoId ?? ($_SESSION['subsecao_id_ativa'] ?? $_SESSION['subsecao_id'] ?? 1);
     try {
-        $stmt = $pdo->prepare("INSERT INTO logs_auditoria (usuario_id, usuario_nome, acao, detalhes, atendimento_id, ip, request_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$userId, $userName, $acao, $detalhes, $atendimentoId, ipCliente() ?: null, SGA_REQUEST_ID]);
+        if (colunaExiste($pdo, 'logs_auditoria', 'subsecao_id')) {
+            $stmt = $pdo->prepare("INSERT INTO logs_auditoria (usuario_id, usuario_nome, acao, detalhes, atendimento_id, ip, request_id, subsecao_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$userId, $userName, $acao, $detalhes, $atendimentoId, ipCliente() ?: null, SGA_REQUEST_ID, $subId]);
+        } else {
+            $stmt = $pdo->prepare("INSERT INTO logs_auditoria (usuario_id, usuario_nome, acao, detalhes, atendimento_id, ip, request_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$userId, $userName, $acao, $detalhes, $atendimentoId, ipCliente() ?: null, SGA_REQUEST_ID]);
+        }
     } catch (PDOException $e) {
         error_log("Falha de auditoria: " . $e->getMessage());
         throw $e;
@@ -94,13 +112,64 @@ function registrarLog($pdo, $acao, $detalhes, $atendimentoId = null) {
 /**
  * Verifica se a pauta de uma determinada data está liberada
  */
-function isPautaLiberada($pdo, $data) {
+function isPautaLiberada($pdo, $data, ?int $subsecaoId = null) {
     try {
+        if (colunaExiste($pdo, 'pautas_liberadas', 'subsecao_id')) {
+            $subId = $subsecaoId ?? subsecaoAtivaId($pdo);
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM pautas_liberadas WHERE data_pauta = ? AND subsecao_id = ?");
+            $stmt->execute([$data, $subId]);
+            return $stmt->fetchColumn() > 0;
+        }
         $stmt = $pdo->prepare("SELECT COUNT(*) FROM pautas_liberadas WHERE data_pauta = ?");
         $stmt->execute([$data]);
         return $stmt->fetchColumn() > 0;
     } catch (PDOException $e) {
         return false;
+    }
+}
+
+/**
+ * Helpers para o ecossistema multi-subseção
+ */
+function multisubsecaoAtiva(PDO $pdo): bool {
+    static $ativa = null;
+    if ($ativa === null) {
+        $ativa = (get_config($pdo, 'multisubsecao_ativa', '0') === '1');
+    }
+    return $ativa;
+}
+
+function subsecaoAtivaId(PDO $pdo): int {
+    if (!multisubsecaoAtiva($pdo)) {
+        return 1;
+    }
+    if (isset($_SESSION['subsecao_id_ativa']) && (int)$_SESSION['subsecao_id_ativa'] > 0) {
+        return (int)$_SESSION['subsecao_id_ativa'];
+    }
+    if (isset($_SESSION['subsecao_id']) && (int)$_SESSION['subsecao_id'] > 0) {
+        return (int)$_SESSION['subsecao_id'];
+    }
+    return 1;
+}
+
+function obterSubsecoes(PDO $pdo): array {
+    try {
+        if (!tabelaExiste($pdo, 'subsecoes')) return [];
+        return $pdo->query("SELECT id, nome, cidade, sigla, endereco, telefone, token_painel FROM subsecoes WHERE ativo = 1 ORDER BY id ASC")->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function obterSubsecao(PDO $pdo, int $id): ?array {
+    try {
+        if (!tabelaExiste($pdo, 'subsecoes')) return null;
+        $s = $pdo->prepare("SELECT id, nome, cidade, sigla, endereco, telefone, token_painel FROM subsecoes WHERE id = ?");
+        $s->execute([$id]);
+        $res = $s->fetch();
+        return $res ?: null;
+    } catch (Throwable $e) {
+        return null;
     }
 }
 

@@ -17,7 +17,7 @@ function peritoId(PDO $pdo, string $nome): ?int {
     return count($ids) === 1 ? (int)$ids[0] : null;
 }
 
-function validarAgendamento(PDO $pdo, array $dados, string $data, ?int $ignorar = null): array {
+function validarAgendamento(PDO $pdo, array $dados, string $data, ?int $ignorar = null, ?int $subsecaoId = null): array {
     $nome = preg_replace('/\s+/u', ' ', trim((string)($dados['nome'] ?? '')));
     $processo = trim((string)($dados['processo'] ?? ''));
     $perito = trim((string)($dados['perito'] ?? ''));
@@ -25,7 +25,14 @@ function validarAgendamento(PDO $pdo, array $dados, string $data, ?int $ignorar 
     if ($nome === '' || mb_strlen($nome) > 100 || strlen($processo) > 50 || $perito === '' || mb_strlen($perito) > 100 || !validarCpf($cpf)) throw new DomainException('Confira nome, processo, perito e CPF.');
     if ($cpf !== '') $cpf = preg_replace('/^(\d{3})(\d{3})(\d{3})(\d{2})$/', '$1.$2.$3-$4', preg_replace('/\D/', '', $cpf));
     if ($processo !== '') {
-        $s = $pdo->prepare("SELECT id, processo, perito, nome, cpf FROM atendimentos WHERE data_pauta = ? AND status <> 'cancelado' AND id <> ?"); $s->execute([$data, $ignorar ?? 0]);
+        $subId = $subsecaoId ?? subsecaoAtivaId($pdo);
+        if (colunaExiste($pdo, 'atendimentos', 'subsecao_id')) {
+            $s = $pdo->prepare("SELECT id, processo, perito, nome, cpf FROM atendimentos WHERE subsecao_id = ? AND data_pauta = ? AND status <> 'cancelado' AND id <> ?");
+            $s->execute([$subId, $data, $ignorar ?? 0]);
+        } else {
+            $s = $pdo->prepare("SELECT id, processo, perito, nome, cpf FROM atendimentos WHERE data_pauta = ? AND status <> 'cancelado' AND id <> ?");
+            $s->execute([$data, $ignorar ?? 0]);
+        }
         $cpfLimpo = preg_replace('/\D/', '', $cpf);
         $nomeSimplificado = simplifyName($nome);
         foreach ($s as $item) {
@@ -56,10 +63,21 @@ function operarPauta(PDO $pdo, string $acao, array $dados, string $dataFiltro): 
         if (in_array($acao, ['liberar_pauta','bloquear_pauta'], true)) {
             $data = $dados['data_alvo'] ?? '';
             if (!dataValida($data)) throw new DomainException('Data inválida.');
+            $subId = (int)($dados['subsecao_id'] ?? subsecaoAtivaId($pdo));
             if ($acao === 'liberar_pauta') {
-                $s = $pdo->prepare('INSERT IGNORE INTO pautas_liberadas (data_pauta, usuario_id) VALUES (?, ?)'); $s->execute([$data, $_SESSION['usuario_id']]);
-            } else { $s = $pdo->prepare('DELETE FROM pautas_liberadas WHERE data_pauta = ?'); $s->execute([$data]); }
-            registrarLog($pdo, $acao, "Data: $data"); $mensagem = 'Homologação atualizada.';
+                if (colunaExiste($pdo, 'pautas_liberadas', 'subsecao_id')) {
+                    $s = $pdo->prepare('INSERT IGNORE INTO pautas_liberadas (data_pauta, subsecao_id, usuario_id) VALUES (?, ?, ?)'); $s->execute([$data, $subId, $_SESSION['usuario_id']]);
+                } else {
+                    $s = $pdo->prepare('INSERT IGNORE INTO pautas_liberadas (data_pauta, usuario_id) VALUES (?, ?)'); $s->execute([$data, $_SESSION['usuario_id']]);
+                }
+            } else {
+                if (colunaExiste($pdo, 'pautas_liberadas', 'subsecao_id')) {
+                    $s = $pdo->prepare('DELETE FROM pautas_liberadas WHERE data_pauta = ? AND subsecao_id = ?'); $s->execute([$data, $subId]);
+                } else {
+                    $s = $pdo->prepare('DELETE FROM pautas_liberadas WHERE data_pauta = ?'); $s->execute([$data]);
+                }
+            }
+            registrarLog($pdo, $acao, "Data: $data", null, $subId); $mensagem = 'Homologação atualizada.';
         } elseif ($acao === 'set_yt_url') {
             if (!in_array($_SESSION['usuario_role'], ['admin', 'supervisor', 'recepcao'], true)) throw new DomainException('Acesso negado.');
             $url = trim((string)($dados['yt_url'] ?? ''));
@@ -67,26 +85,41 @@ function operarPauta(PDO $pdo, string $acao, array $dados, string $dataFiltro): 
             set_config($pdo, 'youtube_url', $url); registrarLog($pdo, $acao, 'Vídeo ou playlist da TV atualizado.'); $mensagem = 'Conteúdo da TV atualizado.';
         } elseif ($acao === 'agendar_unico') {
             if (!dataValida($dataFiltro) || $dataFiltro < date('Y-m-d')) throw new DomainException('Agende para hoje ou data futura.');
-            [$nome,$processo,$perito,$cpf,$peritoId] = validarAgendamento($pdo, $dados, $dataFiltro);
+            $subId = (int)($dados['subsecao_id'] ?? subsecaoAtivaId($pdo));
+            [$nome,$processo,$perito,$cpf,$peritoId] = validarAgendamento($pdo, $dados, $dataFiltro, null, $subId);
             $prioInformada = (string)($dados['prioridade'] ?? 'normal');
             $prioridade = in_array($prioInformada, ['normal', 'prioridade', 'superprioridade'], true) ? $prioInformada : 'normal';
             $temPrio = colunaExiste($pdo, 'atendimentos', 'prioridade');
-            if ($temPrio) {
+            $temSub = colunaExiste($pdo, 'atendimentos', 'subsecao_id');
+            if ($temSub && $temPrio) {
+                $s = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, cpf, perito_id, data_pauta, status, prioridade, subsecao_id) VALUES (?, ?, ?, ?, ?, ?, 'agendado', ?, ?)");
+                $s->execute([$nome,$processo,$perito,$cpf,$peritoId,$dataFiltro,$prioridade,$subId]);
+            } elseif ($temPrio) {
                 $s = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, cpf, perito_id, data_pauta, status, prioridade) VALUES (?, ?, ?, ?, ?, ?, 'agendado', ?)");
                 $s->execute([$nome,$processo,$perito,$cpf,$peritoId,$dataFiltro,$prioridade]);
             } else {
                 $s = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, cpf, perito_id, data_pauta, status) VALUES (?, ?, ?, ?, ?, ?, 'agendado')");
                 $s->execute([$nome,$processo,$perito,$cpf,$peritoId,$dataFiltro]);
             }
-            registrarLog($pdo, $acao, json_encode(array_diff_key($dados,['csrf'=>1]), JSON_UNESCAPED_UNICODE), (int)$pdo->lastInsertId()); $mensagem = 'Agendamento cadastrado.';
+            registrarLog($pdo, $acao, json_encode(array_diff_key($dados,['csrf'=>1]), JSON_UNESCAPED_UNICODE), (int)$pdo->lastInsertId(), $subId); $mensagem = 'Agendamento cadastrado.';
         } else {
             $ids = isset($dados['id']) ? [(int)$dados['id']] : array_values(array_unique(array_map('intval', (array)($dados['selecionados'] ?? []))));
             $params = []; $where = '';
             $tipo = $dados['mover_tipo'] ?? $dados['perito_tipo'] ?? '';
+            $subIdOp = (int)($dados['subsecao_id'] ?? subsecaoAtivaId($pdo));
+            $temSub = colunaExiste($pdo, 'atendimentos', 'subsecao_id');
             if ($acao === 'excluir_periodo') {
-                if (($dados['periodo_tipo'] ?? '') === 'dia' && dataValida($dados['data_alvo'] ?? '')) { $where = 'data_pauta = ?'; $params = [$dados['data_alvo']]; }
-                elseif (($dados['periodo_tipo'] ?? '') === 'mes' && dataValida($dados['mes_alvo'] ?? '', 'Y-m')) { $where = 'data_pauta >= ? AND data_pauta < DATE_ADD(?, INTERVAL 1 MONTH)'; $params = [$dados['mes_alvo'].'-01',$dados['mes_alvo'].'-01']; }
-            } elseif ($acao === 'limpar_pauta_hoje') { $where = 'data_pauta = ?'; $params = [$dataFiltro]; }
+                if (($dados['periodo_tipo'] ?? '') === 'dia' && dataValida($dados['data_alvo'] ?? '')) {
+                    $where = $temSub ? 'data_pauta = ? AND subsecao_id = ?' : 'data_pauta = ?';
+                    $params = $temSub ? [$dados['data_alvo'], $subIdOp] : [$dados['data_alvo']];
+                } elseif (($dados['periodo_tipo'] ?? '') === 'mes' && dataValida($dados['mes_alvo'] ?? '', 'Y-m')) {
+                    $where = $temSub ? 'data_pauta >= ? AND data_pauta < DATE_ADD(?, INTERVAL 1 MONTH) AND subsecao_id = ?' : 'data_pauta >= ? AND data_pauta < DATE_ADD(?, INTERVAL 1 MONTH)';
+                    $params = $temSub ? [$dados['mes_alvo'].'-01',$dados['mes_alvo'].'-01', $subIdOp] : [$dados['mes_alvo'].'-01',$dados['mes_alvo'].'-01'];
+                }
+            } elseif ($acao === 'limpar_pauta_hoje') {
+                $where = $temSub ? 'data_pauta = ? AND subsecao_id = ?' : 'data_pauta = ?';
+                $params = $temSub ? [$dataFiltro, $subIdOp] : [$dataFiltro];
+            }
             elseif ($acao === 'mover_pauta' && $tipo === 'dia') { $where = 'data_pauta = ?'; $params = [$dados['mover_data_origem'] ?? '']; }
             elseif ($acao === 'mover_pauta' && $tipo === 'mes') { $where = 'data_pauta >= ? AND data_pauta < DATE_ADD(?, INTERVAL 1 MONTH)'; $params = [($dados['mover_mes_origem'] ?? '').'-01',($dados['mover_mes_origem'] ?? '').'-01']; }
             elseif ($acao === 'alterar_perito_lote' && $tipo === 'dia') { $where = 'data_pauta = ?'; $params = [$dados['perito_data_origem'] ?? '']; }

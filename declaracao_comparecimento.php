@@ -23,6 +23,14 @@ if (!$atendimento) {
     die('Atendimento não encontrado.');
 }
 
+$subsecaoId = (int)($atendimento['subsecao_id'] ?? 1);
+$subsecaoInfo = obterSubsecao($pdo, $subsecaoId);
+$cidadeDeclaracao = $subsecaoInfo['cidade'] ?? 'Maceió';
+$enderecoDeclaracao = $subsecaoInfo['endereco'] ?? 'Av. Menino Marcelo, s/n - Serraria, Maceió - AL, CEP 57046-000 • Tel: (82) 2122-4100';
+if (!empty($subsecaoInfo['telefone']) && strpos($enderecoDeclaracao, 'Tel:') === false) {
+    $enderecoDeclaracao .= ' • Tel: ' . $subsecaoInfo['telefone'];
+}
+
 // Perito só acessa seus próprios atendimentos (ou geral se admin/supervisor/recepcao)
 if ($_SESSION['usuario_role'] === 'perito') {
     $peritoNomeLogado = (string)($_SESSION['usuario_name'] ?? '');
@@ -363,7 +371,7 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
 
             <!-- Fechamento com Data por Extenso -->
             <div class="fechamento">
-                Maceió/AL, <?= sprintf('%02d de %s de %04d', $diaAtual, $mesAtual, $anoAtual) ?>.
+                <?= htmlspecialchars($cidadeDeclaracao, ENT_QUOTES, 'UTF-8') ?>/AL, <?= sprintf('%02d de %s de %04d', $diaAtual, $mesAtual, $anoAtual) ?>.
             </div>
 
             <!-- Assinatura -->
@@ -382,7 +390,7 @@ $autoPrint = isset($_GET['print']) && $_GET['print'] === '1';
         <!-- Rodapé de Validação -->
         <div class="rodape">
             <div>
-                Av. Menino Marcelo, s/n - Serraria, Maceió - AL, CEP 57046-000 • Tel: (82) 2122-4100
+                <?= htmlspecialchars($enderecoDeclaracao, ENT_QUOTES, 'UTF-8') ?>
             </div>
             <div>
                 <strong>Autenticação SGA:</strong> <?= $hashAutenticidade ?> • Emitido em <?= $emitidoEm ?>

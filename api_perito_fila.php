@@ -16,22 +16,41 @@ try {
     $ownerId = (int)$_SESSION['usuario_id'];
     $ownerAdmin = $user_role === 'admin' ? 1 : 0;
 
+    $subId = subsecaoAtivaId($pdo);
+    $temSubAtend = colunaExiste($pdo, 'atendimentos', 'subsecao_id');
+    $temSubSalasP = colunaExiste($pdo, 'salas_peritos', 'subsecao_id');
+
     if ($user_role === 'perito') {
         $perito_selecionado = (string)($_SESSION['perito_selecionado'] ?? $_SESSION['usuario_nome'] ?? $_SESSION['usuario_name'] ?? '');
     } else {
         $perito_selecionado = (string)($_SESSION['perito_selecionado'] ?? '');
         if ($perito_selecionado === '') {
-            $stmtAtivo = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND status IN ('chamada', 'atendimento') AND perito IS NOT NULL AND perito != '' LIMIT 1");
+            if ($temSubAtend) {
+                $stmtAtivo = $pdo->prepare("SELECT DISTINCT perito FROM atendimentos WHERE subsecao_id = ? AND data_pauta = CURRENT_DATE() AND status IN ('chamada', 'atendimento') AND perito IS NOT NULL AND perito != '' LIMIT 1");
+                $stmtAtivo->execute([$subId]);
+            } else {
+                $stmtAtivo = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND status IN ('chamada', 'atendimento') AND perito IS NOT NULL AND perito != '' LIMIT 1");
+            }
             $peritoAtivo = $stmtAtivo->fetchColumn();
             if ($peritoAtivo) {
                 $perito_selecionado = (string)$peritoAtivo;
             } else {
-                $stmtSalaP = $pdo->query("SELECT DISTINCT perito FROM salas_peritos WHERE DATE(atualizado_em) = CURRENT_DATE() LIMIT 1");
+                if ($temSubSalasP) {
+                    $stmtSalaP = $pdo->prepare("SELECT DISTINCT perito FROM salas_peritos WHERE subsecao_id = ? AND DATE(atualizado_em) = CURRENT_DATE() LIMIT 1");
+                    $stmtSalaP->execute([$subId]);
+                } else {
+                    $stmtSalaP = $pdo->query("SELECT DISTINCT perito FROM salas_peritos WHERE DATE(atualizado_em) = CURRENT_DATE() LIMIT 1");
+                }
                 $peritoSala = $stmtSalaP->fetchColumn();
                 if ($peritoSala) {
                     $perito_selecionado = (string)$peritoSala;
                 } else {
-                    $stmtPrimeiro = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND perito IS NOT NULL AND perito != '' ORDER BY perito ASC LIMIT 1");
+                    if ($temSubAtend) {
+                        $stmtPrimeiro = $pdo->prepare("SELECT DISTINCT perito FROM atendimentos WHERE subsecao_id = ? AND data_pauta = CURRENT_DATE() AND perito IS NOT NULL AND perito != '' ORDER BY perito ASC LIMIT 1");
+                        $stmtPrimeiro->execute([$subId]);
+                    } else {
+                        $stmtPrimeiro = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND perito IS NOT NULL AND perito != '' ORDER BY perito ASC LIMIT 1");
+                    }
                     $peritoPrimeiro = $stmtPrimeiro->fetchColumn();
                     if ($peritoPrimeiro) $perito_selecionado = (string)$peritoPrimeiro;
                 }
@@ -45,8 +64,13 @@ try {
     $sala_confirmada = false;
     $sala = (string)($_SESSION['sala'] ?? 'Sala 1');
     if ($perito_selecionado !== '') {
-        $stmtSala = $pdo->prepare("SELECT sala FROM salas_peritos WHERE LOWER(TRIM(perito)) = LOWER(TRIM(?)) AND DATE(atualizado_em) = CURRENT_DATE()");
-        $stmtSala->execute([$perito_selecionado]);
+        if ($temSubSalasP) {
+            $stmtSala = $pdo->prepare("SELECT sala FROM salas_peritos WHERE subsecao_id = ? AND LOWER(TRIM(perito)) = LOWER(TRIM(?)) AND DATE(atualizado_em) = CURRENT_DATE()");
+            $stmtSala->execute([$subId, $perito_selecionado]);
+        } else {
+            $stmtSala = $pdo->prepare("SELECT sala FROM salas_peritos WHERE LOWER(TRIM(perito)) = LOWER(TRIM(?)) AND DATE(atualizado_em) = CURRENT_DATE()");
+            $stmtSala->execute([$perito_selecionado]);
+        }
         $salaSalvaHoje = $stmtSala->fetchColumn();
         if (!$salaSalvaHoje) {
             $pId = peritoId($pdo, $perito_selecionado);
@@ -55,16 +79,26 @@ try {
                 $stmtUserPerito->execute([$pId]);
                 $uP = $stmtUserPerito->fetch(PDO::FETCH_ASSOC);
                 if ($uP) {
-                    $stmtSalaConfUser = $pdo->prepare("SELECT sala FROM salas_peritos WHERE (LOWER(TRIM(perito)) = LOWER(TRIM(?)) OR LOWER(TRIM(perito)) = LOWER(TRIM(?))) AND DATE(atualizado_em) = CURRENT_DATE()");
-                    $stmtSalaConfUser->execute([$uP['username'], $uP['nome'] ?? '']);
+                    if ($temSubSalasP) {
+                        $stmtSalaConfUser = $pdo->prepare("SELECT sala FROM salas_peritos WHERE subsecao_id = ? AND (LOWER(TRIM(perito)) = LOWER(TRIM(?)) OR LOWER(TRIM(perito)) = LOWER(TRIM(?))) AND DATE(atualizado_em) = CURRENT_DATE()");
+                        $stmtSalaConfUser->execute([$subId, $uP['username'], $uP['nome'] ?? '']);
+                    } else {
+                        $stmtSalaConfUser = $pdo->prepare("SELECT sala FROM salas_peritos WHERE (LOWER(TRIM(perito)) = LOWER(TRIM(?)) OR LOWER(TRIM(perito)) = LOWER(TRIM(?))) AND DATE(atualizado_em) = CURRENT_DATE()");
+                        $stmtSalaConfUser->execute([$uP['username'], $uP['nome'] ?? '']);
+                    }
                     $salaSalvaHoje = $stmtSalaConfUser->fetchColumn();
                 }
             }
         }
         if (!$salaSalvaHoje) {
             $pId = peritoId($pdo, $perito_selecionado);
-            $stmtSalaAtend = $pdo->prepare("SELECT sala FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito = ? OR (? IS NOT NULL AND perito_id = ?)) AND sala IS NOT NULL AND sala != '' ORDER BY id DESC LIMIT 1");
-            $stmtSalaAtend->execute([$perito_selecionado, $pId, $pId]);
+            if ($temSubAtend) {
+                $stmtSalaAtend = $pdo->prepare("SELECT sala FROM atendimentos WHERE subsecao_id = ? AND data_pauta = CURRENT_DATE() AND (perito = ? OR (? IS NOT NULL AND perito_id = ?)) AND sala IS NOT NULL AND sala != '' ORDER BY id DESC LIMIT 1");
+                $stmtSalaAtend->execute([$subId, $perito_selecionado, $pId, $pId]);
+            } else {
+                $stmtSalaAtend = $pdo->prepare("SELECT sala FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito = ? OR (? IS NOT NULL AND perito_id = ?)) AND sala IS NOT NULL AND sala != '' ORDER BY id DESC LIMIT 1");
+                $stmtSalaAtend->execute([$perito_selecionado, $pId, $pId]);
+            }
             $salaSalvaHoje = $stmtSalaAtend->fetchColumn();
         }
         if ($salaSalvaHoje) {
@@ -79,7 +113,11 @@ try {
 
     // Heartbeat: mantém a trava da sala ativa enquanto o médico estiver navegando
     if ($perito_selecionado !== '' && $user_role === 'perito') {
-        $pdo->prepare("UPDATE salas_peritos SET atualizado_em = CURRENT_TIMESTAMP WHERE perito = ?")->execute([$perito_selecionado]);
+        if ($temSubSalasP) {
+            $pdo->prepare("UPDATE salas_peritos SET atualizado_em = CURRENT_TIMESTAMP WHERE perito = ? AND subsecao_id = ?")->execute([$perito_selecionado, $subId]);
+        } else {
+            $pdo->prepare("UPDATE salas_peritos SET atualizado_em = CURRENT_TIMESTAMP WHERE perito = ?")->execute([$perito_selecionado]);
+        }
     }
 
     $temHora = colunaExiste($pdo, 'atendimentos', 'hora_pericia');
@@ -91,8 +129,13 @@ try {
     $paramsPerito = ($user_role === 'admin') ? [$perito_selecionado] : [$ownerId, $perito_selecionado];
 
     // Atendimento atual (sendo chamado ou atendido agora nesta sala)
-    $stmtAtual = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chamado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE status IN ('chamada', 'atendimento') AND sala = ? AND data_pauta = CURRENT_DATE() AND $clausulaPerito ORDER BY chamado_em DESC LIMIT 1");
-    $stmtAtual->execute(array_merge([$sala], $paramsPerito));
+    if ($temSubAtend) {
+        $stmtAtual = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chamado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE subsecao_id = ? AND status IN ('chamada', 'atendimento') AND sala = ? AND data_pauta = CURRENT_DATE() AND $clausulaPerito ORDER BY chamado_em DESC LIMIT 1");
+        $stmtAtual->execute(array_merge([$subId, $sala], $paramsPerito));
+    } else {
+        $stmtAtual = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chamado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE status IN ('chamada', 'atendimento') AND sala = ? AND data_pauta = CURRENT_DATE() AND $clausulaPerito ORDER BY chamado_em DESC LIMIT 1");
+        $stmtAtual->execute(array_merge([$sala], $paramsPerito));
+    }
     $atendimentoAtual = $stmtAtual->fetch(PDO::FETCH_ASSOC);
 
     // Critério de ordenação da fila
@@ -108,11 +151,21 @@ try {
 
     // Consulta todos os agendamentos deste perito hoje
     if ($perito_selecionado !== '') {
-        $stmtTodos = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND $clausulaPerito $orderClausula");
-        $stmtTodos->execute($paramsPerito);
+        if ($temSubAtend) {
+            $stmtTodos = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE subsecao_id = ? AND data_pauta = CURRENT_DATE() AND $clausulaPerito $orderClausula");
+            $stmtTodos->execute(array_merge([$subId], $paramsPerito));
+        } else {
+            $stmtTodos = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND $clausulaPerito $orderClausula");
+            $stmtTodos->execute($paramsPerito);
+        }
         $todosRegistros = $stmtTodos->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        $stmtTodos = $pdo->query("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE data_pauta = CURRENT_DATE() $orderClausula");
+        if ($temSubAtend) {
+            $stmtTodos = $pdo->prepare("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE subsecao_id = ? AND data_pauta = CURRENT_DATE() $orderClausula");
+            $stmtTodos->execute([$subId]);
+        } else {
+            $stmtTodos = $pdo->query("SELECT id, nome, processo, cpf, senha, status, sala, chegada_em, fila_em, chamado_em, finalizado_em, chamadas_count $colHora $colPrioridade FROM atendimentos WHERE data_pauta = CURRENT_DATE() $orderClausula");
+        }
         $todosRegistros = $stmtTodos->fetchAll(PDO::FETCH_ASSOC);
     }
 

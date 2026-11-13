@@ -16,7 +16,22 @@ function indiceExiste(PDO $pdo, string $tabela, string $indice): bool {
     $s = $pdo->prepare('SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?');
     $s->execute([$tabela, $indice]); return (bool)$s->fetchColumn();
 }
+function chavePrimariaContem(PDO $pdo, string $tabela, string $coluna): bool {
+    $s = $pdo->prepare("SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = 'PRIMARY' AND COLUMN_NAME = ?");
+    $s->execute([$tabela, $coluna]); return (bool)$s->fetchColumn();
+}
 try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS subsecoes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            nome VARCHAR(100) NOT NULL,
+            cidade VARCHAR(100) NOT NULL,
+            sigla VARCHAR(10) NOT NULL UNIQUE,
+            endereco VARCHAR(255) NOT NULL,
+            telefone VARCHAR(50) NOT NULL,
+            token_painel VARCHAR(64) NOT NULL UNIQUE,
+            ativo TINYINT NOT NULL DEFAULT 1,
+            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $pdo->exec("CREATE TABLE IF NOT EXISTS atendimentos (
             id INT AUTO_INCREMENT PRIMARY KEY,
             nome VARCHAR(100) NOT NULL,
@@ -105,6 +120,15 @@ try {
         ['atendimentos','prioridade',"VARCHAR(20) NOT NULL DEFAULT 'normal'"],
         ['salas_peritos','atender_prioridade','TINYINT(1) NOT NULL DEFAULT 0'],
         ['eventos_chamada','prioridade',"VARCHAR(20) NOT NULL DEFAULT 'normal'"],
+        ['atendimentos','subsecao_id','INT NOT NULL DEFAULT 1'],
+        ['usuarios','subsecao_id','INT NULL DEFAULT 1'],
+        ['salas','subsecao_id','INT NOT NULL DEFAULT 1'],
+        ['salas_peritos','subsecao_id','INT NOT NULL DEFAULT 1'],
+        ['locks_peritos','subsecao_id','INT NOT NULL DEFAULT 1'],
+        ['sequencia_diaria_senhas','subsecao_id','INT NOT NULL DEFAULT 1'],
+        ['pautas_liberadas','subsecao_id','INT NOT NULL DEFAULT 1'],
+        ['eventos_chamada','subsecao_id','INT NOT NULL DEFAULT 1'],
+        ['logs_auditoria','subsecao_id','INT NULL DEFAULT 1'],
     ];
     foreach ($add as [$table, $column, $definition]) {
         if (tabelaExiste($pdo, $table) && !colunaExiste($pdo, $table, $column)) {
@@ -118,12 +142,46 @@ try {
         ['atendimentos','idx_perito_id','perito_id, data_pauta, status, chegada_em'],
         ['atendimentos','idx_processo','processo, data_pauta'],
         ['logs_auditoria','idx_log_data','criado_em, id'],
+        ['atendimentos','idx_sub_data_status','subsecao_id, data_pauta, status'],
+        ['eventos_chamada','idx_sub_evento','subsecao_id, data_pauta, id'],
     ];
     foreach ($indices as [$table, $name, $columns]) {
         if (tabelaExiste($pdo, $table) && !indiceExiste($pdo, $table, $name)) {
             $pdo->exec("ALTER TABLE $table ADD INDEX $name ($columns)");
         }
     }
+    // Chaves compostas e constraints multi-subseção
+    if (tabelaExiste($pdo, 'salas_peritos') && colunaExiste($pdo, 'salas_peritos', 'subsecao_id') && !chavePrimariaContem($pdo, 'salas_peritos', 'subsecao_id')) {
+        $pdo->exec("ALTER TABLE salas_peritos DROP PRIMARY KEY, ADD PRIMARY KEY (perito, subsecao_id)");
+    }
+    if (tabelaExiste($pdo, 'locks_peritos') && colunaExiste($pdo, 'locks_peritos', 'subsecao_id') && !chavePrimariaContem($pdo, 'locks_peritos', 'subsecao_id')) {
+        $pdo->exec("ALTER TABLE locks_peritos DROP PRIMARY KEY, ADD PRIMARY KEY (perito, subsecao_id)");
+    }
+    if (tabelaExiste($pdo, 'sequencia_diaria_senhas') && colunaExiste($pdo, 'sequencia_diaria_senhas', 'subsecao_id') && !chavePrimariaContem($pdo, 'sequencia_diaria_senhas', 'subsecao_id')) {
+        $pdo->exec("ALTER TABLE sequencia_diaria_senhas DROP PRIMARY KEY, ADD PRIMARY KEY (data_pauta, subsecao_id)");
+    }
+    if (tabelaExiste($pdo, 'pautas_liberadas') && colunaExiste($pdo, 'pautas_liberadas', 'subsecao_id') && !chavePrimariaContem($pdo, 'pautas_liberadas', 'subsecao_id')) {
+        $pdo->exec("ALTER TABLE pautas_liberadas DROP PRIMARY KEY, ADD PRIMARY KEY (data_pauta, subsecao_id)");
+    }
+    if (tabelaExiste($pdo, 'salas') && colunaExiste($pdo, 'salas', 'subsecao_id')) {
+        if (indiceExiste($pdo, 'salas', 'nome')) {
+            $pdo->exec("ALTER TABLE salas DROP INDEX nome");
+        }
+        if (!indiceExiste($pdo, 'salas', 'idx_sala_subsecao')) {
+            $pdo->exec("ALTER TABLE salas ADD UNIQUE idx_sala_subsecao (subsecao_id, nome)");
+        }
+    }
+    // Carga inicial de subseções (Maceió Sede e União dos Palmares)
+    if (tabelaExiste($pdo, 'subsecoes') && (int)$pdo->query('SELECT COUNT(*) FROM subsecoes')->fetchColumn() === 0) {
+        $pdo->exec("INSERT INTO subsecoes (id, nome, cidade, sigla, endereco, telefone, token_painel) VALUES
+            (1, 'Subseção Judiciária de Maceió (Sede)', 'Maceió', 'MCZ', 'Av. Menino Marcelo, s/n - Serraria, Maceió - AL, CEP 57046-000', '(82) 2122-4100', 'painel_maceio_jfal_default'),
+            (2, 'Subseção Judiciária de União dos Palmares', 'União dos Palmares', 'UPA', 'Rua Santa Sofia, s/n - Centro, União dos Palmares - AL, CEP 57800-000', '(82) 2122-4500', 'painel_uniao_jfal_default')
+        ");
+    }
+    // Flag de controle: multisubsecao_ativa (0 = desligada / legado, 1 = ativa)
+    $pdo->exec("INSERT IGNORE INTO configuracoes (chave, valor) VALUES ('multisubsecao_ativa', '0')");
+    // Peritos e Super-Admin têm escopo global (subsecao_id = NULL)
+    $pdo->exec("UPDATE usuarios SET subsecao_id = NULL WHERE (username = 'admin' AND role = 'admin') OR role = 'perito'");
     if ((int)$pdo->query('SELECT COUNT(*) FROM salas')->fetchColumn()===0) $pdo->exec("INSERT INTO salas (nome) VALUES ('Sala 1'), ('Sala 2'), ('Sala 3'), ('Sala 4')");
     $pdo->exec('UPDATE atendimentos SET fila_em=chegada_em WHERE fila_em IS NULL AND chegada_em IS NOT NULL');
     $pdo->exec("INSERT INTO sequencia_diaria_senhas (data_pauta,ultimo_numero) SELECT data_pauta,MAX(CAST(SUBSTRING(senha,4) AS UNSIGNED)) FROM atendimentos WHERE data_pauta IS NOT NULL AND senha REGEXP '^PE-[0-9]+$' GROUP BY data_pauta ON DUPLICATE KEY UPDATE ultimo_numero=GREATEST(ultimo_numero,VALUES(ultimo_numero))");
@@ -157,9 +215,21 @@ try {
             $s->execute([$u['id']]);
         }
     }
-    // Assegura que peritos com credenciais iniciais pendentes troquem a senha no próximo acesso
-    $hashPadraoPerito = password_hash('123456', PASSWORD_DEFAULT);
-    $pdo->prepare("UPDATE usuarios SET password = ?, must_change_password = 1, session_version = session_version + 1 WHERE role = 'perito'")->execute([$hashPadraoPerito]);
+    // Assegura que peritos com credenciais iniciais pendentes troquem a senha no próximo acesso (executado apenas UMA vez)
+    $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (versao VARCHAR(50) PRIMARY KEY, aplicado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $migracaoJaAplicada = false;
+    try {
+        $stmtMig = $pdo->prepare("SELECT 1 FROM schema_migrations WHERE versao = ?");
+        $stmtMig->execute(['20261113_redefinir_senhas_peritos_123456']);
+        $migracaoJaAplicada = (bool)$stmtMig->fetchColumn();
+    } catch (Throwable $e) {
+        $migracaoJaAplicada = false;
+    }
+    if (!$migracaoJaAplicada) {
+        $hashPadraoPerito = password_hash('123456', PASSWORD_DEFAULT);
+        $pdo->prepare("UPDATE usuarios SET password = ?, must_change_password = 1, session_version = session_version + 1 WHERE role = 'perito'")->execute([$hashPadraoPerito]);
+        $pdo->exec("INSERT IGNORE INTO schema_migrations (versao) VALUES ('20261113_redefinir_senhas_peritos_123456')");
+    }
     if ((int)$pdo->query('SELECT COUNT(*) FROM usuarios')->fetchColumn() === 0) {
         $password = getenv('BOOTSTRAP_ADMIN_PASSWORD') ?: '';
         if (strlen($password) < 12) throw new RuntimeException('Banco novo exige BOOTSTRAP_ADMIN_PASSWORD de 12 caracteres ou mais.');
@@ -167,7 +237,7 @@ try {
         $s->execute([password_hash($password, PASSWORD_DEFAULT)]);
     }
     $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (versao VARCHAR(50) PRIMARY KEY, aplicado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-    $pdo->exec("INSERT IGNORE INTO schema_migrations (versao) VALUES ('20261022_hardening')");
+    $pdo->exec("INSERT IGNORE INTO schema_migrations (versao) VALUES ('20261022_hardening'), ('20261113_suporte_multisubsecao_schema')");
     $runtimeUser = getenv('RUNTIME_DB_USER') ?: '';
     if ($runtimeUser !== '') {
         if (!preg_match('/^[a-zA-Z0-9_]+$/', $runtimeUser) || !preg_match('/^[a-zA-Z0-9_]+$/', DB_NAME) || $runtimeUser === 'root') throw new RuntimeException('Usuário de runtime inválido.');
@@ -175,6 +245,7 @@ try {
         // Conta dedicada: remove privilégios amplos, inclusive grants de banco com '_' escapado.
         $pdo->exec('REVOKE ALL PRIVILEGES, GRANT OPTION FROM ' . $account);
         $permissoes = [
+            'subsecoes'=>'SELECT, INSERT, UPDATE',
             'atendimentos'=>'SELECT, INSERT, UPDATE', 'usuarios'=>'SELECT, INSERT, UPDATE, DELETE',
             'salas'=>'SELECT, INSERT, UPDATE, DELETE', 'salas_peritos'=>'SELECT, INSERT, UPDATE, DELETE',
             'pautas_liberadas'=>'SELECT, INSERT, DELETE', 'sequencia_diaria_senhas'=>'SELECT, INSERT, UPDATE',
