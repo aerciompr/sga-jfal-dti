@@ -276,6 +276,7 @@ check(obterSubsecao($pdo, -1) === null, 'obterSubsecao com ID negativo retorna n
 rejeita(fn() => operarUsuario($pdo, ['action' => 'cadastrar', 'username' => 'fraco', 'role' => 'recepcao', 'nome' => 'Fraco', 'password' => '123']), 'Rejeita usuário com senha curta');
 
 // 6.6 Resolução Definitiva de Travas de Salas e Não-Ressurreição por Atendimentos Concluídos
+$pdo->prepare("INSERT INTO salas (nome, subsecao_id) VALUES (?, ?)")->execute(['Sala de Perícia 6', 1]);
 operarPauta($pdo, 'agendar_unico', ['nome' => 'Paciente Sala 6', 'processo' => 'PROC-SALA6', 'perito' => 'Perito Teste A', 'cpf' => '', 'subsecao_id' => 1], date('Y-m-d'));
 $idSala6 = (int)$pdo->query("SELECT id FROM atendimentos WHERE processo = 'PROC-SALA6'")->fetchColumn();
 confirmarPresencas($pdo, [$idSala6], 'recepcao');
