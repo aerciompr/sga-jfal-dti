@@ -131,9 +131,9 @@ function isPautaLiberada($pdo, $data, ?int $subsecaoId = null) {
 /**
  * Helpers para o ecossistema multi-subseção
  */
-function multisubsecaoAtiva(PDO $pdo): bool {
+function multisubsecaoAtiva(PDO $pdo, bool $force = false): bool {
     static $ativa = null;
-    if ($ativa === null) {
+    if ($ativa === null || $force) {
         $ativa = (get_config($pdo, 'multisubsecao_ativa', '0') === '1');
     }
     return $ativa;
@@ -192,7 +192,11 @@ function get_config($pdo, $chave, $padrao = '') {
  */
 function set_config($pdo, $chave, $valor) {
     $stmt = $pdo->prepare("INSERT INTO configuracoes (chave, valor) VALUES (?, ?) ON DUPLICATE KEY UPDATE valor = ?");
-    return $stmt->execute([$chave, $valor, $valor]);
+    $res = $stmt->execute([$chave, $valor, $valor]);
+    if ($chave === 'multisubsecao_ativa') {
+        multisubsecaoAtiva($pdo, true);
+    }
+    return $res;
 }
 
 function videoId(string $url): string {
