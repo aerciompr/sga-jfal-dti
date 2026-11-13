@@ -289,8 +289,8 @@ check(isset($ocupAntes['Sala de Perícia 6']), 'Sala de Perícia 6 travada pelo 
 
 // Realiza atendimento e CONCLUI a perícia
 agirAtendimento($pdo, 'chamar_especifico', 'Perito Teste A', 'Sala de Perícia 6', ['id' => $idSala6], 1);
-agirAtendimento($pdo, 'iniciar', 'Perito Teste A', 'Sala de Perícia 6', ['id' => $idSala6], 1);
-agirAtendimento($pdo, 'concluir', 'Perito Teste A', 'Sala de Perícia 6', ['id' => $idSala6], 1);
+agirAtendimento($pdo, 'iniciar_atendimento', 'Perito Teste A', 'Sala de Perícia 6', ['atendimento_id' => $idSala6], 1);
+agirAtendimento($pdo, 'concluir', 'Perito Teste A', 'Sala de Perícia 6', ['atendimento_id' => $idSala6], 1);
 check(item($pdo, $idSala6)['status'] === 'concluido', 'Atendimento concluído com sucesso');
 
 // Perito A clica em liberar a sala
