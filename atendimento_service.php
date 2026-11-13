@@ -666,7 +666,15 @@ function obterResumoFilasPeritos(PDO $pdo, string $data, ?int $subsecaoId = null
 /**
  * Consulta indicadores executivos e detalhamento de produtividade por médico para o Dashboard.
  */
-function obterMetricasDia(PDO $pdo, string $data): array {
+function obterMetricasDia(PDO $pdo, string $data, ?int $subsecaoId = null): array {
+    $subId = $subsecaoId ?? subsecaoAtivaId($pdo);
+    $temSubAtend = colunaExiste($pdo, 'atendimentos', 'subsecao_id');
+    $temSubSalasP = colunaExiste($pdo, 'salas_peritos', 'subsecao_id');
+    $multiAtiva = multisubsecaoAtiva($pdo);
+
+    $whereSub = ($temSubAtend && $multiAtiva) ? " AND subsecao_id = ?" : "";
+    $paramsSub = ($temSubAtend && $multiAtiva) ? [$data, $subId] : [$data];
+
     $stmtGeral = $pdo->prepare("
         SELECT
             COUNT(*) as total_agendados,
@@ -680,9 +688,9 @@ function obterMetricasDia(PDO $pdo, string $data): array {
             AVG(CASE WHEN iniciado_em IS NOT NULL AND finalizado_em IS NOT NULL 
                      THEN TIMESTAMPDIFF(MINUTE, iniciado_em, finalizado_em) END) as media_pericia_min
         FROM atendimentos
-        WHERE data_pauta = ? AND status <> 'cancelado'
+        WHERE data_pauta = ? AND status <> 'cancelado' $whereSub
     ");
-    $stmtGeral->execute([$data]);
+    $stmtGeral->execute($paramsSub);
     $geral = $stmtGeral->fetch(PDO::FETCH_ASSOC) ?: [];
     
     $totalAgendados = (int)($geral['total_agendados'] ?? 0);
@@ -709,14 +717,20 @@ function obterMetricasDia(PDO $pdo, string $data): array {
             ROUND(AVG(CASE WHEN iniciado_em IS NOT NULL AND finalizado_em IS NOT NULL 
                            THEN TIMESTAMPDIFF(MINUTE, iniciado_em, finalizado_em) END), 0) as tempo_medio_min
         FROM atendimentos
-        WHERE data_pauta = ? AND status <> 'cancelado' AND perito IS NOT NULL AND perito <> ''
+        WHERE data_pauta = ? AND status <> 'cancelado' AND perito IS NOT NULL AND perito <> '' $whereSub
         GROUP BY perito
         ORDER BY perito ASC
     ");
-    $stmtPeritos->execute([$data]);
+    $stmtPeritos->execute($paramsSub);
     $peritos = $stmtPeritos->fetchAll(PDO::FETCH_ASSOC);
     
-    $salasMap = $pdo->query("SELECT perito, sala FROM salas_peritos")->fetchAll(PDO::FETCH_KEY_PAIR);
+    if ($temSubSalasP && $multiAtiva) {
+        $sSalas = $pdo->prepare("SELECT perito, sala FROM salas_peritos WHERE subsecao_id = ?");
+        $sSalas->execute([$subId]);
+        $salasMap = $sSalas->fetchAll(PDO::FETCH_KEY_PAIR);
+    } else {
+        $salasMap = $pdo->query("SELECT perito, sala FROM salas_peritos")->fetchAll(PDO::FETCH_KEY_PAIR);
+    }
     foreach ($peritos as &$p) {
         $p['sala'] = $salasMap[$p['perito']] ?? 'Não definida';
     }

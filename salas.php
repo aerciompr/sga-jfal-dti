@@ -22,6 +22,12 @@ $sys_name = defined('SYS_NAME') ? SYS_NAME : 'Justiça Federal';
 $message = '';
 $message_type = '';
 
+$subsecaoId = subsecaoAtivaId($pdo);
+$multiAtiva = multisubsecaoAtiva($pdo);
+$temSubSalas = colunaExiste($pdo, 'salas', 'subsecao_id');
+$temSubSalasP = colunaExiste($pdo, 'salas_peritos', 'subsecao_id');
+$temSubAtend = colunaExiste($pdo, 'atendimentos', 'subsecao_id');
+
 [$message,$message_type]=$_SESSION['flash_salas']??['','']; unset($_SESSION['flash_salas']);
 if ($_SERVER['REQUEST_METHOD']==='POST') {
     try {
@@ -29,21 +35,41 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $pdo->beginTransaction();
             $nome=trim((string)($_POST['nome']??''));
             if ($nome==='' || mb_strlen($nome)>50) throw new DomainException('Informe nome de até 50 caracteres.');
-            $s=$pdo->prepare('INSERT INTO salas (nome) VALUES (?)'); $s->execute([$nome]); registrarLog($pdo,'Cadastrar Sala',"Sala: $nome");
+            if ($temSubSalas && $multiAtiva) {
+                $s=$pdo->prepare('INSERT INTO salas (nome, subsecao_id) VALUES (?, ?)'); $s->execute([$nome, $subsecaoId]);
+            } else {
+                $s=$pdo->prepare('INSERT INTO salas (nome) VALUES (?)'); $s->execute([$nome]);
+            }
+            registrarLog($pdo,'Cadastrar Sala',"Sala: $nome", null, $subsecaoId);
             $pdo->commit(); $message='Salas atualizadas com sucesso.'; $message_type='success';
         } elseif (($_POST['action']??'')==='deletar') {
             $pdo->beginTransaction();
-            $s=$pdo->prepare('SELECT nome FROM salas WHERE id=? FOR UPDATE'); $s->execute([(int)($_POST['id']??0)]); $nome=$s->fetchColumn();
+            if ($temSubSalas && $multiAtiva) {
+                $s=$pdo->prepare('SELECT nome FROM salas WHERE id=? AND subsecao_id=? FOR UPDATE'); $s->execute([(int)($_POST['id']??0), $subsecaoId]);
+            } else {
+                $s=$pdo->prepare('SELECT nome FROM salas WHERE id=? FOR UPDATE'); $s->execute([(int)($_POST['id']??0)]);
+            }
+            $nome=$s->fetchColumn();
             if (!$nome) throw new DomainException('Sala não encontrada.');
-            $s=$pdo->prepare("SELECT id FROM atendimentos WHERE sala=? AND data_pauta=CURRENT_DATE() AND status IN ('chamada','atendimento') LIMIT 1 FOR UPDATE");$s->execute([$nome]);
+            $sqlAtend = "SELECT id FROM atendimentos WHERE sala=? AND data_pauta=CURRENT_DATE() AND status IN ('chamada','atendimento')" . (($temSubAtend && $multiAtiva) ? " AND subsecao_id=?" : "") . " LIMIT 1 FOR UPDATE";
+            $s=$pdo->prepare($sqlAtend); $s->execute(($temSubAtend && $multiAtiva) ? [$nome, $subsecaoId] : [$nome]);
             if ($s->fetchColumn()) throw new DomainException('Não é possível excluir uma sala em uso.');
-            $s=$pdo->prepare('DELETE FROM salas_peritos WHERE sala=?');$s->execute([$nome]);
-            $s=$pdo->prepare('DELETE FROM salas WHERE nome=?');$s->execute([$nome]); registrarLog($pdo,'Excluir Sala',"Sala: $nome; histórico preservado.");
+            if ($temSubSalasP && $multiAtiva) {
+                $s=$pdo->prepare('DELETE FROM salas_peritos WHERE sala=? AND subsecao_id=?');$s->execute([$nome, $subsecaoId]);
+            } else {
+                $s=$pdo->prepare('DELETE FROM salas_peritos WHERE sala=?');$s->execute([$nome]);
+            }
+            if ($temSubSalas && $multiAtiva) {
+                $s=$pdo->prepare('DELETE FROM salas WHERE nome=? AND subsecao_id=?');$s->execute([$nome, $subsecaoId]);
+            } else {
+                $s=$pdo->prepare('DELETE FROM salas WHERE nome=?');$s->execute([$nome]);
+            }
+            registrarLog($pdo,'Excluir Sala',"Sala: $nome; histórico preservado.", null, $subsecaoId);
             $pdo->commit(); $message='Salas atualizadas com sucesso.'; $message_type='success';
         } elseif (($_POST['action']??'')==='desbloquear_sala') {
             $nome = trim((string)($_POST['nome'] ?? ''));
             if ($nome === '') throw new DomainException('Informe a sala para desbloqueio.');
-            $res = desbloquearSalaAdministrativa($pdo, $nome, $_SESSION['usuario_name'] ?? 'Admin', 'Desbloqueio solicitado no Gerenciamento de Salas');
+            $res = desbloquearSalaAdministrativa($pdo, $nome, $_SESSION['usuario_name'] ?? 'Admin', 'Desbloqueio solicitado no Gerenciamento de Salas', $subsecaoId);
             $msgExtra = $res['atendimentos_liberados'] > 0 ? " ({$res['atendimentos_liberados']} paciente(s) devolvidos para a fila da recepção)." : "";
             $message = "Sala {$nome} desbloqueada com sucesso!{$msgExtra}";
             $message_type = 'success';
@@ -54,11 +80,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 }
 
 // Busca todas as salas ordenadas por nome para a listagem
-$stmt = $pdo->query("SELECT id, nome FROM salas ORDER BY nome ASC");
+if ($temSubSalas && $multiAtiva) {
+    $stmt = $pdo->prepare("SELECT id, nome FROM salas WHERE subsecao_id = ? ORDER BY nome ASC");
+    $stmt->execute([$subsecaoId]);
+} else {
+    $stmt = $pdo->query("SELECT id, nome FROM salas ORDER BY nome ASC");
+}
 $salas = $stmt->fetchAll();
 
 // Obtém status de ocupação das salas hoje
-$salasOcupadas = obterSalasOcupadasHoje($pdo);
+$salasOcupadas = obterSalasOcupadasHoje($pdo, '', $subsecaoId);
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">

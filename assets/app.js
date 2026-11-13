@@ -202,7 +202,9 @@ let ultimoHtmlRodape = '';
 
 async function atualizarRodape(forcar = false) {
     try {
-        const resposta = await fetch('api_senhas_recentes.php', { cache: 'no-store' });
+        const qs = window.tvQueryString || (window.location?.search || '');
+        const url = 'api_senhas_recentes.php' + (qs ? (qs.startsWith('?') ? qs : '?' + qs) : '');
+        const resposta = await fetch(url, { cache: 'no-store' });
         if (!resposta.ok) return;
         const novoHtml = await resposta.text();
         const container = document.getElementById('rodape-senhas');
@@ -220,7 +222,9 @@ async function verificarNovaSenha() {
     processando = true;
     const indicador = document.getElementById('conexao-tv');
     try {
-        const resposta = await fetch(`api_senhas.php?apos=${cursor}`, { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+        const qs = window.tvQueryString || (window.location?.search || '');
+        const extraParam = qs ? '&' + qs.replace(/^\?/, '') : '';
+        const resposta = await fetch(`api_senhas.php?apos=${cursor}${extraParam}`, { cache: 'no-store', signal: AbortSignal.timeout(10000) });
         if (!resposta.ok) throw new Error('Painel sem autorização ou conexão');
         const dados = await resposta.json();
         if (!dados.success) throw new Error('Resposta inválida');

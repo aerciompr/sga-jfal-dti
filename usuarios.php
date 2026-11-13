@@ -23,6 +23,16 @@ $message = '';
 $message_type = '';
 
 $current_user_id = $_SESSION['usuario_id'];
+$isSuperAdmin = !empty($_SESSION['is_superadmin']) || (($_SESSION['usuario_role'] ?? '') === 'admin' && empty($_SESSION['usuario_subsecao_id']));
+$subsecaoId = subsecaoAtivaId($pdo);
+$multiAtiva = multisubsecaoAtiva($pdo);
+$temSubUser = colunaExiste($pdo, 'usuarios', 'subsecao_id');
+$subsecoesMap = [];
+if ($multiAtiva) {
+    foreach (obterSubsecoes($pdo) as $sub) {
+        $subsecoesMap[(int)$sub['id']] = $sub['nome'];
+    }
+}
 
 require_once __DIR__ . '/usuarios_service.php';
 [$message,$message_type] = $_SESSION['flash_usuarios'] ?? ['', '']; unset($_SESSION['flash_usuarios']);
@@ -34,7 +44,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Busca todos os usuários ordenados por ID para a listagem
-$stmt = $pdo->query("SELECT id, username, role, nome, must_change_password FROM usuarios ORDER BY id ASC");
+if ($multiAtiva && !$isSuperAdmin && $temSubUser) {
+    $stmt = $pdo->prepare("SELECT id, username, role, nome, must_change_password, subsecao_id FROM usuarios WHERE subsecao_id = ? AND role IN ('recepcao', 'supervisor') ORDER BY id ASC");
+    $stmt->execute([$subsecaoId]);
+} elseif ($temSubUser) {
+    $stmt = $pdo->query("SELECT id, username, role, nome, must_change_password, subsecao_id FROM usuarios ORDER BY id ASC");
+} else {
+    $stmt = $pdo->query("SELECT id, username, role, nome, must_change_password FROM usuarios ORDER BY id ASC");
+}
 $usuarios = $stmt->fetchAll();
 ?>
 <!DOCTYPE html>
@@ -93,10 +110,32 @@ $usuarios = $stmt->fetchAll();
                         <select name="role" id="form-role" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
                             <option value="recepcao">Recepção</option>
                             <option value="supervisor">Supervisor da Recepção</option>
-                            <option value="admin">Administrador</option>
-                            <option value="perito">Perito Médico</option>
+                            <?php if ($isSuperAdmin): ?>
+                                <option value="admin">Administrador</option>
+                                <option value="perito">Perito Médico</option>
+                            <?php endif; ?>
                         </select>
                     </div>
+
+                    <?php if ($multiAtiva): ?>
+                        <?php if ($isSuperAdmin): ?>
+                            <div>
+                                <label class="block text-xs text-gray-400 mb-1 font-semibold uppercase">Subseção Judiciária</label>
+                                <select name="subsecao_id" id="form-subsecao" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                                    <option value="">Global / Sede Geral (Sem restrição)</option>
+                                    <?php foreach (obterSubsecoes($pdo) as $sub): ?>
+                                        <option value="<?= (int)$sub['id'] ?>">🏢 <?= escapar($sub['nome']) ?> (<?= escapar($sub['cidade']) ?>)</option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <span class="text-[10px] text-gray-500 mt-1 block">Super-admin e peritos ficam como Global; recepcionistas e administradores locais são vinculados à subseção.</span>
+                            </div>
+                        <?php else: ?>
+                            <input type="hidden" name="subsecao_id" value="<?= (int)$subsecaoId ?>">
+                            <div class="text-xs text-blue-300 font-bold bg-blue-950/40 border border-blue-800/60 rounded-lg px-3 py-2">
+                                🏢 Subseção: <?= escapar($subsecoesMap[$subsecaoId] ?? 'Local') ?>
+                            </div>
+                        <?php endif; ?>
+                    <?php endif; ?>
 
                     <div class="flex items-center gap-2 pt-1 bg-gray-800/40 p-2.5 rounded-lg border border-gray-750">
                         <input type="checkbox" name="must_change_password" id="form-must-change" value="1" checked class="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500">
@@ -124,18 +163,20 @@ $usuarios = $stmt->fetchAll();
                         <span class="bg-gray-800 text-gray-400 text-xs px-2.5 py-0.5 rounded-full font-bold"><?= count($usuarios) ?></span>
                     </h2>
                     <div class="flex flex-wrap items-center gap-2">
-                        <form method="POST" class="inline" onsubmit="return confirm('ATENÇÃO: Deseja redefinir a senha de TODOS os peritos médicos para a senha padrão \'123456\' com troca obrigatória no próximo acesso? Todas as sessões abertas de peritos serão revogadas.');"><?= csrfCampo() ?>
-                            <input type="hidden" name="action" value="redefinir_senhas_peritos_padrao">
-                            <button type="submit" class="bg-blue-950/40 hover:bg-blue-900/50 border border-blue-800/70 text-blue-300 text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-sm">
-                                <span>🔑 Redefinir Peritos para 123456</span>
-                            </button>
-                        </form>
-                        <form method="POST" class="inline" onsubmit="return confirm('ATENÇÃO: Deseja exigir a troca de senha de TODOS os peritos médicos no próximo acesso? Todas as sessões abertas de peritos serão revogadas.');"><?= csrfCampo() ?>
-                            <input type="hidden" name="action" value="exigir_troca_todos_peritos">
-                            <button type="submit" class="bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/70 text-amber-300 text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-sm">
-                                <span>🔒 Exigir Troca de Todos os Peritos</span>
-                            </button>
-                        </form>
+                        <?php if ($isSuperAdmin): ?>
+                            <form method="POST" class="inline" onsubmit="return confirm('ATENÇÃO: Deseja redefinir a senha de TODOS os peritos médicos para a senha padrão \'123456\' com troca obrigatória no próximo acesso? Todas as sessões abertas de peritos serão revogadas.');"><?= csrfCampo() ?>
+                                <input type="hidden" name="action" value="redefinir_senhas_peritos_padrao">
+                                <button type="submit" class="bg-blue-950/40 hover:bg-blue-900/50 border border-blue-800/70 text-blue-300 text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-sm">
+                                    <span>🔑 Redefinir Peritos para 123456</span>
+                                </button>
+                            </form>
+                            <form method="POST" class="inline" onsubmit="return confirm('ATENÇÃO: Deseja exigir a troca de senha de TODOS os peritos médicos no próximo acesso? Todas as sessões abertas de peritos serão revogadas.');"><?= csrfCampo() ?>
+                                <input type="hidden" name="action" value="exigir_troca_todos_peritos">
+                                <button type="submit" class="bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/70 text-amber-300 text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-sm">
+                                    <span>🔒 Exigir Troca de Todos os Peritos</span>
+                                </button>
+                            </form>
+                        <?php endif; ?>
                         <div class="w-full sm:w-56">
                             <input type="text" id="busca-usuarios" aria-label="Buscar usuário" oninput="filtrarUsuarios()" placeholder="🔍 Filtrar por nome ou login..." class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition">
                         </div>
@@ -150,6 +191,9 @@ $usuarios = $stmt->fetchAll();
                                 <th class="pb-2">Nome de Usuário</th>
                                 <th class="pb-2">Nome Completo</th>
                                 <th class="pb-2">Perfil</th>
+                                <?php if ($multiAtiva): ?>
+                                    <th class="pb-2">Subseção</th>
+                                <?php endif; ?>
                                 <th class="pb-2 text-right">Ações</th>
                             </tr>
                         </thead>
@@ -177,9 +221,18 @@ $usuarios = $stmt->fetchAll();
                                             <span class="bg-emerald-950 text-emerald-400 text-[10px] px-2.5 py-0.5 rounded-full border border-emerald-900/50 uppercase font-semibold">Recepção</span>
                                         <?php endif; ?>
                                     </td>
+                                    <?php if ($multiAtiva): ?>
+                                        <td class="py-3 text-xs">
+                                            <?php if (!empty($u['subsecao_id']) && isset($subsecoesMap[$u['subsecao_id']])): ?>
+                                                <span class="bg-blue-950/50 text-blue-300 border border-blue-800/60 text-[10px] px-2 py-0.5 rounded font-medium">🏢 <?= escapar($subsecoesMap[$u['subsecao_id']]) ?></span>
+                                            <?php else: ?>
+                                                <span class="bg-gray-800 text-gray-400 border border-gray-700 text-[10px] px-2 py-0.5 rounded font-medium">🌐 Global / Sede</span>
+                                            <?php endif; ?>
+                                        </td>
+                                    <?php endif; ?>
                                     <td class="py-3 text-right">
                                         <div class="flex justify-end gap-1.5 flex-wrap">
-                                            <button onclick="editUser(<?= $u['id'] ?>, <?= jsValor($u['username']) ?>, <?= jsValor($u['nome'] ?? '') ?>, <?= jsValor($u['role']) ?>, <?= (int)$u['must_change_password'] ?>)" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold px-2.5 py-1 rounded transition border border-gray-750">
+                                            <button onclick="editUser(<?= $u['id'] ?>, <?= jsValor($u['username']) ?>, <?= jsValor($u['nome'] ?? '') ?>, <?= jsValor($u['role']) ?>, <?= (int)$u['must_change_password'] ?>, <?= (int)($u['subsecao_id'] ?? 0) ?>)" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold px-2.5 py-1 rounded transition border border-gray-750">
                                                 Editar
                                             </button>
                                             <?php if (!$u['must_change_password']): ?>
@@ -216,7 +269,7 @@ $usuarios = $stmt->fetchAll();
 
     <!-- Scripts de Interação das Ações CRUD no lado do Cliente -->
     <script>
-        function editUser(id, username, nome, role, mustChange = 1) {
+        function editUser(id, username, nome, role, mustChange = 1, subsecaoId = 0) {
             document.getElementById('form-title').textContent = "✏️ Editar Usuário";
             document.getElementById('form-action').value = "editar";
             document.getElementById('user-id').value = id;
@@ -232,6 +285,11 @@ $usuarios = $stmt->fetchAll();
             
             document.getElementById('form-role').value = role;
             document.getElementById('form-must-change').checked = Boolean(mustChange);
+
+            const subSelect = document.getElementById('form-subsecao');
+            if (subSelect) {
+                subSelect.value = subsecaoId ? String(subsecaoId) : '';
+            }
             
             document.getElementById('submit-btn').textContent = "Atualizar Usuário";
             document.getElementById('cancel-btn').classList.remove('hidden');
@@ -250,6 +308,11 @@ $usuarios = $stmt->fetchAll();
             passInput.placeholder = "Digite a senha";
             document.getElementById('password-help').classList.add('hidden');
             document.getElementById('form-must-change').checked = true;
+
+            const subSelect = document.getElementById('form-subsecao');
+            if (subSelect) {
+                subSelect.value = '';
+            }
             
             document.getElementById('submit-btn').textContent = "Cadastrar Usuário";
             document.getElementById('cancel-btn').classList.add('hidden');

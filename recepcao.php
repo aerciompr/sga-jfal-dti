@@ -49,8 +49,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $file = $_FILES['arquivo_excel'] ?? $_FILES['arquivo_pdf'] ?? [];
             $janela = (string)($_POST['janela_importacao'] ?? 'dia');
             $sincronizar = isset($_POST['sincronizar_pauta']) ? (bool)$_POST['sincronizar_pauta'] : true;
+            $destSubId = null;
+            if (multisubsecaoAtiva($pdo)) {
+                if (!empty($_SESSION['is_superadmin']) && !empty($_POST['subsecao_id_destino'])) {
+                    $destSubId = (int)$_POST['subsecao_id_destino'];
+                } else {
+                    $destSubId = subsecaoAtivaId($pdo);
+                }
+            }
             $dados = prepararImportacao($file, $janela);
-            $resultado = importarRegistros($pdo, $dados['registros'], $dados['datas_escopo'], $sincronizar);
+            $resultado = importarRegistros($pdo, $dados['registros'], $dados['datas_escopo'], $sincronizar, $destSubId);
             $partes = [$resultado['novos'] . ' novos incluídos'];
             if (!empty($resultado['atualizados'])) $partes[] = $resultado['atualizados'] . ' atualizados';
             if (!empty($resultado['cancelados'])) $partes[] = $resultado['cancelados'] . ' cancelados da pauta';
@@ -112,7 +120,13 @@ if (empty($yt_url)) {
     $yt_url = file_exists($yt_file) ? trim(file_get_contents($yt_file)) : 'https://www.youtube.com/watch?v=5qap5aO4i9A';
 }
 
-$pauta_liberada = isPautaLiberada($pdo, $dataFiltro);
+$subsecaoId = subsecaoAtivaId($pdo);
+$multiAtiva = multisubsecaoAtiva($pdo);
+$temSubAtend = colunaExiste($pdo, 'atendimentos', 'subsecao_id');
+$filtroSub = ($temSubAtend && $multiAtiva) ? " AND subsecao_id = ?" : "";
+$paramsSub = ($temSubAtend && $multiAtiva) ? [$subsecaoId] : [];
+
+$pauta_liberada = isPautaLiberada($pdo, $dataFiltro, $subsecaoId);
 $permite_checkin = $dataFiltro === date('Y-m-d') && (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['usuario_role'] === 'recepcao' && $dataFiltro === date('Y-m-d') && $pauta_liberada));
 
 // Recepção comum não visualiza dados de pautas que não foram homologadas/liberadas pelo supervisor
@@ -122,17 +136,17 @@ $chamados = [];
 $concluidos = [];
 
 if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['usuario_role'] === 'recepcao' && $pauta_liberada)) {
-    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'agendado' AND data_pauta = ? ORDER BY perito ASC, nome ASC, id ASC");
-    $stmt->execute([$dataFiltro]);
+    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'agendado' AND data_pauta = ?" . $filtroSub . " ORDER BY perito ASC, nome ASC, id ASC");
+    $stmt->execute(array_merge([$dataFiltro], $paramsSub));
     $agendados = $stmt->fetchAll();
 
     // Ordenação alinhada estritamente com o painel do perito: fila_em ASC, id ASC
-    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'presente' AND data_pauta = ? ORDER BY fila_em ASC, id ASC");
-    $stmt->execute([$dataFiltro]);
+    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'presente' AND data_pauta = ?" . $filtroSub . " ORDER BY fila_em ASC, id ASC");
+    $stmt->execute(array_merge([$dataFiltro], $paramsSub));
     $presentes = $stmt->fetchAll();
 
     // Sincroniza fila dos peritos respeitando critérios (chegada vs horário) e priorização
-    $resumoPeritos = obterResumoFilasPeritos($pdo, $dataFiltro);
+    $resumoPeritos = obterResumoFilasPeritos($pdo, $dataFiltro, $subsecaoId);
     $mapFilaPeritos = [];
     foreach ($resumoPeritos as $rp) {
         foreach ($rp['fila'] as $itemFila) {
@@ -164,16 +178,16 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
     }
     unset($p);
 
-    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status IN ('chamada','atendimento') AND data_pauta = ? ORDER BY chamado_em DESC");
-    $stmt->execute([$dataFiltro]);
+    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status IN ('chamada','atendimento') AND data_pauta = ?" . $filtroSub . " ORDER BY chamado_em DESC");
+    $stmt->execute(array_merge([$dataFiltro], $paramsSub));
     $chamados = $stmt->fetchAll();
 
-    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'concluido' AND data_pauta = ? ORDER BY finalizado_em DESC, chamado_em DESC");
-    $stmt->execute([$dataFiltro]);
+    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'concluido' AND data_pauta = ?" . $filtroSub . " ORDER BY finalizado_em DESC, chamado_em DESC");
+    $stmt->execute(array_merge([$dataFiltro], $paramsSub));
     $concluidos = $stmt->fetchAll();
 
-    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'desistente' AND data_pauta = ? ORDER BY finalizado_em DESC");
-    $stmt->execute([$dataFiltro]);
+    $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status = 'desistente' AND data_pauta = ?" . $filtroSub . " ORDER BY finalizado_em DESC");
+    $stmt->execute(array_merge([$dataFiltro], $paramsSub));
     $desistentes = $stmt->fetchAll();
 }
 ?>
@@ -677,6 +691,25 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                             <option value="3dias">📅 Hoje e próximos 2 dias (Máximo 3 dias)</option>
                         </select>
                     </div>
+                    <?php if ($multiAtiva): ?>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Subseção de Destino</label>
+                        <?php if (!empty($_SESSION['is_superadmin'])): ?>
+                            <select name="subsecao_id_destino" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500">
+                                <?php foreach (obterSubsecoes($pdo) as $sub): ?>
+                                    <option value="<?= (int)$sub['id'] ?>" <?= $sub['id'] == $subsecaoId ? 'selected' : '' ?>>
+                                        🏢 <?= escapar($sub['nome']) ?> (<?= escapar($sub['cidade']) ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        <?php else: ?>
+                            <input type="hidden" name="subsecao_id_destino" value="<?= (int)$subsecaoId ?>">
+                            <div class="text-xs text-blue-300 font-bold bg-blue-950/40 border border-blue-800/60 rounded-lg px-2.5 py-1.5">
+                                🏢 Subseção: <?= escapar(obterSubsecao($pdo, $subsecaoId)['nome'] ?? 'Local') ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                    <?php endif; ?>
                     <div>
                         <label class="flex items-start gap-2 cursor-pointer">
                             <input type="checkbox" name="sincronizar_pauta" value="1" checked class="mt-0.5 rounded bg-gray-800 border-gray-700 text-blue-600 focus:ring-0">
@@ -703,6 +736,7 @@ if (in_array($_SESSION['usuario_role'], ['admin', 'supervisor']) || ($_SESSION['
                 <h2 class="text-sm font-semibold uppercase text-gray-400 tracking-wider mb-4">Adicionar Periciado Manual</h2>
                 <form method="POST" class="space-y-4"><?= csrfCampo() ?>
                     <input type="hidden" name="action" value="agendar_unico">
+                    <input type="hidden" name="subsecao_id" value="<?= (int)$subsecaoId ?>">
                     <div>
                         <label class="block text-xs text-gray-400 mb-1">Nome do Periciado</label>
                         <input type="text" name="nome" required maxlength="100" placeholder="Nome Completo" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">

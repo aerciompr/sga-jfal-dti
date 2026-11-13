@@ -28,9 +28,26 @@ $filtro_atraso = $_GET['atraso'] ?? '';
 $ordenacao = $_GET['ordenacao'] ?? 'chegada_desc';
 $busca = trim($_GET['busca'] ?? '');
 
+$isSuperAdmin = !empty($_SESSION['is_superadmin']) || (($_SESSION['usuario_role'] ?? '') === 'admin' && empty($_SESSION['usuario_subsecao_id']));
+$subsecaoId = subsecaoAtivaId($pdo);
+$multiAtiva = multisubsecaoAtiva($pdo);
+$temSubAtend = colunaExiste($pdo, 'atendimentos', 'subsecao_id');
+$temSubLogs = colunaExiste($pdo, 'logs_auditoria', 'subsecao_id');
+$subsecaoFiltro = $_GET['subsecao_filtro'] ?? ($isSuperAdmin ? '' : (string)$subsecaoId);
+
 // Consulta de Atendimentos Filtrada
 $sql = "SELECT * FROM atendimentos WHERE 1=1";
 $params = [];
+
+if ($multiAtiva && $temSubAtend) {
+    if (!$isSuperAdmin) {
+        $sql .= " AND subsecao_id = ?";
+        $params[] = $subsecaoId;
+    } elseif ($subsecaoFiltro !== '') {
+        $sql .= " AND subsecao_id = ?";
+        $params[] = (int)$subsecaoFiltro;
+    }
+}
 
 if ($data_inicio) {
     $sql .= " AND data_pauta >= ?";
@@ -92,6 +109,15 @@ $agregado->execute($params); $resumoFiltro = $agregado->fetch();
 $totalRegistros=(int)$resumoFiltro['total'];
 $sqlLogs = 'SELECT * FROM logs_auditoria WHERE criado_em >= ? AND criado_em < DATE_ADD(?, INTERVAL 1 DAY)';
 $paramsLogs = [$data_inicio, $data_fim];
+if ($multiAtiva && $temSubLogs) {
+    if (!$isSuperAdmin) {
+        $sqlLogs .= ' AND subsecao_id = ?';
+        $paramsLogs[] = $subsecaoId;
+    } elseif ($subsecaoFiltro !== '') {
+        $sqlLogs .= ' AND subsecao_id = ?';
+        $paramsLogs[] = (int)$subsecaoFiltro;
+    }
+}
 if ($busca !== '') { $sqlLogs .= ' AND (usuario_nome LIKE ? OR acao LIKE ? OR detalhes LIKE ?)'; $paramsLogs=array_merge($paramsLogs,["%$busca%","%$busca%","%$busca%"]); }
 $sqlLogs .= ' ORDER BY id DESC';
 if ($exportar) {
@@ -173,8 +199,17 @@ if ($total_pericia_validos > 0) {
 $total_chegadas=(int)$resumoFiltro['chegadas']; $total_chamadas=(int)$resumoFiltro['chamadas'];
 $tempo_medio_espera_txt=$resumoFiltro['espera']===null ? '---' : round((float)$resumoFiltro['espera']/60,1).' min';
 $tempo_medio_pericia_txt=$resumoFiltro['duracao']===null ? '---' : round((float)$resumoFiltro['duracao']/60,1).' min';
-$peritos_lista = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE perito IS NOT NULL AND perito != '' ORDER BY perito ASC")->fetchAll(PDO::FETCH_COLUMN);
-$salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS NOT NULL AND sala != '' ORDER BY sala ASC")->fetchAll(PDO::FETCH_COLUMN);
+if ($multiAtiva && !$isSuperAdmin && $temSubAtend) {
+    $sPer = $pdo->prepare("SELECT DISTINCT perito FROM atendimentos WHERE perito IS NOT NULL AND perito != '' AND subsecao_id = ? ORDER BY perito ASC");
+    $sPer->execute([$subsecaoId]);
+    $peritos_lista = $sPer->fetchAll(PDO::FETCH_COLUMN);
+    $sSal = $pdo->prepare("SELECT DISTINCT sala FROM atendimentos WHERE sala IS NOT NULL AND sala != '' AND subsecao_id = ? ORDER BY sala ASC");
+    $sSal->execute([$subsecaoId]);
+    $salas_lista = $sSal->fetchAll(PDO::FETCH_COLUMN);
+} else {
+    $peritos_lista = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE perito IS NOT NULL AND perito != '' ORDER BY perito ASC")->fetchAll(PDO::FETCH_COLUMN);
+    $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS NOT NULL AND sala != '' ORDER BY sala ASC")->fetchAll(PDO::FETCH_COLUMN);
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -228,7 +263,21 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
                 </div>
 
                 <?php if ($aba === 'atendimentos'): ?>
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-gray-800 pt-4">
+                    <div class="grid grid-cols-1 md:grid-cols-<?= ($multiAtiva && $isSuperAdmin) ? '5' : '4' ?> gap-4 border-t border-gray-800 pt-4">
+                        <?php if ($multiAtiva && $isSuperAdmin): ?>
+                        <!-- Filtro Subseção -->
+                        <div>
+                            <label class="block text-[10px] text-gray-400 mb-1 font-bold uppercase tracking-wider">Subseção</label>
+                            <select name="subsecao_filtro" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                                <option value="">-- Todas --</option>
+                                <?php foreach (obterSubsecoes($pdo) as $sub): ?>
+                                    <option value="<?= (int)$sub['id'] ?>" <?= $subsecaoFiltro == $sub['id'] ? 'selected' : '' ?>>
+                                        🏢 <?= escapar($sub['nome']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <?php endif; ?>
                         <!-- Filtro Perito -->
                         <div>
                             <label class="block text-[10px] text-gray-400 mb-1 font-bold uppercase tracking-wider">Perito Médico</label>
@@ -298,11 +347,30 @@ $salas_lista = $pdo->query("SELECT DISTINCT sala FROM atendimentos WHERE sala IS
                         </div>
                     </div>
                 <?php else: ?>
+                    <?php if ($multiAtiva && $isSuperAdmin): ?>
+                    <div class="border-t border-gray-800 pt-4 flex items-center justify-between gap-4">
+                        <div class="w-64">
+                            <label class="block text-[10px] text-gray-400 mb-1 font-bold uppercase tracking-wider">Subseção</label>
+                            <select name="subsecao_filtro" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                                <option value="">-- Todas as Subseções --</option>
+                                <?php foreach (obterSubsecoes($pdo) as $sub): ?>
+                                    <option value="<?= (int)$sub['id'] ?>" <?= $subsecaoFiltro == $sub['id'] ? 'selected' : '' ?>>
+                                        🏢 <?= escapar($sub['nome']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow transition tracking-wider uppercase mt-4">
+                            filtrar logs de ações
+                        </button>
+                    </div>
+                    <?php else: ?>
                     <div class="flex justify-end border-t border-gray-850 pt-4">
                         <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow transition tracking-wider uppercase">
                             filtrar logs de ações
                         </button>
                     </div>
+                    <?php endif; ?>
                 <?php endif; ?>
             </form>
         </div>

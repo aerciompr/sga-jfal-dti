@@ -25,14 +25,19 @@ if ($abaAtiva !== 'metricas' || !$isAdminOuSupervisor) {
     $abaAtiva = 'modulos';
 }
 
+$subsecaoId = subsecaoAtivaId($pdo);
+$multiAtiva = multisubsecaoAtiva($pdo);
+$subsecaoObj = $multiAtiva ? (obterSubsecao($pdo, $subsecaoId) ?? ['nome' => 'Maceió (Sede)']) : null;
+
 // Exportação do Relatório Executivo em CSV para a Diretoria / Coordenação
 if (isset($_GET['exportar']) && $_GET['exportar'] === 'metricas_csv' && $isAdminOuSupervisor) {
-    $rel = obterMetricasDia($pdo, $dataBusca);
+    $rel = obterMetricasDia($pdo, $dataBusca, $subsecaoId);
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="relatorio_produtividade_' . $dataBusca . '.csv"');
     $out = fopen('php://output', 'w');
     fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
     fputcsv($out, ['RELATORIO DE PRODUTIVIDADE E ATENDIMENTOS — JUSTICA FEDERAL EM ALAGOAS'], ';');
+    if ($subsecaoObj) fputcsv($out, ['Subsecao Judiciaria', $subsecaoObj['nome']], ';');
     fputcsv($out, ['Data de Referencia', date('d/m/Y', strtotime($dataBusca))], ';');
     fputcsv($out, ['Emitido em', date('d/m/Y H:i:s')], ';');
     fputcsv($out, ['Emitido por', $_SESSION['usuario_name']], ';');
@@ -67,7 +72,7 @@ if (isset($_GET['exportar']) && $_GET['exportar'] === 'metricas_csv' && $isAdmin
     exit;
 }
 
-$metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
+$metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca, $subsecaoId) : null;
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">

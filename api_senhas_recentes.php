@@ -1,22 +1,45 @@
 <?php
 require_once __DIR__ . '/banco.php';
 
+$subsecaoId = 1;
+if (multisubsecaoAtiva($pdo)) {
+    if (!empty($_GET['token'])) {
+        $sTok = $pdo->prepare("SELECT id FROM subsecoes WHERE token_painel = ? AND ativo = 1");
+        $sTok->execute([trim((string)$_GET['token'])]);
+        $sId = $sTok->fetchColumn();
+        if ($sId) $subsecaoId = (int)$sId;
+    } elseif (!empty($_GET['subsecao'])) {
+        $sSub = $pdo->prepare("SELECT id FROM subsecoes WHERE (sigla = ? OR id = ?) AND ativo = 1");
+        $sSub->execute([trim((string)$_GET['subsecao']), (int)$_GET['subsecao']]);
+        $sId = $sSub->fetchColumn();
+        if ($sId) $subsecaoId = (int)$sId;
+    } elseif (isset($_SESSION['subsecao_id_ativa'])) {
+        $subsecaoId = (int)$_SESSION['subsecao_id_ativa'];
+    }
+}
+
 $temPrio = colunaExiste($pdo, 'eventos_chamada', 'prioridade') || colunaExiste($pdo, 'atendimentos', 'prioridade');
 $colPrio = $temPrio ? "COALESCE(ec.prioridade, a.prioridade, 'normal') AS prioridade," : "'normal' AS prioridade,";
+$temSub = colunaExiste($pdo, 'eventos_chamada', 'subsecao_id');
+$whereSub = $temSub ? "ec.subsecao_id = ? AND " : "";
+$whereSubUltimos = $temSub ? "subsecao_id = ? AND " : "";
+$params = $temSub ? [$subsecaoId, $subsecaoId] : [];
 
-$stmt = $pdo->query("
+$stmt = $pdo->prepare("
     SELECT ec.nome, ec.sala, $colPrio COALESCE(a.chamadas_count, 1) AS chamadas_count
     FROM eventos_chamada ec
     INNER JOIN (
         SELECT MAX(id) AS max_id
         FROM eventos_chamada
-        WHERE data_pauta = CURRENT_DATE()
+        WHERE $whereSubUltimos data_pauta = CURRENT_DATE()
         GROUP BY atendimento_id
     ) ultimos ON ec.id = ultimos.max_id
     LEFT JOIN atendimentos a ON a.id = ec.atendimento_id
+    WHERE $whereSub ec.data_pauta = CURRENT_DATE()
     ORDER BY ec.id DESC
     LIMIT 4
 ");
+$stmt->execute($params);
 $recentes = $stmt->fetchAll();
 
 for ($i = 0; $i < 4; $i++) {

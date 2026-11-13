@@ -49,6 +49,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['usuario_role'] = $user['role'];
             $_SESSION['usuario_nome'] = $user['nome'] ?: $user['username'];
 
+            $_SESSION['data_sessao'] = date('Y-m-d');
+            $multiAtiva = multisubsecaoAtiva($pdo);
+            $subsecaoEscolhida = isset($_POST['subsecao_id']) && is_numeric($_POST['subsecao_id']) ? (int)$_POST['subsecao_id'] : 0;
+
+            if ($user['role'] === 'admin') {
+                if (empty($user['subsecao_id'])) {
+                    $_SESSION['is_superadmin'] = true;
+                    $_SESSION['usuario_subsecao_id'] = null;
+                    if ($multiAtiva && $subsecaoEscolhida > 0 && obterSubsecao($pdo, $subsecaoEscolhida)) {
+                        $_SESSION['subsecao_id_ativa'] = $subsecaoEscolhida;
+                    } else {
+                        $_SESSION['subsecao_id_ativa'] = 1;
+                    }
+                } else {
+                    $_SESSION['is_superadmin'] = false;
+                    $_SESSION['usuario_subsecao_id'] = (int)$user['subsecao_id'];
+                    $_SESSION['subsecao_id_ativa'] = (int)$user['subsecao_id'];
+                }
+            } elseif ($user['role'] === 'recepcao' || $user['role'] === 'supervisor') {
+                $_SESSION['is_superadmin'] = false;
+                $_SESSION['usuario_subsecao_id'] = (int)($user['subsecao_id'] ?? 1);
+                $_SESSION['subsecao_id_ativa'] = (int)($user['subsecao_id'] ?? 1);
+            } elseif ($user['role'] === 'perito') {
+                $_SESSION['is_superadmin'] = false;
+                $_SESSION['usuario_subsecao_id'] = null;
+                if ($multiAtiva) {
+                    if ($subsecaoEscolhida > 0 && obterSubsecao($pdo, $subsecaoEscolhida)) {
+                        $_SESSION['subsecao_id_ativa'] = $subsecaoEscolhida;
+                    } else {
+                        $subsecaoDetectada = null;
+                        try {
+                            $stmtSub = $pdo->prepare("SELECT DISTINCT subsecao_id FROM atendimentos WHERE (perito_id = ? OR perito = ?) AND data_pauta = CURRENT_DATE() AND subsecao_id IS NOT NULL");
+                            $stmtSub->execute([(int)$user['id'], $user['nome'] ?: $user['username']]);
+                            $subsHoje = $stmtSub->fetchAll(PDO::FETCH_COLUMN);
+                            if (count($subsHoje) === 1) {
+                                $subsecaoDetectada = (int)$subsHoje[0];
+                            }
+                        } catch (Throwable $e) {}
+                        $_SESSION['subsecao_id_ativa'] = $subsecaoDetectada ?: 1;
+                    }
+                } else {
+                    $_SESSION['subsecao_id_ativa'] = 1;
+                }
+            } else {
+                $_SESSION['is_superadmin'] = false;
+                $_SESSION['usuario_subsecao_id'] = 1;
+                $_SESSION['subsecao_id_ativa'] = 1;
+            }
+
             // Detecção ativa de credencial inicial ou pendência de troca obrigatória
             $cpfLimpo = preg_replace('/\D/', '', $user['cpf'] ?? '');
             $senhasPadraoIniciais = [
@@ -157,6 +206,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                        class="w-full bg-gray-950/60 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 text-white placeholder-gray-500 transition-all duration-200"
                        placeholder="••••••••">
             </div>
+            <?php if (multisubsecaoAtiva($pdo)): ?>
+                <div>
+                    <label for="login-subsecao" class="block text-xs uppercase font-semibold text-gray-400 mb-1.5 tracking-wider">Subseção Judiciária</label>
+                    <select name="subsecao_id" id="login-subsecao"
+                            class="w-full bg-gray-950/60 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 text-white transition-all duration-200">
+                        <option value="0">Detectar automaticamente pela pauta de hoje</option>
+                        <?php foreach (obterSubsecoes($pdo) as $sub): ?>
+                            <option value="<?= (int)$sub['id'] ?>">🏢 <?= escapar($sub['nome']) ?> (<?= escapar($sub['cidade']) ?>)</option>
+                        <?php endforeach; ?>
+                    </select>
+                    <span class="text-[10px] text-gray-400 mt-1 block">Médicos peritos são direcionados automaticamente para a cidade da sua perícia de hoje.</span>
+                </div>
+            <?php endif; ?>
             <button type="submit"
                     class="login-btn w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm transition-all duration-200 shadow-md shadow-blue-900/20 mt-2">
                 Acessar Painel

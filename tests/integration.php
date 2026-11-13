@@ -152,4 +152,79 @@ $res30 = prepararImportacao($fileTeste, '30dias');
 check(count($res30['registros']) === 1, 'Tentativa de 30 dias sanitiza para dia');
 @unlink($tmpXlsx);
 for ($n=0;$n<510;$n++) registrarLog($pdo,'Teste de paginação','Registro fictício de teste.');
+
+// Testes de Multi-Subseção (Maceió = 1, União dos Palmares = 2)
+function itemUser(PDO $pdo, int $id): array { $s = $pdo->prepare('SELECT * FROM usuarios WHERE id=?'); $s->execute([$id]); return $s->fetch(); }
+
+set_config($pdo, 'multisubsecao_ativa', '1');
+check(multisubsecaoAtiva($pdo) === true, 'Flag multi-subseção ativa no banco');
+
+// 1. Isolamento de Senhas Diárias (PE-001 independente por subseção)
+$dadosMcz = ['nome' => 'Paciente Maceio', 'processo' => 'MCZ-001', 'perito' => 'Perito Teste A', 'cpf' => ''];
+operarPauta($pdo, 'agendar_unico', array_merge($dadosMcz, ['subsecao_id' => 1]), date('Y-m-d'));
+$idMcz = (int)$pdo->query("SELECT id FROM atendimentos WHERE processo = 'MCZ-001'")->fetchColumn();
+check(confirmarPresencas($pdo, [$idMcz], 'recepcao') === 1, 'Check-in Maceió confirmado');
+$senhaMcz = item($pdo, $idMcz)['senha'];
+check(str_starts_with($senhaMcz, 'PE-'), 'Senha Maceió gerada no formato PE-xxx');
+
+$dadosUniao = ['nome' => 'Paciente Uniao', 'processo' => 'UNI-001', 'perito' => 'Perito Teste B', 'cpf' => ''];
+operarPauta($pdo, 'agendar_unico', array_merge($dadosUniao, ['subsecao_id' => 2]), date('Y-m-d'));
+$idUniao = (int)$pdo->query("SELECT id FROM atendimentos WHERE processo = 'UNI-001'")->fetchColumn();
+check(confirmarPresencas($pdo, [$idUniao], 'recepcao') === 1, 'Check-in União confirmado');
+$senhaUniao = item($pdo, $idUniao)['senha'];
+check($senhaUniao === 'PE-001', 'União dos Palmares inicia sua própria sequência PE-001 independente de Maceió');
+
+// 2. Isolamento de Filas e Atendimento
+$resumoMcz = obterResumoFilasPeritos($pdo, date('Y-m-d'), 1);
+$resumoUniao = obterResumoFilasPeritos($pdo, date('Y-m-d'), 2);
+check(count($resumoMcz) >= 1 && count($resumoUniao) >= 1, 'Resumos de filas separados por subseção');
+
+// 3. Isolamento de Travas de Salas entre Subseções
+travarSalaPerito($pdo, 'Perito Teste A', 'Sala 1', 1);
+$ocupadasMcz = obterSalasOcupadasHoje($pdo, '', 1);
+check(isset($ocupadasMcz['Sala 1']), 'Sala 1 ocupada em Maceió');
+
+$ocupadasUniao = obterSalasOcupadasHoje($pdo, '', 2);
+check(!isset($ocupadasUniao['Sala 1']), 'Sala 1 livre em União dos Palmares mesmo ocupada em Maceió');
+
+travarSalaPerito($pdo, 'Perito Teste B', 'Sala 1', 2);
+$ocupadasUniaoApos = obterSalasOcupadasHoje($pdo, '', 2);
+check(isset($ocupadasUniaoApos['Sala 1']), 'Sala 1 pode ser travada em União dos Palmares por outro perito');
+
+// Liberação em Maceió não afeta União
+liberarSalaPerito($pdo, 'Perito Teste A', 'Sala 1', 1);
+$ocupadasMczDepois = obterSalasOcupadasHoje($pdo, '', 1);
+check(!isset($ocupadasMczDepois['Sala 1']), 'Sala 1 liberada em Maceió');
+$ocupadasUniaoMantida = obterSalasOcupadasHoje($pdo, '', 2);
+check(isset($ocupadasUniaoMantida['Sala 1']), 'Sala 1 continua travada em União após liberação em Maceió');
+liberarSalaPerito($pdo, 'Perito Teste B', 'Sala 1', 2);
+
+// 4. Restrições do Administrador Local
+$pdo->prepare('INSERT INTO usuarios (username, password, role, nome, subsecao_id) VALUES (?, ?, ?, ?, ?)')->execute(['admin-uniao', password_hash('Senha-uniao-2026!', PASSWORD_DEFAULT), 'admin', 'Admin Local Uniao', 2]);
+$idAdminUniao = (int)$pdo->lastInsertId();
+$_SESSION = ['usuario_id' => $idAdminUniao, 'usuario_role' => 'admin', 'usuario_name' => 'admin-uniao', 'is_superadmin' => false, 'usuario_subsecao_id' => 2, 'subsecao_id_ativa' => 2];
+
+// Admin local tenta cadastrar outro admin -> rejeitado
+rejeita(fn() => operarUsuario($pdo, ['action' => 'cadastrar', 'username' => 'novo-admin', 'role' => 'admin', 'nome' => 'Novo Admin', 'password' => '12345678']), 'Admin local não pode criar novos admins');
+
+// Admin local tenta cadastrar perito -> rejeitado
+rejeita(fn() => operarUsuario($pdo, ['action' => 'cadastrar', 'username' => 'novo-perito', 'role' => 'perito', 'nome' => 'Novo Perito', 'password' => '12345678']), 'Admin local não pode criar peritos médicos');
+
+// Admin local tenta editar usuário da Sede (Maceió) -> rejeitado
+rejeita(fn() => operarUsuario($pdo, ['action' => 'editar', 'id' => $ids['recepcao-test'], 'username' => 'recepcao-test', 'role' => 'recepcao', 'nome' => 'Recepcao Alterada', 'password' => '']), 'Admin local não pode alterar usuários de outra subseção');
+
+// Admin local cadastra recepção para sua própria subseção -> sucesso
+operarUsuario($pdo, ['action' => 'cadastrar', 'username' => 'recepcao-uniao', 'role' => 'recepcao', 'nome' => 'Recepção União', 'password' => '12345678']);
+$idRecUniao = (int)$pdo->query("SELECT id FROM usuarios WHERE username = 'recepcao-uniao'")->fetchColumn();
+check((int)itemUser($pdo, $idRecUniao)['subsecao_id'] === 2, 'Usuário cadastrado pelo admin local fica vinculado à subseção 2');
+
+// 5. Métricas e Produtividade isoladas
+$metMcz = obterMetricasDia($pdo, date('Y-m-d'), 1);
+$metUniao = obterMetricasDia($pdo, date('Y-m-d'), 2);
+check(isset($metMcz['totais']['agendados']) && isset($metUniao['totais']['agendados']), 'Métricas calculadas por subseção');
+
+// 6. Restaura estado multi-subseção para retrocompatibilidade
+set_config($pdo, 'multisubsecao_ativa', '0');
+check(multisubsecaoAtiva($pdo) === false, 'Flag multi-subseção restaurada para retrocompatibilidade');
+
 echo "$checks verificações passaram.\n";

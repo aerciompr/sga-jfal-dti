@@ -23,6 +23,13 @@ if ($userRole === 'recepcao') {
 } elseif ($userRole === 'perito') {
     $homeDestino = 'atendente';
 }
+
+global $pdo;
+$subAtivaMulti = (isset($pdo) && function_exists('multisubsecaoAtiva') && multisubsecaoAtiva($pdo));
+$subAtivaId = $subAtivaMulti ? subsecaoAtivaId($pdo) : 1;
+$subsecoesLista = $subAtivaMulti ? obterSubsecoes($pdo) : [];
+$subAtivaObj = $subAtivaMulti ? (obterSubsecao($pdo, $subAtivaId) ?? ['nome' => 'Maceió', 'sigla' => 'MCZ']) : null;
+$podeTrocarSubsecao = $subAtivaMulti && (!empty($_SESSION['is_superadmin']) || $userRole === 'perito' || ($userRole === 'admin' && empty($_SESSION['usuario_subsecao_id'])));
 ?>
 <!-- Header Institucional Unificado JFAL (Padrão Único em Todas as Páginas) -->
 <header class="sga-header bg-gray-900 border-b border-gray-800 px-4 py-2.5 flex items-center justify-between shadow-xs shrink-0">
@@ -38,6 +45,25 @@ if ($userRole === 'recepcao') {
         <span class="sga-role-badge bg-gray-800 text-gray-400 text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider border border-gray-700">
             <?= escapar(ucfirst($userRole)) ?>
         </span>
+        <?php if ($subAtivaMulti && $subAtivaObj): ?>
+            <?php if ($podeTrocarSubsecao && count($subsecoesLista) > 1): ?>
+                <form method="POST" action="trocar_subsecao.php" class="inline-flex items-center m-0">
+                    <?= csrfCampo() ?>
+                    <input type="hidden" name="redirect" value="<?= escapar($_SERVER['REQUEST_URI'] ?? '') ?>">
+                    <select name="subsecao_id" onchange="this.form.submit()" class="bg-blue-950/70 border border-blue-700/60 text-blue-200 text-[10px] font-bold rounded-lg px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-xs" title="Alternar subseção judiciária">
+                        <?php foreach ($subsecoesLista as $sub): ?>
+                            <option value="<?= (int)$sub['id'] ?>" <?= $sub['id'] == $subAtivaId ? 'selected' : '' ?>>
+                                <?= $userRole === 'perito' ? '📍' : '🏢' ?> <?= escapar($sub['nome']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </form>
+            <?php else: ?>
+                <span class="bg-blue-950/50 text-blue-300 border border-blue-800/60 text-[10px] px-2 py-0.5 rounded-md font-bold tracking-wider" title="Subseção Judiciária Ativa">
+                    🏢 <?= escapar($subAtivaObj['nome']) ?>
+                </span>
+            <?php endif; ?>
+        <?php endif; ?>
     </div>
 
     <!-- 2. Barra de Navegação Central (Abas Limpas Padronizadas com Rotas Amigáveis) -->

@@ -10,25 +10,64 @@
 
 require_once __DIR__ . '/banco.php';
 
-$recentes = $pdo->query('
+$subsecaoId = 1;
+$subsecaoObj = null;
+if (multisubsecaoAtiva($pdo)) {
+    if (!empty($_GET['token'])) {
+        $sTok = $pdo->prepare("SELECT id, nome, cidade, sigla, endereco, telefone, token_painel FROM subsecoes WHERE token_painel = ? AND ativo = 1");
+        $sTok->execute([trim((string)$_GET['token'])]);
+        $subsecaoObj = $sTok->fetch(PDO::FETCH_ASSOC);
+        if ($subsecaoObj) $subsecaoId = (int)$subsecaoObj['id'];
+    } elseif (!empty($_GET['subsecao'])) {
+        $sSub = $pdo->prepare("SELECT id, nome, cidade, sigla, endereco, telefone, token_painel FROM subsecoes WHERE (sigla = ? OR id = ?) AND ativo = 1");
+        $sSub->execute([trim((string)$_GET['subsecao']), (int)$_GET['subsecao']]);
+        $subsecaoObj = $sSub->fetch(PDO::FETCH_ASSOC);
+        if ($subsecaoObj) $subsecaoId = (int)$subsecaoObj['id'];
+    } elseif (isset($_SESSION['subsecao_id_ativa'])) {
+        $subsecaoId = (int)$_SESSION['subsecao_id_ativa'];
+        $subsecaoObj = obterSubsecao($pdo, $subsecaoId);
+    }
+}
+if (!$subsecaoObj) {
+    $subsecaoObj = obterSubsecao($pdo, $subsecaoId) ?? ['nome' => 'Maceió (Sede)', 'cidade' => 'Maceió', 'sigla' => 'MCZ'];
+}
+
+$temSub = colunaExiste($pdo, 'eventos_chamada', 'subsecao_id');
+$whereSub = $temSub ? "ec.subsecao_id = ? AND " : "";
+$whereSubUltimos = $temSub ? "subsecao_id = ? AND " : "";
+$params = $temSub ? [$subsecaoId, $subsecaoId] : [];
+
+$stmtRecent = $pdo->prepare("
     SELECT ec.nome, ec.sala, ec.criado_em AS chamado_em, COALESCE(a.chamadas_count, 1) AS chamadas_count
     FROM eventos_chamada ec
     INNER JOIN (
         SELECT MAX(id) AS max_id
         FROM eventos_chamada
-        WHERE data_pauta = CURRENT_DATE()
+        WHERE $whereSubUltimos data_pauta = CURRENT_DATE()
         GROUP BY atendimento_id
     ) ultimos ON ec.id = ultimos.max_id
     LEFT JOIN atendimentos a ON a.id = ec.atendimento_id
+    WHERE $whereSub ec.data_pauta = CURRENT_DATE()
     ORDER BY ec.id DESC
     LIMIT 4
-')->fetchAll();
+");
+$stmtRecent->execute($params);
+$recentes = $stmtRecent->fetchAll();
+
 $ultima = $recentes[0] ?? null;
 $nome = $ultima['nome'] ?? 'Aguardando Atendimento';
 $sala = $ultima['sala'] ?? '---';
-$fonteVideo = fonteYouTubePadrao(get_config($pdo, 'youtube_url'));
+$ytUrl = get_config($pdo, "youtube_url_{$subsecaoId}") ?: get_config($pdo, 'youtube_url');
+$fonteVideo = fonteYouTubePadrao($ytUrl);
 $video_id = $fonteVideo['video_id'];
-$cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_chamada')->fetchColumn();
+
+$cursorStmt = $temSub ? $pdo->prepare('SELECT COALESCE(MAX(id), 0) FROM eventos_chamada WHERE subsecao_id = ?') : $pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_chamada');
+if ($temSub) {
+    $cursorStmt->execute([$subsecaoId]);
+    $cursorInicial = (int)$cursorStmt->fetchColumn();
+} else {
+    $cursorInicial = (int)$cursorStmt->fetchColumn();
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -69,7 +108,9 @@ $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_cham
             <img src="assets/catavento-jfal.png" alt="JFAL" class="h-8 w-auto object-contain">
             <div>
                 <h1 class="text-base font-black tracking-wide text-blue-500 uppercase leading-none">Justiça Federal em Alagoas</h1>
-                <p class="text-[10px] text-gray-400 font-semibold tracking-widest uppercase mt-0.5">Seção Judiciária de Alagoas</p>
+                <p class="text-[10px] text-gray-400 font-semibold tracking-widest uppercase mt-0.5">
+                    <?= multisubsecaoAtiva($pdo) ? ('Subseção Judiciária de ' . escapar($subsecaoObj['nome'])) : 'Seção Judiciária de Alagoas' ?>
+                </p>
             </div>
         </div>
         <div class="flex items-center gap-4"><span id="conexao-tv" role="status">Conectando…</span><button type="button" id="reativar-voz-tv" class="sga-neutral" hidden>Reativar voz</button><button type="button" onclick="document.getElementById('preparar-tv').classList.remove('hidden')" class="sga-neutral">Som e tela</button>
@@ -186,6 +227,8 @@ $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_cham
         window.initialPlaylistId = <?= json_encode($fonteVideo['playlist_id'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
         window.initialCursor = <?= $cursorInicial ?>;
         window.eventDay = '<?= date('Y-m-d') ?>';
+        window.tvSubsecaoId = <?= (int)$subsecaoId ?>;
+        window.tvQueryString = <?= json_encode(!empty($_SERVER['QUERY_STRING']) ? '?' . $_SERVER['QUERY_STRING'] : '') ?>;
 
         // Relógio e Data do painel
         function updateClock() {

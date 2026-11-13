@@ -34,6 +34,10 @@ function csrfCampo(): string {
     return '<input type="hidden" name="csrf" value="' . csrfToken() . '">';
 }
 
+function csrfValido(?string $token): bool {
+    return isset($_SESSION['csrf']) && is_string($token) && hash_equals($_SESSION['csrf'], $token);
+}
+
 function dataValida(string $valor, string $formato = 'Y-m-d'): bool {
     $data = DateTimeImmutable::createFromFormat('!' . $formato, $valor);
     return $data !== false && $data->format($formato) === $valor;

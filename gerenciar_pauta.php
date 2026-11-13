@@ -28,8 +28,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $file = $_FILES['arquivo_excel'] ?? $_FILES['arquivo_pdf'] ?? [];
             $janela = (string)($_POST['janela_importacao'] ?? 'dia');
             $sincronizar = isset($_POST['sincronizar_pauta']) ? (bool)$_POST['sincronizar_pauta'] : true;
+            $destSubId = null;
+            if (multisubsecaoAtiva($pdo)) {
+                if (!empty($_SESSION['is_superadmin']) && !empty($_POST['subsecao_id_destino'])) {
+                    $destSubId = (int)$_POST['subsecao_id_destino'];
+                } else {
+                    $destSubId = subsecaoAtivaId($pdo);
+                }
+            }
             $dados = prepararImportacao($file, $janela);
-            $resultado = importarRegistros($pdo, $dados['registros'], $dados['datas_escopo'], $sincronizar);
+            $resultado = importarRegistros($pdo, $dados['registros'], $dados['datas_escopo'], $sincronizar, $destSubId);
             $partes = [$resultado['novos'] . ' novos incluídos'];
             if (!empty($resultado['atualizados'])) $partes[] = $resultado['atualizados'] . ' atualizados';
             if (!empty($resultado['cancelados'])) $partes[] = $resultado['cancelados'] . ' cancelados da pauta';
@@ -62,16 +70,22 @@ $filtro_tipo = $_GET['filtro_tipo'] ?? 'dia'; // 'dia' ou 'mes'
 $data_busca = $_GET['data_busca'] ?? date('Y-m-d');
 $mes_busca = $_GET['mes_busca'] ?? date('Y-m');
 
+$subsecaoId = subsecaoAtivaId($pdo);
+$multiAtiva = multisubsecaoAtiva($pdo);
+$temSubAtend = colunaExiste($pdo, 'atendimentos', 'subsecao_id');
+$filtroSub = ($temSubAtend && $multiAtiva) ? " AND subsecao_id = ?" : "";
+$paramsSub = ($temSubAtend && $multiAtiva) ? [$subsecaoId] : [];
+
 // Consulta de Atendimentos
 $atendimentos = [];
 try {
     if ($filtro_tipo === 'dia') {
-        $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE data_pauta = ? ORDER BY perito ASC, nome ASC, id ASC");
-        $stmt->execute([$data_busca]);
+        $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE data_pauta = ?" . $filtroSub . " ORDER BY perito ASC, nome ASC, id ASC");
+        $stmt->execute(array_merge([$data_busca], $paramsSub));
         $atendimentos = $stmt->fetchAll();
     } else {
-        $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE DATE_FORMAT(data_pauta, '%Y-%m') = ? ORDER BY data_pauta ASC, perito ASC, nome ASC, id ASC");
-        $stmt->execute([$mes_busca]);
+        $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE DATE_FORMAT(data_pauta, '%Y-%m') = ?" . $filtroSub . " ORDER BY data_pauta ASC, perito ASC, nome ASC, id ASC");
+        $stmt->execute(array_merge([$mes_busca], $paramsSub));
         $atendimentos = $stmt->fetchAll();
     }
 } catch (PDOException $e) {
@@ -140,6 +154,26 @@ try {
                         </select>
                         <p class="text-[10px] text-gray-400 mt-1">Datas fora deste limite são descartadas automaticamente.</p>
                     </div>
+
+                    <?php if ($multiAtiva): ?>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Subseção de Destino</label>
+                        <?php if (!empty($_SESSION['is_superadmin'])): ?>
+                            <select name="subsecao_id_destino" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
+                                <?php foreach (obterSubsecoes($pdo) as $sub): ?>
+                                    <option value="<?= (int)$sub['id'] ?>" <?= $sub['id'] == $subsecaoId ? 'selected' : '' ?>>
+                                        🏢 <?= escapar($sub['nome']) ?> (<?= escapar($sub['cidade']) ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        <?php else: ?>
+                            <input type="hidden" name="subsecao_id_destino" value="<?= (int)$subsecaoId ?>">
+                            <div class="text-xs text-blue-300 font-bold bg-blue-950/40 border border-blue-800/60 rounded-lg px-2.5 py-2">
+                                🏢 Subseção: <?= escapar(obterSubsecao($pdo, $subsecaoId)['nome'] ?? 'Local') ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                    <?php endif; ?>
 
                     <div class="pt-1">
                         <label class="flex items-start gap-2 cursor-pointer">
