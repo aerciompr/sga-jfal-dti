@@ -251,7 +251,6 @@ function desbloquearSalaAdministrativa(PDO $pdo, string $sala, string $usuarioNo
         throw $e;
     }
 }
-}
 
 function obterCriterioFilaPerito(PDO $pdo, string $perito): string {
     $temCriterio = colunaExiste($pdo, 'salas_peritos', 'criterio_fila');
