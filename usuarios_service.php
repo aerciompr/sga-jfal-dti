@@ -9,7 +9,7 @@ function operarUsuario(PDO $pdo, array $dados): string {
         $acao = $dados['action'] ?? '';
         $id = (int)($dados['id'] ?? 0);
         $antes = null;
-        if (!in_array($acao, ['cadastrar', 'exigir_troca_todos_peritos'], true)) {
+        if (!in_array($acao, ['cadastrar', 'exigir_troca_todos_peritos', 'redefinir_senhas_peritos_padrao'], true)) {
             $s=$pdo->prepare('SELECT id, username, role, nome, must_change_password FROM usuarios WHERE id=? FOR UPDATE'); $s->execute([$id]); $antes=$s->fetch();
             if (!$antes) throw new DomainException('Usuário inexistente.');
         }
@@ -30,12 +30,20 @@ function operarUsuario(PDO $pdo, array $dados): string {
             registrarLog($pdo, 'Usuários: exigir_troca_todos_peritos', "Exigida troca obrigatória de senha para todos os peritos médicos ($afetados profissionais atualizados).");
             $pdo->commit();
             return "Troca de senha obrigatória ativada com sucesso para todos os peritos médicos ($afetados profissionais atualizados).";
+        } elseif ($acao === 'redefinir_senhas_peritos_padrao') {
+            $hashPadrao = password_hash('123456', PASSWORD_DEFAULT);
+            $s = $pdo->prepare("UPDATE usuarios SET password = ?, must_change_password = 1, session_version = session_version + 1 WHERE role = 'perito'");
+            $s->execute([$hashPadrao]);
+            $afetados = $s->rowCount();
+            registrarLog($pdo, 'Usuários: redefinir_senhas_peritos_padrao', "Redefinida a senha de todos os peritos médicos ($afetados profissionais) para a padrão '123456' com troca obrigatória no próximo acesso.");
+            $pdo->commit();
+            return "Senha padrão '123456' definida para todos os peritos médicos ($afetados profissionais atualizados) com troca obrigatória no próximo acesso.";
         } elseif (in_array($acao,['cadastrar','editar'],true)) {
             $username=trim((string)($dados['username']??'')); $nome=trim((string)($dados['nome']??'')); $role=$dados['role']??''; $senha=(string)($dados['password']??'');
             $exigirTroca = isset($dados['must_change_password']) ? ((int)$dados['must_change_password'] ? 1 : 0) : 1;
             if ($username==='' || strlen($username)>50 || mb_strlen($nome)>100 || !in_array($role,['admin','supervisor','recepcao','perito'],true)) throw new DomainException('Login, nome ou perfil inválido.');
             if ($role==='perito' && $nome==='') throw new DomainException('Preencha o nome completo do perito.');
-            if (($acao==='cadastrar' || $senha!=='') && (strlen($senha)<12 || strlen($senha)>72)) throw new DomainException('Use uma senha individual de 12 a 72 bytes.');
+            if (($acao==='cadastrar' || $senha!=='') && (strlen($senha)<6 || strlen($senha)>72)) throw new DomainException('Use uma senha de 6 a 72 caracteres.');
             if ($antes && $antes['role']==='admin' && $role!=='admin' && (int)$pdo->query("SELECT COUNT(*) FROM usuarios WHERE role='admin'")->fetchColumn()<=1) throw new DomainException('Mantenha ao menos um administrador.');
             if ($acao==='cadastrar') {
                 $s=$pdo->prepare('INSERT INTO usuarios (username,password,role,nome,must_change_password) VALUES (?,?,?,?,?)'); $s->execute([$username,password_hash($senha,PASSWORD_DEFAULT),$role,$nome,$exigirTroca]); $id=(int)$pdo->lastInsertId();

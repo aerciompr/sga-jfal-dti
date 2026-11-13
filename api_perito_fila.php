@@ -20,14 +20,65 @@ try {
         $perito_selecionado = (string)($_SESSION['perito_selecionado'] ?? $_SESSION['usuario_nome'] ?? $_SESSION['usuario_name'] ?? '');
     } else {
         $perito_selecionado = (string)($_SESSION['perito_selecionado'] ?? '');
+        if ($perito_selecionado === '') {
+            $stmtAtivo = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND status IN ('chamada', 'atendimento') AND perito IS NOT NULL AND perito != '' LIMIT 1");
+            $peritoAtivo = $stmtAtivo->fetchColumn();
+            if ($peritoAtivo) {
+                $perito_selecionado = (string)$peritoAtivo;
+            } else {
+                $stmtSalaP = $pdo->query("SELECT DISTINCT perito FROM salas_peritos WHERE DATE(atualizado_em) = CURRENT_DATE() LIMIT 1");
+                $peritoSala = $stmtSalaP->fetchColumn();
+                if ($peritoSala) {
+                    $perito_selecionado = (string)$peritoSala;
+                } else {
+                    $stmtPrimeiro = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND perito IS NOT NULL AND perito != '' ORDER BY perito ASC LIMIT 1");
+                    $peritoPrimeiro = $stmtPrimeiro->fetchColumn();
+                    if ($peritoPrimeiro) $perito_selecionado = (string)$peritoPrimeiro;
+                }
+            }
+            if ($perito_selecionado !== '') {
+                $_SESSION['perito_selecionado'] = $perito_selecionado;
+            }
+        }
     }
 
+    $sala_confirmada = false;
     $sala = (string)($_SESSION['sala'] ?? 'Sala 1');
+    if ($perito_selecionado !== '') {
+        $stmtSala = $pdo->prepare("SELECT sala FROM salas_peritos WHERE LOWER(TRIM(perito)) = LOWER(TRIM(?)) AND DATE(atualizado_em) = CURRENT_DATE()");
+        $stmtSala->execute([$perito_selecionado]);
+        $salaSalvaHoje = $stmtSala->fetchColumn();
+        if (!$salaSalvaHoje) {
+            $pId = peritoId($pdo, $perito_selecionado);
+            if ($pId) {
+                $stmtUserPerito = $pdo->prepare("SELECT username, nome FROM usuarios WHERE id = ?");
+                $stmtUserPerito->execute([$pId]);
+                $uP = $stmtUserPerito->fetch(PDO::FETCH_ASSOC);
+                if ($uP) {
+                    $stmtSalaConfUser = $pdo->prepare("SELECT sala FROM salas_peritos WHERE (LOWER(TRIM(perito)) = LOWER(TRIM(?)) OR LOWER(TRIM(perito)) = LOWER(TRIM(?))) AND DATE(atualizado_em) = CURRENT_DATE()");
+                    $stmtSalaConfUser->execute([$uP['username'], $uP['nome'] ?? '']);
+                    $salaSalvaHoje = $stmtSalaConfUser->fetchColumn();
+                }
+            }
+        }
+        if (!$salaSalvaHoje) {
+            $pId = peritoId($pdo, $perito_selecionado);
+            $stmtSalaAtend = $pdo->prepare("SELECT sala FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito = ? OR (? IS NOT NULL AND perito_id = ?)) AND sala IS NOT NULL AND sala != '' ORDER BY id DESC LIMIT 1");
+            $stmtSalaAtend->execute([$perito_selecionado, $pId, $pId]);
+            $salaSalvaHoje = $stmtSalaAtend->fetchColumn();
+        }
+        if ($salaSalvaHoje) {
+            $sala = (string)$salaSalvaHoje;
+            $_SESSION['sala'] = $sala;
+            $sala_confirmada = true;
+        }
+    }
+
     $criterioFila = obterCriterioFilaPerito($pdo, $perito_selecionado);
     $atendePrioridade = obterAtenderPrioridadePerito($pdo, $perito_selecionado);
 
     // Heartbeat: mantém a trava da sala ativa enquanto o médico estiver navegando
-    if ($perito_selecionado !== '') {
+    if ($perito_selecionado !== '' && $user_role === 'perito') {
         $pdo->prepare("UPDATE salas_peritos SET atualizado_em = CURRENT_TIMESTAMP WHERE perito = ?")->execute([$perito_selecionado]);
     }
 
@@ -116,6 +167,9 @@ try {
 
     echo json_encode([
         'success' => true,
+        'sala' => $sala,
+        'sala_confirmada' => $sala_confirmada,
+        'perito_selecionado' => $perito_selecionado,
         'criterio_fila' => $criterioFila,
         'atender_prioridade' => $atendePrioridade,
         'total_aguardando' => $contAguardando,

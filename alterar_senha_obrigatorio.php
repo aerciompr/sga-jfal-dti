@@ -40,8 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($nova_senha) || empty($confirma_senha)) {
         $error_msg = "Por favor, preencha todos os campos.";
-    } elseif (strlen($nova_senha) < 12 || strlen($nova_senha) > 72) {
-        $error_msg = "A nova senha deve possuir de 12 a 72 bytes.";
+    } elseif (strlen($nova_senha) < 8 || strlen($nova_senha) > 72) {
+        $error_msg = "A nova senha deve possuir de 8 a 72 caracteres.";
     } elseif ($nova_senha !== $confirma_senha) {
         $error_msg = "A confirmação de senha não coincide com a nova senha.";
     } else {
@@ -175,7 +175,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php endif; ?>
             <div>
                 <label class="block text-xs text-gray-400 uppercase font-semibold mb-1">Nova Senha</label>
-                <input type="password" name="nova_senha" required minlength="12" maxlength="72" autocomplete="new-password" placeholder="Mínimo 12 caracteres" class="w-full bg-gray-950/60 border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
+                <input type="password" name="nova_senha" required minlength="8" maxlength="72" autocomplete="new-password" placeholder="Mínimo 8 caracteres" class="w-full bg-gray-950/60 border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
             </div>
 
             <div>

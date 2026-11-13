@@ -259,7 +259,7 @@ function importarRegistros(PDO $pdo, array $registros, array $datasEscopo = [], 
                     try {
                         $inserirUsuarioPerito->execute([
                             $cpfLimpo,
-                            password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT),
+                            password_hash('123456', PASSWORD_DEFAULT),
                             $r['perito'],
                             $r['cpf_perito']
                         ]);

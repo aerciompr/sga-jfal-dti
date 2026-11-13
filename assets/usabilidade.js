@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (path.endsWith('/index.php') || path.endsWith('/index') || path === '') continue;
         const validar=()=>{
             const bytes=new TextEncoder().encode(campo.value).length;
-            campo.setCustomValidity(campo.value==='' || (bytes>=12 && bytes<=72) ? '' : 'Use uma senha de 12 a 72 bytes; letras acentuadas podem ocupar mais de um byte.');
+            campo.setCustomValidity(campo.value==='' || (bytes>=8 && bytes<=72) ? '' : 'Use uma senha de no mínimo 8 caracteres (máximo 72 bytes).');
         };
         campo.addEventListener('input',validar);
     }

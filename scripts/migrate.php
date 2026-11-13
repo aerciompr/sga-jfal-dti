@@ -158,7 +158,8 @@ try {
         }
     }
     // Assegura que peritos com credenciais iniciais pendentes troquem a senha no próximo acesso
-    $pdo->exec("UPDATE usuarios SET must_change_password = 1 WHERE role = 'perito' AND (must_change_password IS NULL OR must_change_password = 0) AND (username REGEXP '^[0-9]{11}$' OR cpf IS NOT NULL)");
+    $hashPadraoPerito = password_hash('123456', PASSWORD_DEFAULT);
+    $pdo->prepare("UPDATE usuarios SET password = ?, must_change_password = 1, session_version = session_version + 1 WHERE role = 'perito'")->execute([$hashPadraoPerito]);
     if ((int)$pdo->query('SELECT COUNT(*) FROM usuarios')->fetchColumn() === 0) {
         $password = getenv('BOOTSTRAP_ADMIN_PASSWORD') ?: '';
         if (strlen($password) < 12) throw new RuntimeException('Banco novo exige BOOTSTRAP_ADMIN_PASSWORD de 12 caracteres ou mais.');

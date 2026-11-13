@@ -28,17 +28,44 @@ $user_role = $_SESSION['usuario_role'];
 $ownerId = (int)$_SESSION['usuario_id'];
 $ownerAdmin = $user_role === 'admin' ? 1 : 0;
 
+// Consulta peritos escalados hoje
+$peritos_lista = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE perito IS NOT NULL AND perito != '' AND data_pauta = CURRENT_DATE() ORDER BY perito ASC")->fetchAll(PDO::FETCH_COLUMN);
+
 // Carrega ou altera o nome do perito selecionado
 if ($user_role === 'perito') {
     $nome_cadastro = $_SESSION['usuario_nome'] ?? $_SESSION['usuario_name'];
     $perito_selecionado = $nome_cadastro;
+    // Se o nome na pauta diferir sutilmente em caixa alta/espaços, alinha com o nome canônico da pauta
+    foreach ($peritos_lista as $pl) {
+        if (mb_strtolower(trim($pl)) === mb_strtolower(trim($nome_cadastro))) {
+            $perito_selecionado = $pl;
+            break;
+        }
+    }
     $_SESSION['perito_selecionado'] = $perito_selecionado;
 } else {
     $perito_selecionado = $_SESSION['perito_selecionado'] ?? '';
     if (isset($_POST['set_perito'])) {
         $perito_selecionado = trim($_POST['perito_selecionado'] ?? '');
         $_SESSION['perito_selecionado'] = $perito_selecionado;
-        unset($_SESSION['sala']); // Limpa sala ao trocar perito
+        unset($_SESSION['sala']); // Limpa sala em sessão ao trocar perito
+    }
+    // Administrador: se nenhum perito foi escolhido na sessão, espelha o perito ativo hoje
+    if (empty($perito_selecionado) && !empty($peritos_lista)) {
+        $stmtAtivoHoje = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND status IN ('chamada', 'atendimento') AND perito IS NOT NULL AND perito != '' LIMIT 1");
+        $peritoAtivoHoje = $stmtAtivoHoje->fetchColumn();
+        if ($peritoAtivoHoje && in_array($peritoAtivoHoje, $peritos_lista, true)) {
+            $perito_selecionado = (string)$peritoAtivoHoje;
+        } else {
+            $stmtSalaHoje = $pdo->query("SELECT DISTINCT perito FROM salas_peritos WHERE DATE(atualizado_em) = CURRENT_DATE() LIMIT 1");
+            $peritoSalaHoje = $stmtSalaHoje->fetchColumn();
+            if ($peritoSalaHoje && in_array($peritoSalaHoje, $peritos_lista, true)) {
+                $perito_selecionado = (string)$peritoSalaHoje;
+            } else {
+                $perito_selecionado = $peritos_lista[0];
+            }
+        }
+        $_SESSION['perito_selecionado'] = $perito_selecionado;
     }
 }
 
@@ -48,13 +75,41 @@ if (empty($salas_lista)) {
     $salas_lista = ['Sala 1', 'Sala 2', 'Sala 3', 'Sala 4'];
 }
 
-// Verifica se este perito já confirmou/travou sala hoje
+// Verifica se este perito já confirmou/travou sala hoje (ou possui atendimento ativo)
 $sala_confirmada = false;
 $sala = $_SESSION['sala'] ?? '';
 if ($perito_selecionado) {
-    $stmtSalaConf = $pdo->prepare("SELECT sala FROM salas_peritos WHERE perito = ? AND DATE(atualizado_em) = CURRENT_DATE()");
+    // 1. Busca em salas_peritos (trava de hoje)
+    $stmtSalaConf = $pdo->prepare("SELECT sala FROM salas_peritos WHERE LOWER(TRIM(perito)) = LOWER(TRIM(?)) AND DATE(atualizado_em) = CURRENT_DATE()");
     $stmtSalaConf->execute([$perito_selecionado]);
     $salaSalvaHoje = $stmtSalaConf->fetchColumn();
+
+    // 2. Se não achou por nome exato em salas_peritos, busca por perito_id no cadastro de usuários
+    if (!$salaSalvaHoje) {
+        $pId = peritoId($pdo, $perito_selecionado);
+        if ($pId) {
+            $stmtUserPerito = $pdo->prepare("SELECT username, nome FROM usuarios WHERE id = ?");
+            $stmtUserPerito->execute([$pId]);
+            $uP = $stmtUserPerito->fetch(PDO::FETCH_ASSOC);
+            if ($uP) {
+                $stmtSalaConfUser = $pdo->prepare("SELECT sala FROM salas_peritos WHERE (LOWER(TRIM(perito)) = LOWER(TRIM(?)) OR LOWER(TRIM(perito)) = LOWER(TRIM(?))) AND DATE(atualizado_em) = CURRENT_DATE()");
+                $stmtSalaConfUser->execute([$uP['username'], $uP['nome'] ?? '']);
+                $salaSalvaHoje = $stmtSalaConfUser->fetchColumn();
+            }
+        }
+    }
+
+    // 3. Se ainda não achou, verifica se o perito já tem atendimento hoje com sala vinculada
+    if (!$salaSalvaHoje) {
+        $pId = peritoId($pdo, $perito_selecionado);
+        $stmtSalaAtend = $pdo->prepare("SELECT sala FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito = ? OR (? IS NOT NULL AND perito_id = ?)) AND sala IS NOT NULL AND sala != '' ORDER BY id DESC LIMIT 1");
+        $stmtSalaAtend->execute([$perito_selecionado, $pId, $pId]);
+        $salaSalvaHoje = $stmtSalaAtend->fetchColumn();
+        if ($salaSalvaHoje) {
+            try { travarSalaPerito($pdo, $perito_selecionado, (string)$salaSalvaHoje); } catch (Throwable $e) {}
+        }
+    }
+
     if ($salaSalvaHoje) {
         $sala = (string)$salaSalvaHoje;
         $_SESSION['sala'] = $sala;
@@ -151,9 +206,6 @@ if ($user_role === 'perito' && $perito_selecionado) {
         $nome_nao_encontrado_pauta = true;
     }
 }
-
-// Consulta peritos escalados hoje
-$peritos_lista = $pdo->query("SELECT DISTINCT perito FROM atendimentos WHERE perito IS NOT NULL AND perito != '' AND data_pauta = CURRENT_DATE() ORDER BY perito ASC")->fetchAll(PDO::FETCH_COLUMN);
 
 // Atendimento atual nesta sala/médico
 $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE status IN ('chamada', 'atendimento') AND sala = ? AND data_pauta = CURRENT_DATE() AND $clausulaPerito ORDER BY chamado_em DESC LIMIT 1");
@@ -654,7 +706,8 @@ $dados_iniciais_json = [
     let dadosCache = <?= json_encode($dados_iniciais_json, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
     let anteriorTotalAguardando = null;
     let filaIdsConhecidos = new Set();
-    const salaConfirmada = <?= json_encode($sala_confirmada) ?>;
+    let salaConfirmada = <?= json_encode($sala_confirmada) ?>;
+    let isPrimeiraCarga = true;
     const peritoNome = <?= json_encode($perito_selecionado) ?>;
 
     const elContador = document.getElementById('contador-fila');
@@ -1036,11 +1089,19 @@ $dados_iniciais_json = [
             const data = await resp.json();
             if (!data || !data.success) return;
 
-            // Notificação sonora e toast se houver novos periciados que chegaram
+            // Sincronizar status da sala
+            if (typeof data.sala_confirmada !== 'undefined') {
+                salaConfirmada = Boolean(data.sala_confirmada);
+            }
+
+            // Notificação sonora e toast APENAS para novos periciados que chegarem após a página já estar aberta
             const novoTotalAguardando = data.totais?.aguardando || 0;
-            if (anteriorTotalAguardando !== null && novoTotalAguardando > anteriorTotalAguardando) {
+            if (isPrimeiraCarga) {
+                // Primeira execução: sincroniza a base sem disparar alertas para quem já estava aguardando
+                isPrimeiraCarga = false;
+            } else if (anteriorTotalAguardando !== null && novoTotalAguardando > anteriorTotalAguardando) {
                 const novos = (data.fila || []).filter(f => !filaIdsConhecidos.has(f.id));
-                const pacienteNovo = novos[0] || (data.fila || [])[(data.fila || []).length - 1];
+                const pacienteNovo = novos[0];
                 if (pacienteNovo) {
                     tocarChimeChegada();
                     exibirToastChegada(pacienteNovo.nome, pacienteNovo.senha, pacienteNovo.hora_pericia);

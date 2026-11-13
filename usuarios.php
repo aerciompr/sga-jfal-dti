@@ -124,6 +124,12 @@ $usuarios = $stmt->fetchAll();
                         <span class="bg-gray-800 text-gray-400 text-xs px-2.5 py-0.5 rounded-full font-bold"><?= count($usuarios) ?></span>
                     </h2>
                     <div class="flex flex-wrap items-center gap-2">
+                        <form method="POST" class="inline" onsubmit="return confirm('ATENÇÃO: Deseja redefinir a senha de TODOS os peritos médicos para a senha padrão \'123456\' com troca obrigatória no próximo acesso? Todas as sessões abertas de peritos serão revogadas.');"><?= csrfCampo() ?>
+                            <input type="hidden" name="action" value="redefinir_senhas_peritos_padrao">
+                            <button type="submit" class="bg-blue-950/40 hover:bg-blue-900/50 border border-blue-800/70 text-blue-300 text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-sm">
+                                <span>🔑 Redefinir Peritos para 123456</span>
+                            </button>
+                        </form>
                         <form method="POST" class="inline" onsubmit="return confirm('ATENÇÃO: Deseja exigir a troca de senha de TODOS os peritos médicos no próximo acesso? Todas as sessões abertas de peritos serão revogadas.');"><?= csrfCampo() ?>
                             <input type="hidden" name="action" value="exigir_troca_todos_peritos">
                             <button type="submit" class="bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/70 text-amber-300 text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-sm">
