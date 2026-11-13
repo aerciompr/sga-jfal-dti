@@ -253,13 +253,15 @@ function agirAtendimento(PDO $pdo, string $acao, string $perito, string $sala, a
         return $novo ? 'Fila configurada para priorizar atendimentos preferenciais no topo.' : 'Fila configurada para seguir a ordem normal (priorização automática desativada).';
     }
 
-    $pdo->beginTransaction();
-    try {
-        // Ordem estável de locks: profissional, sala, atendimento.
-        $lock = $pdo->prepare('INSERT IGNORE INTO locks_peritos (perito) VALUES (?)'); $lock->execute([$perito]);
-        $lock = $pdo->prepare('SELECT perito FROM locks_peritos WHERE perito = ? FOR UPDATE'); $lock->execute([$perito]);
-        $lock = $pdo->prepare('SELECT id FROM salas WHERE nome = ? FOR UPDATE'); $lock->execute([$sala]);
-        if (!$lock->fetchColumn()) throw new DomainException('Sala inválida.');
+    $pdo->prepare('INSERT IGNORE INTO locks_peritos (perito) VALUES (?)')->execute([$perito]);
+
+    for ($tentativa = 0; $tentativa < 3; $tentativa++) {
+        $pdo->beginTransaction();
+        try {
+            // Ordem estável de locks: profissional, sala, atendimento.
+            $lock = $pdo->prepare('SELECT perito FROM locks_peritos WHERE perito = ? FOR UPDATE'); $lock->execute([$perito]);
+            $lock = $pdo->prepare('SELECT id FROM salas WHERE nome = ? FOR UPDATE'); $lock->execute([$sala]);
+            if (!$lock->fetchColumn()) throw new DomainException('Sala inválida.');
 
         $stmt = $pdo->prepare("SELECT * FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND status IN ('chamada','atendimento') AND (sala = ? OR perito = ? OR perito_id = ?) ORDER BY id FOR UPDATE");
         $stmt->execute([$sala, $perito, $profissionalId]); $ativos = $stmt->fetchAll();
@@ -386,7 +388,19 @@ function agirAtendimento(PDO $pdo, string $acao, string $perito, string $sala, a
         }
         registrarLog($pdo, $acao, "Perito: $perito; Sala: $sala", $id);
         $pdo->commit(); return $mensagem;
-    } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }
+        } catch (PDOException $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            if (($e->getCode() === '40001' || ($e->errorInfo[1] ?? 0) === 1213) && $tentativa < 2) {
+                usleep(25000 * ($tentativa + 1));
+                continue;
+            }
+            throw $e;
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+    }
+    throw new DomainException('Não foi possível processar a operação devido à concorrência. Tente novamente.');
 }
 
 /**
