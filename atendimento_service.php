@@ -44,21 +44,23 @@ function confirmarPresencas(PDO $pdo, array $ids, string $role, ?string $priorid
             $check->execute([$id]); $item = $check->fetch();
             if (!$item) throw new DomainException('Agendamento inexistente.');
             if ($item['data_pauta'] !== date('Y-m-d')) throw new DomainException('Presença só pode ser confirmada no dia da pauta.');
+            $itemSubId = isset($item['subsecao_id']) && $item['subsecao_id'] !== null ? (int)$item['subsecao_id'] : subsecaoAtivaId($pdo);
             if ($role === 'recepcao') {
                 $dp = (string)$item['data_pauta'];
-                if (!isset($pautaLiberadaCache[$dp])) {
-                    $pautaLiberadaCache[$dp] = isPautaLiberada($pdo, $dp);
+                $cacheKey = "{$dp}_{$itemSubId}";
+                if (!isset($pautaLiberadaCache[$cacheKey])) {
+                    $pautaLiberadaCache[$cacheKey] = isPautaLiberada($pdo, $dp, $itemSubId);
                 }
-                if (!$pautaLiberadaCache[$dp]) throw new DomainException('Pauta ainda não homologada.');
+                if (!$pautaLiberadaCache[$cacheKey]) throw new DomainException('Pauta ainda não homologada.');
             }
             if ($item['status'] !== 'agendado') continue; // Repetição é idempotente.
-            $senha = getNextSenha($pdo);
+            $senha = getNextSenha($pdo, $itemSubId);
             if ($comPrio) {
                 $update->execute([$senha, $prioridade, $id]);
             } else {
                 $update->execute([$senha, $id]);
             }
-            registrarLog($pdo, 'Confirmar Presença', "Paciente: {$item['nome']}, Senha: $senha", $id); $total++;
+            registrarLog($pdo, 'Confirmar Presença', "Paciente: {$item['nome']}, Senha: $senha", $id, $itemSubId); $total++;
         }
         $pdo->commit(); return $total;
     } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }

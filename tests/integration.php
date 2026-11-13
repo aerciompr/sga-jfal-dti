@@ -167,6 +167,8 @@ check(confirmarPresencas($pdo, [$idMcz], 'recepcao') === 1, 'Check-in Maceió co
 $senhaMcz = item($pdo, $idMcz)['senha'];
 check(str_starts_with($senhaMcz, 'PE-'), 'Senha Maceió gerada no formato PE-xxx');
 
+operarPauta($pdo, 'liberar_pauta', ['data_alvo' => date('Y-m-d'), 'subsecao_id' => 2], date('Y-m-d'));
+
 $dadosUniao = ['nome' => 'Paciente Uniao', 'processo' => 'UNI-001', 'perito' => 'Perito Teste B', 'cpf' => ''];
 operarPauta($pdo, 'agendar_unico', array_merge($dadosUniao, ['subsecao_id' => 2]), date('Y-m-d'));
 $idUniao = (int)$pdo->query("SELECT id FROM atendimentos WHERE processo = 'UNI-001'")->fetchColumn();
