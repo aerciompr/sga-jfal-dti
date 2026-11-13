@@ -86,7 +86,7 @@ class HttpTests(unittest.TestCase):
         csrf = re.search(r'name="csrf" value="([a-f0-9]+)"', html)[1]
         status, _, destino, _ = c.abrir('trocar_subsecao.php', {'csrf': csrf, 'subsecao_id': '1'})
         self.assertEqual(200, status)
-        self.assertIn('usuarios.php', destino)
+        self.assertIn('dashboard.php', destino)
 
     def test_paginas_administrativas(self):
         c = Cliente(); self.assertEqual(200, c.login('admin-test')[0])
