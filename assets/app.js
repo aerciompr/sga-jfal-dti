@@ -48,9 +48,9 @@ function onPlayerReady(event) {
     if (player) player.hidden = false;
     event.target.setLoop(true);
     event.target.playVideo();
-    if (audioAtivado) {
-        event.target.unMute();
-        event.target.setVolume(50);
+    // O vídeo de fundo é mantido mudo para garantir ambiente silencioso na recepção
+    if (typeof event.target.mute === 'function') {
+        event.target.mute();
     }
 }
 
@@ -76,16 +76,15 @@ function ativarAudio() {
         console.error("Erro voz:", e);
     }
 
-    // Desmuta o vídeo do YouTube
-    if (ytPlayer && typeof ytPlayer.unMute === 'function') {
-        ytPlayer.unMute();
-        ytPlayer.setVolume(50);
+    // O vídeo do YouTube permanece mudo (sem áudio) para não poluir o ambiente da recepção
+    if (ytPlayer && typeof ytPlayer.mute === 'function') {
+        ytPlayer.mute();
     }
     
     // Toca o gongo de chamada
     playChime();
     const aviso = document.getElementById('audio-status');
-    if (aviso) aviso.textContent = 'Voz ativada. Clique em “Testar som” para conferir os alto-falantes.';
+    if (aviso) aviso.textContent = 'Voz ativada (Vídeo em silêncio). Clique em “Testar som” para conferir os alto-falantes.';
 }
 
 async function testarSom() {

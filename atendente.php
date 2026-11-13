@@ -775,6 +775,38 @@ $dados_iniciais_json = [
         }, 7000);
     }
 
+    function exibirToastFeedback(mensagem, tipo = 'success') {
+        if (!toastContainer) return;
+        const toast = document.createElement('div');
+        const isSucesso = tipo === 'success';
+        const borda = isSucesso ? 'border-emerald-500/80 bg-gray-900' : 'border-rose-500 bg-gray-900';
+        const corTitulo = isSucesso ? 'text-emerald-400' : 'text-rose-400';
+        const icone = isSucesso ? '✅' : '⚠️';
+        const titulo = isSucesso ? 'Ação Realizada' : 'Atenção / Aviso';
+
+        toast.className = `border-2 ${borda} text-white shadow-2xl rounded-2xl p-4 flex items-start gap-3 transition-all duration-300 transform translate-x-full max-w-sm w-full`;
+        toast.innerHTML = `
+            <div class="text-2xl mt-0.5">${icone}</div>
+            <div class="flex-1 min-w-0">
+                <span class="text-[10px] font-bold uppercase tracking-wider ${corTitulo} block">${titulo}</span>
+                <div class="text-sm font-semibold text-gray-100 mt-0.5 break-words">${escaparHtml(mensagem)}</div>
+            </div>
+            <button type="button" class="text-gray-400 hover:text-white text-base leading-none">&times;</button>
+        `;
+        toast.querySelector('button').addEventListener('click', () => {
+            toast.classList.add('translate-x-full', 'opacity-0');
+            setTimeout(() => toast.remove(), 300);
+        });
+        toastContainer.appendChild(toast);
+        setTimeout(() => toast.classList.remove('translate-x-full'), 20);
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.classList.add('translate-x-full', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }
+        }, 7000);
+    }
+
     // Configuração do alternador de critério
     async function alternarCriterioFila(novoCriterio) {
         atualizarUiCriterio(novoCriterio);
@@ -1193,10 +1225,10 @@ $dados_iniciais_json = [
                 document.querySelectorAll('input[name="csrf"]').forEach(i => i.value = res.csrf_token);
             }
             if (res.success) {
-                exibirToastChegada(res.message, '', null);
+                exibirToastFeedback(res.message, 'success');
                 await atualizarFilaPerito();
             } else {
-                exibirToastChegada(res.message || 'Erro ao processar', '', null);
+                exibirToastFeedback(res.message || 'Erro ao processar a ação.', 'error');
                 if (btnSubmit) {
                     btnSubmit.disabled = false;
                     btnSubmit.innerHTML = textoOriginal;

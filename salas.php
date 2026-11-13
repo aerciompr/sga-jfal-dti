@@ -24,22 +24,31 @@ $message_type = '';
 
 [$message,$message_type]=$_SESSION['flash_salas']??['','']; unset($_SESSION['flash_salas']);
 if ($_SERVER['REQUEST_METHOD']==='POST') {
-    $pdo->beginTransaction();
     try {
         if (($_POST['action']??'')==='cadastrar') {
+            $pdo->beginTransaction();
             $nome=trim((string)($_POST['nome']??''));
             if ($nome==='' || mb_strlen($nome)>50) throw new DomainException('Informe nome de até 50 caracteres.');
             $s=$pdo->prepare('INSERT INTO salas (nome) VALUES (?)'); $s->execute([$nome]); registrarLog($pdo,'Cadastrar Sala',"Sala: $nome");
+            $pdo->commit(); $message='Salas atualizadas com sucesso.'; $message_type='success';
         } elseif (($_POST['action']??'')==='deletar') {
+            $pdo->beginTransaction();
             $s=$pdo->prepare('SELECT nome FROM salas WHERE id=? FOR UPDATE'); $s->execute([(int)($_POST['id']??0)]); $nome=$s->fetchColumn();
             if (!$nome) throw new DomainException('Sala não encontrada.');
             $s=$pdo->prepare("SELECT id FROM atendimentos WHERE sala=? AND data_pauta=CURRENT_DATE() AND status IN ('chamada','atendimento') LIMIT 1 FOR UPDATE");$s->execute([$nome]);
             if ($s->fetchColumn()) throw new DomainException('Não é possível excluir uma sala em uso.');
             $s=$pdo->prepare('DELETE FROM salas_peritos WHERE sala=?');$s->execute([$nome]);
             $s=$pdo->prepare('DELETE FROM salas WHERE nome=?');$s->execute([$nome]); registrarLog($pdo,'Excluir Sala',"Sala: $nome; histórico preservado.");
+            $pdo->commit(); $message='Salas atualizadas com sucesso.'; $message_type='success';
+        } elseif (($_POST['action']??'')==='desbloquear_sala') {
+            $nome = trim((string)($_POST['nome'] ?? ''));
+            if ($nome === '') throw new DomainException('Informe a sala para desbloqueio.');
+            $res = desbloquearSalaAdministrativa($pdo, $nome, $_SESSION['usuario_name'] ?? 'Admin', 'Desbloqueio solicitado no Gerenciamento de Salas');
+            $msgExtra = $res['atendimentos_liberados'] > 0 ? " ({$res['atendimentos_liberados']} paciente(s) devolvidos para a fila da recepção)." : "";
+            $message = "Sala {$nome} desbloqueada com sucesso!{$msgExtra}";
+            $message_type = 'success';
         } else throw new DomainException('Ação inválida.');
-        $pdo->commit(); $message='Salas atualizadas com sucesso.'; $message_type='success';
-    } catch (DomainException $e) { $pdo->rollBack(); $message=$e->getMessage(); $message_type='error'; }
+    } catch (DomainException $e) { if ($pdo->inTransaction()) $pdo->rollBack(); $message=$e->getMessage(); $message_type='error'; }
     catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); $message=erroPublico($e); $message_type='error'; }
     $_SESSION['flash_salas']=[$message,$message_type]; header('Location: salas.php',true,303);exit;
 }
@@ -72,6 +81,17 @@ $salasOcupadas = obterSalasOcupadasHoje($pdo);
                 <?= escapar($message) ?>
             </div>
         <?php endif; ?>
+
+        <!-- Banner de Orientação para Desbloqueio de Travas -->
+        <div class="col-span-full bg-blue-950/30 border border-blue-900/50 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-blue-200">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">🛡️</span>
+                <div>
+                    <strong class="font-bold text-blue-400 block uppercase tracking-wider text-[11px]">Resolução de Travas e Conflitos de Salas</strong>
+                    <span>Se um perito esquecer uma sala travada ou se houver erro ao iniciar/trocar de sala, utilize o botão <strong>"🔓 Forçar Desbloqueio"</strong> para liberar a sala imediatamente e devolver eventuais pacientes chamados para a fila de espera da recepção.</span>
+                </div>
+            </div>
+        </div>
 
         <!-- Formulário Lateral para Cadastro -->
         <div class="md:col-span-1 space-y-6">
@@ -142,7 +162,13 @@ $salasOcupadas = obterSalasOcupadasHoje($pdo);
                                         </td>
                                         <td class="py-3 text-right">
                                             <?php if ($emUso): ?>
-                                                <span class="text-[10px] text-gray-500 italic">Em atendimento</span>
+                                                <form method="POST" class="inline" onsubmit="return confirm('ATENÇÃO: Deseja forçar o desbloqueio da sala <?= escapar($s['nome']) ?>?\n\nIsso removerá a trava da sala e devolverá eventuais pacientes chamados para a fila de espera da recepção, liberando a sala imediatamente.');"><?= csrfCampo() ?>
+                                                    <input type="hidden" name="action" value="desbloquear_sala">
+                                                    <input type="hidden" name="nome" value="<?= escapar($s['nome']) ?>">
+                                                    <button type="submit" class="bg-amber-600/90 hover:bg-amber-600 text-white font-bold text-xs px-2.5 py-1 rounded transition shadow inline-flex items-center gap-1" title="Remove a trava e libera a sala imediatamente">
+                                                        🔓 Forçar Desbloqueio
+                                                    </button>
+                                                </form>
                                             <?php else: ?>
                                                 <form method="POST" class="inline" onsubmit="return confirm('Deseja excluir esta sala?');"><?= csrfCampo() ?>
                                                     <input type="hidden" name="action" value="deletar">

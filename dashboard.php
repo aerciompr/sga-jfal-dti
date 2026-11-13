@@ -170,10 +170,10 @@ $metricas = $isAdminOuSupervisor ? obterMetricasDia($pdo, $dataBusca) : null;
                     <div class="w-12 h-12 bg-blue-950/50 border border-blue-900/40 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
                         🚪
                     </div>
-                    <h3 class="text-base font-bold text-white group-hover:text-blue-400 transition-colors">Salas de Atendimento</h3>
-                    <p class="text-xs text-gray-400 mt-2 leading-relaxed">Cadastrar e gerenciar salas físicas com monitoramento de ocupação em tempo real.</p>
+                    <h3 class="text-base font-bold text-white group-hover:text-blue-400 transition-colors">Salas & Desbloqueio</h3>
+                    <p class="text-xs text-gray-400 mt-2 leading-relaxed">Cadastrar e gerenciar salas, monitorar ocupação e forçar desbloqueio de travas em tempo real.</p>
                     <div class="text-xs text-blue-400 font-semibold mt-4 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                        Gerenciar Salas <span>→</span>
+                        Gerenciar e Desbloquear Salas <span>→</span>
                     </div>
                 </a>
                 <?php endif; ?>

@@ -91,7 +91,7 @@ $cursorInicial = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM eventos_cham
 
         <div class="sga-tv-instructions" id="preparar-tv">
             <h2 class="font-bold mb-2">Antes de iniciar os atendimentos</h2>
-            <p id="audio-status" role="status" class="text-sm mb-3">Ative a voz e teste o som nos alto-falantes da TV.</p>
+            <p id="audio-status" role="status" class="text-sm mb-3">Ative a voz e teste o som nos alto-falantes da TV. O vídeo é mantido em silêncio para manter a recepção tranquila.</p>
             <div class="sga-toques">
                 <label for="toque-alerta">Toque de alerta</label>
                 <div class="sga-toolbar">
