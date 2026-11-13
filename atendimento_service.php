@@ -374,16 +374,18 @@ function agirAtendimento(PDO $pdo, string $acao, string $perito, string $sala, a
                     $sql = "SELECT * FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND status = 'presente'";
                     $params = [];
                 }
+                if (($_SESSION['usuario_role'] ?? '') === 'perito') {
                     if ($profissionalId) {
                         $sql .= ' AND (perito_id = ? OR perito = ?)';
-                        $params = [$profissionalId, $perito];
+                        $params[] = $profissionalId;
+                        $params[] = $perito;
                     } else {
                         $sql .= ' AND perito = ?';
-                        $params = [$perito];
+                        $params[] = $perito;
                     }
                 } else {
                     $sql .= ' AND perito = ?';
-                    $params = [$perito];
+                    $params[] = $perito;
                 }
                 if ($acao === 'chamar_especifico') { $sql .= ' AND id = ?'; $params[] = (int)($dados['id'] ?? 0); }
                 $critPerito = obterCriterioFilaPerito($pdo, $perito);
