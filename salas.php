@@ -174,8 +174,10 @@ $salasOcupadas = obterSalasOcupadasHoje($pdo, '', $subsecaoId);
                             <?php else: ?>
                                 <?php foreach ($salas as $s): ?>
                                     <?php 
-                                    $emUso = isset($salasOcupadas[$s['nome']]);
-                                    $medicoOcupante = $emUso ? $salasOcupadas[$s['nome']]['perito'] : '';
+                                    $sNome = (string)$s['nome'];
+                                    $sNomeTrim = trim($sNome);
+                                    $emUso = isset($salasOcupadas[$sNome]) || isset($salasOcupadas[$sNomeTrim]);
+                                    $medicoOcupante = $emUso ? ($salasOcupadas[$sNome]['perito'] ?? $salasOcupadas[$sNomeTrim]['perito'] ?? '') : '';
                                     ?>
                                     <tr class="hover:bg-gray-800/30">
                                         <td class="py-3 font-mono text-xs text-gray-500"><?= $s['id'] ?></td>

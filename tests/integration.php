@@ -275,6 +275,49 @@ check(obterSubsecao($pdo, -1) === null, 'obterSubsecao com ID negativo retorna n
 // 6.5 Segurança no Cadastro de Usuários (Senha Curta)
 rejeita(fn() => operarUsuario($pdo, ['action' => 'cadastrar', 'username' => 'fraco', 'role' => 'recepcao', 'nome' => 'Fraco', 'password' => '123']), 'Rejeita usuário com senha curta');
 
+// 6.6 Resolução Definitiva de Travas de Salas e Não-Ressurreição por Atendimentos Concluídos
+operarPauta($pdo, 'agendar_unico', ['nome' => 'Paciente Sala 6', 'processo' => 'PROC-SALA6', 'perito' => 'Perito Teste A', 'cpf' => '', 'subsecao_id' => 1], date('Y-m-d'));
+$idSala6 = (int)$pdo->query("SELECT id FROM atendimentos WHERE processo = 'PROC-SALA6'")->fetchColumn();
+confirmarPresencas($pdo, [$idSala6], 'recepcao');
+
+// Perito A trava Sala 6
+travarSalaPerito($pdo, 'Perito Teste A', 'Sala de Perícia 6', 1);
+$ocupAntes = obterSalasOcupadasHoje($pdo, '', 1);
+check(isset($ocupAntes['Sala de Perícia 6']), 'Sala de Perícia 6 travada pelo perito');
+
+// Realiza atendimento e CONCLUI a perícia
+agirAtendimento($pdo, 'chamar_especifico', 'Perito Teste A', 'Sala de Perícia 6', ['id' => $idSala6], 1);
+agirAtendimento($pdo, 'iniciar', 'Perito Teste A', 'Sala de Perícia 6', ['id' => $idSala6], 1);
+agirAtendimento($pdo, 'concluir', 'Perito Teste A', 'Sala de Perícia 6', ['id' => $idSala6], 1);
+check(item($pdo, $idSala6)['status'] === 'concluido', 'Atendimento concluído com sucesso');
+
+// Perito A clica em liberar a sala
+liberarSalaPerito($pdo, 'Perito Teste A', 'Sala de Perícia 6', 1);
+$ocupDepoisLib = obterSalasOcupadasHoje($pdo, '', 1);
+check(!isset($ocupDepoisLib['Sala de Perícia 6']), 'Sala de Perícia 6 liberada e desocupada após liberação do perito');
+
+// Simula busca de fallback de sala ativa (atendente.php e api_perito_fila.php)
+$stmtCheckAtivo = $pdo->prepare("SELECT sala FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND perito = ? AND sala IS NOT NULL AND sala != '' AND status IN ('chamada', 'atendimento') ORDER BY id DESC LIMIT 1");
+$stmtCheckAtivo->execute(['Perito Teste A']);
+$salaAtiva = $stmtCheckAtivo->fetchColumn();
+check($salaAtiva === false, 'Atendimento concluído NÃO é considerado como sala ativa');
+
+// Agora simula Desbloqueio Forçado de Sala pelo Administrador com atendimento em andamento
+operarPauta($pdo, 'agendar_unico', ['nome' => 'Paciente Sala 6 Preso', 'processo' => 'PROC-SALA6-PRESO', 'perito' => 'Perito Teste A', 'cpf' => '', 'subsecao_id' => 1], date('Y-m-d'));
+$idPreso = (int)$pdo->query("SELECT id FROM atendimentos WHERE processo = 'PROC-SALA6-PRESO'")->fetchColumn();
+confirmarPresencas($pdo, [$idPreso], 'recepcao');
+travarSalaPerito($pdo, 'Perito Teste A', 'Sala de Perícia 6', 1);
+agirAtendimento($pdo, 'chamar_especifico', 'Perito Teste A', 'Sala de Perícia 6', ['id' => $idPreso], 1);
+check(item($pdo, $idPreso)['status'] === 'chamada', 'Paciente chamado na sala');
+
+// Admin força desbloqueio
+$resDesbloq = desbloquearSalaAdministrativa($pdo, 'Sala de Perícia 6', 'Admin', 'Teste de Forçar Desbloqueio', 1);
+check($resDesbloq['travas_removidas'] >= 1, 'Desbloqueio administrativo removeu trava');
+check($resDesbloq['atendimentos_liberados'] === 1, 'Paciente chamado foi devolvido para a recepção');
+check(item($pdo, $idPreso)['status'] === 'presente' && item($pdo, $idPreso)['sala'] === null, 'Paciente devolvido está presente e sem sala');
+$ocupAposAdmin = obterSalasOcupadasHoje($pdo, '', 1);
+check(!isset($ocupAposAdmin['Sala de Perícia 6']), 'Sala de Perícia 6 totalmente livre após desbloqueio administrativo');
+
 // 7. Restaura estado multi-subseção para retrocompatibilidade
 set_config($pdo, 'multisubsecao_ativa', '0');
 check(multisubsecaoAtiva($pdo) === false, 'Flag multi-subseção restaurada para retrocompatibilidade');

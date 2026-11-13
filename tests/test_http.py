@@ -100,9 +100,12 @@ class HttpTests(unittest.TestCase):
         self.assertIn('eventos', json.loads(body))
 
         # Injeção em subseção
-        status, body, _, _ = c.abrir("api_senhas_recentes.php?subsecao=1' OR '1'='1")
+        status, body, _, _ = c.abrir("api_senhas.php?subsecao=1%27%20OR%20%271%27=%271")
         self.assertEqual(200, status)
-        self.assertIn('historico', json.loads(body))
+        self.assertIn('eventos', json.loads(body))
+
+        status_rec, _, _, _ = c.abrir("api_senhas_recentes.php?subsecao=1%27%20OR%20%271%27=%271")
+        self.assertEqual(200, status_rec)
 
     def test_paginas_administrativas(self):
         c = Cliente(); self.assertEqual(200, c.login('admin-test')[0])

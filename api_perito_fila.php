@@ -108,10 +108,10 @@ try {
         if (!$salaSalvaHoje) {
             $pId = peritoId($pdo, $perito_selecionado);
             if ($temSubAtend) {
-                $stmtSalaAtend = $pdo->prepare("SELECT sala FROM atendimentos WHERE subsecao_id = ? AND data_pauta = CURRENT_DATE() AND (perito = ? OR (? IS NOT NULL AND perito_id = ?)) AND sala IS NOT NULL AND sala != '' ORDER BY id DESC LIMIT 1");
+                $stmtSalaAtend = $pdo->prepare("SELECT sala FROM atendimentos WHERE subsecao_id = ? AND data_pauta = CURRENT_DATE() AND (perito = ? OR (? IS NOT NULL AND perito_id = ?)) AND sala IS NOT NULL AND sala != '' AND status IN ('chamada', 'atendimento') ORDER BY id DESC LIMIT 1");
                 $stmtSalaAtend->execute([$subId, $perito_selecionado, $pId, $pId]);
             } else {
-                $stmtSalaAtend = $pdo->prepare("SELECT sala FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito = ? OR (? IS NOT NULL AND perito_id = ?)) AND sala IS NOT NULL AND sala != '' ORDER BY id DESC LIMIT 1");
+                $stmtSalaAtend = $pdo->prepare("SELECT sala FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito = ? OR (? IS NOT NULL AND perito_id = ?)) AND sala IS NOT NULL AND sala != '' AND status IN ('chamada', 'atendimento') ORDER BY id DESC LIMIT 1");
                 $stmtSalaAtend->execute([$perito_selecionado, $pId, $pId]);
             }
             $salaSalvaHoje = $stmtSalaAtend->fetchColumn();
@@ -120,18 +120,20 @@ try {
             $sala = (string)$salaSalvaHoje;
             $_SESSION['sala'] = $sala;
             $sala_confirmada = true;
+        } else {
+            $sala_confirmada = false;
         }
     }
 
     $criterioFila = obterCriterioFilaPerito($pdo, $perito_selecionado);
     $atendePrioridade = obterAtenderPrioridadePerito($pdo, $perito_selecionado);
 
-    // Heartbeat: mantém a trava da sala ativa enquanto o médico estiver navegando
-    if ($perito_selecionado !== '' && $user_role === 'perito') {
+    // Heartbeat: mantém a trava da sala ativa enquanto o médico estiver navegando e com sala confirmada
+    if ($perito_selecionado !== '' && $user_role === 'perito' && $sala_confirmada) {
         if ($temSubSalasP) {
-            $pdo->prepare("UPDATE salas_peritos SET atualizado_em = CURRENT_TIMESTAMP WHERE perito = ? AND subsecao_id = ?")->execute([$perito_selecionado, $subId]);
+            $pdo->prepare("UPDATE salas_peritos SET atualizado_em = CURRENT_TIMESTAMP WHERE (perito = ? OR LOWER(TRIM(perito)) = LOWER(TRIM(?))) AND subsecao_id = ?")->execute([$perito_selecionado, $perito_selecionado, $subId]);
         } else {
-            $pdo->prepare("UPDATE salas_peritos SET atualizado_em = CURRENT_TIMESTAMP WHERE perito = ?")->execute([$perito_selecionado]);
+            $pdo->prepare("UPDATE salas_peritos SET atualizado_em = CURRENT_TIMESTAMP WHERE perito = ? OR LOWER(TRIM(perito)) = LOWER(TRIM(?))")->execute([$perito_selecionado, $perito_selecionado]);
         }
     }
 

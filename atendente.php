@@ -169,30 +169,30 @@ if ($perito_selecionado) {
         }
     }
 
-    // 3. Se ainda não achou, verifica se o perito já tem atendimento hoje com sala vinculada
+    // 4. Se ainda não achou em salas_peritos, verifica se o perito já tem atendimento ATIVO neste momento
     if (!$salaSalvaHoje) {
         $pId = peritoId($pdo, $perito_selecionado);
         if ($temSubAtend && $multiAtiva) {
-            $stmtSalaAtend = $pdo->prepare("SELECT sala FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito = ? OR (? IS NOT NULL AND perito_id = ?)) AND sala IS NOT NULL AND sala != '' AND subsecao_id = ? ORDER BY id DESC LIMIT 1");
+            $stmtSalaAtend = $pdo->prepare("SELECT sala FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito = ? OR (? IS NOT NULL AND perito_id = ?)) AND sala IS NOT NULL AND sala != '' AND status IN ('chamada', 'atendimento') AND subsecao_id = ? ORDER BY id DESC LIMIT 1");
             $stmtSalaAtend->execute([$perito_selecionado, $pId, $pId, $subsecaoId]);
         } else {
-            $stmtSalaAtend = $pdo->prepare("SELECT sala FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito = ? OR (? IS NOT NULL AND perito_id = ?)) AND sala IS NOT NULL AND sala != '' ORDER BY id DESC LIMIT 1");
+            $stmtSalaAtend = $pdo->prepare("SELECT sala FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (perito = ? OR (? IS NOT NULL AND perito_id = ?)) AND sala IS NOT NULL AND sala != '' AND status IN ('chamada', 'atendimento') ORDER BY id DESC LIMIT 1");
             $stmtSalaAtend->execute([$perito_selecionado, $pId, $pId]);
         }
         $salaSalvaHoje = $stmtSalaAtend->fetchColumn();
-        if ($salaSalvaHoje) {
-            try { travarSalaPerito($pdo, $perito_selecionado, (string)$salaSalvaHoje, $subsecaoId); } catch (Throwable $e) {}
-        }
     }
 
     if ($salaSalvaHoje) {
         $sala = (string)$salaSalvaHoje;
         $_SESSION['sala'] = $sala;
         $sala_confirmada = true;
+    } else {
+        $sala_confirmada = false;
+        unset($_SESSION['sala']);
     }
 }
 if (!$sala || !in_array($sala, $salas_lista, true)) {
-    $sala = $salas_lista[0];
+    $sala = $salas_lista[0] ?? 'Sala 1';
 }
 
 // Ações de Trava e Liberação de Sala

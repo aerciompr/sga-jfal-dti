@@ -105,32 +105,38 @@ function obterSalasOcupadasHoje(PDO $pdo, ?string $ignorarPerito = null, ?int $s
     
     // 1. Peritos que confirmaram/travaram sala hoje (com expiração de inatividade de 4h)
     if (colunaExiste($pdo, 'salas_peritos', 'subsecao_id')) {
-        $stmt = $pdo->prepare("SELECT perito, sala, atualizado_em FROM salas_peritos WHERE subsecao_id = ? AND DATE(atualizado_em) = CURRENT_DATE() AND atualizado_em >= (NOW() - INTERVAL 4 HOUR)");
-        $stmt->execute([$subId]);
+        $stmt = $pdo->prepare("SELECT perito, sala, atualizado_em FROM salas_peritos WHERE (subsecao_id = ? OR subsecao_id IS NULL OR ? IS NULL) AND DATE(atualizado_em) = CURRENT_DATE() AND atualizado_em >= (NOW() - INTERVAL 4 HOUR)");
+        $stmt->execute([$subId, $subId]);
     } else {
         $stmt = $pdo->query("SELECT perito, sala, atualizado_em FROM salas_peritos WHERE DATE(atualizado_em) = CURRENT_DATE() AND atualizado_em >= (NOW() - INTERVAL 4 HOUR)");
     }
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         if ($ignorarNorm !== null && mb_strtolower(trim((string)$row['perito'])) === $ignorarNorm) continue;
-        $ocupadas[$row['sala']] = [
-            'perito' => $row['perito'],
-            'origem' => 'confirmacao'
-        ];
+        $salaNome = trim((string)$row['sala']);
+        if ($salaNome !== '') {
+            $ocupadas[$salaNome] = [
+                'perito' => $row['perito'],
+                'origem' => 'confirmacao'
+            ];
+        }
     }
     
     // 2. Salas com perícia ativa hoje (chamada ou atendimento)
     if (colunaExiste($pdo, 'atendimentos', 'subsecao_id')) {
-        $stmtAtivos = $pdo->prepare("SELECT sala, perito FROM atendimentos WHERE subsecao_id = ? AND data_pauta = CURRENT_DATE() AND status IN ('chamada', 'atendimento') AND sala IS NOT NULL");
-        $stmtAtivos->execute([$subId]);
+        $stmtAtivos = $pdo->prepare("SELECT sala, perito FROM atendimentos WHERE (subsecao_id = ? OR subsecao_id IS NULL OR ? IS NULL) AND data_pauta = CURRENT_DATE() AND status IN ('chamada', 'atendimento') AND sala IS NOT NULL AND sala != ''");
+        $stmtAtivos->execute([$subId, $subId]);
     } else {
-        $stmtAtivos = $pdo->query("SELECT sala, perito FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND status IN ('chamada', 'atendimento') AND sala IS NOT NULL");
+        $stmtAtivos = $pdo->query("SELECT sala, perito FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND status IN ('chamada', 'atendimento') AND sala IS NOT NULL AND sala != ''");
     }
     while ($row = $stmtAtivos->fetch(PDO::FETCH_ASSOC)) {
         if ($ignorarNorm !== null && mb_strtolower(trim((string)$row['perito'])) === $ignorarNorm) continue;
-        $ocupadas[$row['sala']] = [
-            'perito' => $row['perito'],
-            'origem' => 'atendimento_ativo'
-        ];
+        $salaNome = trim((string)$row['sala']);
+        if ($salaNome !== '') {
+            $ocupadas[$salaNome] = [
+                'perito' => $row['perito'],
+                'origem' => 'atendimento_ativo'
+            ];
+        }
     }
     
     return $ocupadas;
@@ -171,23 +177,24 @@ function liberarSalaPerito(PDO $pdo, string $perito, ?string $sala = null, ?int 
     
     if ($sala === null || $sala === '') {
         if (colunaExiste($pdo, 'salas_peritos', 'subsecao_id')) {
-            $stmtSala = $pdo->prepare("SELECT sala FROM salas_peritos WHERE perito = ? AND subsecao_id = ?");
-            $stmtSala->execute([$perito, $subId]);
+            $stmtSala = $pdo->prepare("SELECT sala FROM salas_peritos WHERE (perito = ? OR LOWER(TRIM(perito)) = LOWER(TRIM(?))) AND (subsecao_id = ? OR subsecao_id IS NULL OR ? IS NULL)");
+            $stmtSala->execute([$perito, $perito, $subId, $subId]);
         } else {
-            $stmtSala = $pdo->prepare("SELECT sala FROM salas_peritos WHERE perito = ?");
-            $stmtSala->execute([$perito]);
+            $stmtSala = $pdo->prepare("SELECT sala FROM salas_peritos WHERE perito = ? OR LOWER(TRIM(perito)) = LOWER(TRIM(?))");
+            $stmtSala->execute([$perito, $perito]);
         }
         $sala = (string)$stmtSala->fetchColumn();
     }
     
+    $sala = trim($sala);
     if ($sala !== '') {
         // Se houver perícia já iniciada (em atendimento), exige conclusão médica antes de trocar
         if (colunaExiste($pdo, 'atendimentos', 'subsecao_id')) {
-            $stmtAtend = $pdo->prepare("SELECT COUNT(*) FROM atendimentos WHERE subsecao_id = ? AND data_pauta = CURRENT_DATE() AND sala = ? AND perito = ? AND status = 'atendimento'");
-            $stmtAtend->execute([$subId, $sala, $perito]);
+            $stmtAtend = $pdo->prepare("SELECT COUNT(*) FROM atendimentos WHERE (subsecao_id = ? OR subsecao_id IS NULL OR ? IS NULL) AND data_pauta = CURRENT_DATE() AND (sala = ? OR LOWER(TRIM(sala)) = LOWER(TRIM(?))) AND (perito = ? OR LOWER(TRIM(perito)) = LOWER(TRIM(?))) AND status = 'atendimento'");
+            $stmtAtend->execute([$subId, $subId, $sala, $sala, $perito, $perito]);
         } else {
-            $stmtAtend = $pdo->prepare("SELECT COUNT(*) FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND sala = ? AND perito = ? AND status = 'atendimento'");
-            $stmtAtend->execute([$sala, $perito]);
+            $stmtAtend = $pdo->prepare("SELECT COUNT(*) FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (sala = ? OR LOWER(TRIM(sala)) = LOWER(TRIM(?))) AND (perito = ? OR LOWER(TRIM(perito)) = LOWER(TRIM(?))) AND status = 'atendimento'");
+            $stmtAtend->execute([$sala, $sala, $perito, $perito]);
         }
         if ((int)$stmtAtend->fetchColumn() > 0) {
             throw new DomainException('Não é possível liberar a sala com perícia em andamento. Conclua o atendimento antes.');
@@ -195,11 +202,11 @@ function liberarSalaPerito(PDO $pdo, string $perito, ?string $sala = null, ?int 
 
         // Se houver atendimento apenas chamado (em 'chamada'), retorna para a fila da recepção para não prender a sala
         if (colunaExiste($pdo, 'atendimentos', 'subsecao_id')) {
-            $stmtCham = $pdo->prepare("SELECT id, nome FROM atendimentos WHERE subsecao_id = ? AND data_pauta = CURRENT_DATE() AND sala = ? AND perito = ? AND status = 'chamada'");
-            $stmtCham->execute([$subId, $sala, $perito]);
+            $stmtCham = $pdo->prepare("SELECT id, nome FROM atendimentos WHERE (subsecao_id = ? OR subsecao_id IS NULL OR ? IS NULL) AND data_pauta = CURRENT_DATE() AND (sala = ? OR LOWER(TRIM(sala)) = LOWER(TRIM(?))) AND (perito = ? OR LOWER(TRIM(perito)) = LOWER(TRIM(?))) AND status = 'chamada'");
+            $stmtCham->execute([$subId, $subId, $sala, $sala, $perito, $perito]);
         } else {
-            $stmtCham = $pdo->prepare("SELECT id, nome FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND sala = ? AND perito = ? AND status = 'chamada'");
-            $stmtCham->execute([$sala, $perito]);
+            $stmtCham = $pdo->prepare("SELECT id, nome FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (sala = ? OR LOWER(TRIM(sala)) = LOWER(TRIM(?))) AND (perito = ? OR LOWER(TRIM(perito)) = LOWER(TRIM(?))) AND status = 'chamada'");
+            $stmtCham->execute([$sala, $sala, $perito, $perito]);
         }
         $chamados = $stmtCham->fetchAll(PDO::FETCH_ASSOC);
         foreach ($chamados as $ch) {
@@ -207,12 +214,13 @@ function liberarSalaPerito(PDO $pdo, string $perito, ?string $sala = null, ?int 
             registrarLog($pdo, 'Liberar Sala: Retorno à Fila', "Paciente {$ch['nome']} (ID {$ch['id']}) retornado à fila da recepção ao liberar a sala $sala", (int)$ch['id'], $subId);
         }
     }
+    // Remove qualquer registro em salas_peritos por perito ou por sala
     if (colunaExiste($pdo, 'salas_peritos', 'subsecao_id')) {
-        $stmtDel = $pdo->prepare("DELETE FROM salas_peritos WHERE perito = ? AND subsecao_id = ?");
-        $stmtDel->execute([$perito, $subId]);
+        $stmtDel = $pdo->prepare("DELETE FROM salas_peritos WHERE (perito = ? OR LOWER(TRIM(perito)) = LOWER(TRIM(?)) OR (? != '' AND (sala = ? OR LOWER(TRIM(sala)) = LOWER(TRIM(?))))) AND (subsecao_id = ? OR subsecao_id IS NULL OR ? IS NULL)");
+        $stmtDel->execute([$perito, $perito, $sala, $sala, $sala, $subId, $subId]);
     } else {
-        $stmtDel = $pdo->prepare("DELETE FROM salas_peritos WHERE perito = ?");
-        $stmtDel->execute([$perito]);
+        $stmtDel = $pdo->prepare("DELETE FROM salas_peritos WHERE perito = ? OR LOWER(TRIM(perito)) = LOWER(TRIM(?)) OR (? != '' AND (sala = ? OR LOWER(TRIM(sala)) = LOWER(TRIM(?))))");
+        $stmtDel->execute([$perito, $perito, $sala, $sala, $sala]);
     }
     registrarLog($pdo, 'Liberar Sala', "Perito: $perito; Sala: $sala", null, $subId);
 }
@@ -228,23 +236,23 @@ function desbloquearSalaAdministrativa(PDO $pdo, string $sala, string $usuarioNo
 
     $pdo->beginTransaction();
     try {
-        // 1. Remove trava da tabela salas_peritos
+        // 1. Remove trava da tabela salas_peritos (case-insensitive e tolerante a espaços)
         if (colunaExiste($pdo, 'salas_peritos', 'subsecao_id')) {
-            $stmtDel = $pdo->prepare("DELETE FROM salas_peritos WHERE sala = ? AND subsecao_id = ?");
-            $stmtDel->execute([$sala, $subId]);
+            $stmtDel = $pdo->prepare("DELETE FROM salas_peritos WHERE (sala = ? OR LOWER(TRIM(sala)) = LOWER(TRIM(?))) AND (subsecao_id = ? OR subsecao_id IS NULL OR ? IS NULL)");
+            $stmtDel->execute([$sala, $sala, $subId, $subId]);
         } else {
-            $stmtDel = $pdo->prepare("DELETE FROM salas_peritos WHERE sala = ?");
-            $stmtDel->execute([$sala]);
+            $stmtDel = $pdo->prepare("DELETE FROM salas_peritos WHERE sala = ? OR LOWER(TRIM(sala)) = LOWER(TRIM(?))");
+            $stmtDel->execute([$sala, $sala]);
         }
         $travasRemovidas = $stmtDel->rowCount();
 
         // 2. Identifica atendimentos presos na sala em chamada ou atendimento
         if (colunaExiste($pdo, 'atendimentos', 'subsecao_id')) {
-            $stmtAtend = $pdo->prepare("SELECT id, nome, perito, status FROM atendimentos WHERE subsecao_id = ? AND data_pauta = CURRENT_DATE() AND sala = ? AND status IN ('chamada', 'atendimento') FOR UPDATE");
-            $stmtAtend->execute([$subId, $sala]);
+            $stmtAtend = $pdo->prepare("SELECT id, nome, perito, status FROM atendimentos WHERE (subsecao_id = ? OR subsecao_id IS NULL OR ? IS NULL) AND data_pauta = CURRENT_DATE() AND (sala = ? OR LOWER(TRIM(sala)) = LOWER(TRIM(?))) AND status IN ('chamada', 'atendimento') FOR UPDATE");
+            $stmtAtend->execute([$subId, $subId, $sala, $sala]);
         } else {
-            $stmtAtend = $pdo->prepare("SELECT id, nome, perito, status FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND sala = ? AND status IN ('chamada', 'atendimento') FOR UPDATE");
-            $stmtAtend->execute([$sala]);
+            $stmtAtend = $pdo->prepare("SELECT id, nome, perito, status FROM atendimentos WHERE data_pauta = CURRENT_DATE() AND (sala = ? OR LOWER(TRIM(sala)) = LOWER(TRIM(?))) AND status IN ('chamada', 'atendimento') FOR UPDATE");
+            $stmtAtend->execute([$sala, $sala]);
         }
         $presos = $stmtAtend->fetchAll(PDO::FETCH_ASSOC);
 
@@ -264,6 +272,11 @@ function desbloquearSalaAdministrativa(PDO $pdo, string $sala, string $usuarioNo
             'travas_removidas' => $travasRemovidas,
             'atendimentos_liberados' => $atendimentosLiberados,
         ];
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+}
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         throw $e;
