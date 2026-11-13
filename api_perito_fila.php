@@ -72,6 +72,21 @@ try {
             $stmtSala->execute([$perito_selecionado]);
         }
         $salaSalvaHoje = $stmtSala->fetchColumn();
+
+        if (!$salaSalvaHoje && function_exists('simplifyName')) {
+            $simpAlvo = simplifyName($perito_selecionado);
+            $stmtAllSalas = $temSubSalasP
+                ? $pdo->prepare("SELECT perito, sala FROM salas_peritos WHERE subsecao_id = ? AND DATE(atualizado_em) = CURRENT_DATE()")
+                : $pdo->prepare("SELECT perito, sala FROM salas_peritos WHERE DATE(atualizado_em) = CURRENT_DATE()");
+            if ($temSubSalasP) $stmtAllSalas->execute([$subId]); else $stmtAllSalas->execute();
+            while ($r = $stmtAllSalas->fetch(PDO::FETCH_ASSOC)) {
+                if (simplifyName((string)$r['perito']) === $simpAlvo) {
+                    $salaSalvaHoje = $r['sala'];
+                    break;
+                }
+            }
+        }
+
         if (!$salaSalvaHoje) {
             $pId = peritoId($pdo, $perito_selecionado);
             if ($pId) {

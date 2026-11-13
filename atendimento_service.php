@@ -40,10 +40,19 @@ function confirmarPresencas(PDO $pdo, array $ids, string $role, ?string $priorid
             ? $pdo->prepare("UPDATE atendimentos SET status = 'presente', senha = ?, prioridade = ?, chegada_em = CURRENT_TIMESTAMP, fila_em = CURRENT_TIMESTAMP(6) WHERE id = ? AND status = 'agendado'")
             : $pdo->prepare("UPDATE atendimentos SET status = 'presente', senha = ?, chegada_em = CURRENT_TIMESTAMP, fila_em = CURRENT_TIMESTAMP(6) WHERE id = ? AND status = 'agendado'");
         $pautaLiberadaCache = [];
+        $isLote = count($ids) > 1;
+        $motivosRejeicao = [];
+
         foreach ($ids as $id) {
             $check->execute([$id]); $item = $check->fetch();
-            if (!$item) throw new DomainException('Agendamento inexistente.');
-            if ($item['data_pauta'] !== date('Y-m-d')) throw new DomainException('Presença só pode ser confirmada no dia da pauta.');
+            if (!$item) {
+                if (!$isLote) throw new DomainException('Agendamento inexistente.');
+                continue;
+            }
+            if ($item['data_pauta'] !== date('Y-m-d')) {
+                if (!$isLote) throw new DomainException('Presença só pode ser confirmada no dia da pauta.');
+                continue;
+            }
             $itemSubId = isset($item['subsecao_id']) && $item['subsecao_id'] !== null ? (int)$item['subsecao_id'] : subsecaoAtivaId($pdo);
             if ($role === 'recepcao') {
                 $dp = (string)$item['data_pauta'];
@@ -51,7 +60,11 @@ function confirmarPresencas(PDO $pdo, array $ids, string $role, ?string $priorid
                 if (!isset($pautaLiberadaCache[$cacheKey])) {
                     $pautaLiberadaCache[$cacheKey] = isPautaLiberada($pdo, $dp, $itemSubId);
                 }
-                if (!$pautaLiberadaCache[$cacheKey]) throw new DomainException('Pauta ainda não homologada.');
+                if (!$pautaLiberadaCache[$cacheKey]) {
+                    if (!$isLote) throw new DomainException('Pauta ainda não homologada.');
+                    $motivosRejeicao['nao_homologada'] = true;
+                    continue;
+                }
             }
             if ($item['status'] !== 'agendado') continue; // Repetição é idempotente.
             $senha = getNextSenha($pdo, $itemSubId);
@@ -61,6 +74,9 @@ function confirmarPresencas(PDO $pdo, array $ids, string $role, ?string $priorid
                 $update->execute([$senha, $id]);
             }
             registrarLog($pdo, 'Confirmar Presença', "Paciente: {$item['nome']}, Senha: $senha", $id, $itemSubId); $total++;
+        }
+        if ($total === 0 && $isLote && !empty($motivosRejeicao['nao_homologada'])) {
+            throw new DomainException('A pauta desta data ainda não foi homologada pelo supervisor.');
         }
         $pdo->commit(); return $total;
     } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }

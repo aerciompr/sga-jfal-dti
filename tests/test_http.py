@@ -88,6 +88,22 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(200, status)
         self.assertIn('dashboard.php', destino)
 
+        # Sem CSRF deve ser bloqueado com 403
+        status_sem_csrf, _, _, _ = c.abrir('trocar_subsecao.php', {'subsecao_id': '1'})
+        self.assertEqual(403, status_sem_csrf)
+
+    def test_tv_parametros_hostis_e_invalidos(self):
+        c = Cliente()
+        # Subseção inexistente
+        status, body, _, _ = c.abrir('api_senhas.php?subsecao_id=999999')
+        self.assertEqual(200, status)
+        self.assertIn('eventos', json.loads(body))
+
+        # Injeção em subseção
+        status, body, _, _ = c.abrir("api_senhas_recentes.php?subsecao=1' OR '1'='1")
+        self.assertEqual(200, status)
+        self.assertIn('historico', json.loads(body))
+
     def test_paginas_administrativas(self):
         c = Cliente(); self.assertEqual(200, c.login('admin-test')[0])
         for pagina in ['dashboard.php','recepcao.php','gerenciar_pauta.php','atendente.php','usuarios.php','salas.php','auditoria.php','auditoria.php?aba=logs','ajuda.php']:

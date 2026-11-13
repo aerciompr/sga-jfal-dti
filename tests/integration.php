@@ -225,7 +225,57 @@ $metMcz = obterMetricasDia($pdo, date('Y-m-d'), 1);
 $metUniao = obterMetricasDia($pdo, date('Y-m-d'), 2);
 check(isset($metMcz['totais']['agendados']) && isset($metUniao['totais']['agendados']), 'Métricas calculadas por subseção');
 
-// 6. Restaura estado multi-subseção para retrocompatibilidade
+// 6. Simulação de Erros, Dados Malformados e Fuzzing
+// 6.1 Confirmação em Lote Tolerante na Recepção
+$dadosLote1 = ['nome' => 'Lote Paciente 1', 'processo' => 'LOT-001', 'perito' => 'Perito Teste B', 'cpf' => ''];
+$dadosLote2 = ['nome' => 'Lote Paciente 2', 'processo' => 'LOT-002', 'perito' => 'Perito Teste B', 'cpf' => ''];
+operarPauta($pdo, 'agendar_unico', array_merge($dadosLote1, ['subsecao_id' => 2]), date('Y-m-d'));
+operarPauta($pdo, 'agendar_unico', array_merge($dadosLote2, ['subsecao_id' => 2]), date('Y-m-d'));
+$idLot1 = (int)$pdo->query("SELECT id FROM atendimentos WHERE processo = 'LOT-001'")->fetchColumn();
+$idLot2 = (int)$pdo->query("SELECT id FROM atendimentos WHERE processo = 'LOT-002'")->fetchColumn();
+
+// Lote com IDs mistos: 2 válidos + 1 ID inexistente (999999) + 1 já agendado
+$confirmadosLote = confirmarPresencas($pdo, [$idLot1, 999999, $idLot2], 'recepcao');
+check($confirmadosLote === 2, 'Lote tolerante confirma os 2 válidos ignorando o inexistente');
+check(item($pdo, $idLot1)['status'] === 'presente', 'Primeiro item do lote está presente');
+check(item($pdo, $idLot2)['status'] === 'presente', 'Segundo item do lote está presente');
+
+// Lote vazio
+check(confirmarPresencas($pdo, [], 'recepcao') === 0, 'Lote vazio retorna 0 sem erro');
+
+// Lote somente com inexistentes
+check(confirmarPresencas($pdo, [888888, 999999], 'recepcao') === 0, 'Lote somente de inexistentes retorna 0 sem erro');
+
+// 6.2 Validação de CPF e Dados Inconsistentes
+rejeita(fn() => operarPauta($pdo, 'agendar_unico', ['nome' => 'Teste CPF', 'processo' => 'CPF-ERR-1', 'perito' => 'Perito Teste A', 'cpf' => '111.111.111-11', 'subsecao_id' => 1], date('Y-m-d')), 'Rejeita CPF com todos dígitos iguais');
+rejeita(fn() => operarPauta($pdo, 'agendar_unico', ['nome' => 'Teste CPF', 'processo' => 'CPF-ERR-2', 'perito' => 'Perito Teste A', 'cpf' => '123.456.789-XX', 'subsecao_id' => 1], date('Y-m-d')), 'Rejeita CPF com letras');
+rejeita(fn() => operarPauta($pdo, 'agendar_unico', ['nome' => '', 'processo' => 'SEM-NOME', 'perito' => 'Perito Teste A', 'cpf' => '', 'subsecao_id' => 1], date('Y-m-d')), 'Rejeita agendamento sem nome');
+rejeita(fn() => operarPauta($pdo, 'agendar_unico', ['nome' => 'Data Passada', 'processo' => 'PAS-001', 'perito' => 'Perito Teste A', 'cpf' => '', 'subsecao_id' => 1], '2020-01-01'), 'Rejeita agendamento para data passada');
+
+// 6.3 Conflito e Simulação de Salas
+rejeita(fn() => travarSalaPerito($pdo, '', 'Sala 1', 1), 'Rejeita travar sala com perito vazio');
+rejeita(fn() => travarSalaPerito($pdo, 'Perito Teste A', '', 1), 'Rejeita travar sala com nome de sala vazio');
+
+// Perito A trava Sala 4 em Maceió (subseção 1)
+travarSalaPerito($pdo, 'Perito Teste A', 'Sala 4', 1);
+// Perito B tenta travar a MESMA Sala 4 em Maceió (subseção 1) -> deve ser rejeitado!
+rejeita(fn() => travarSalaPerito($pdo, 'Perito Teste B', 'Sala 4', 1), 'Impede dois peritos na mesma sala da mesma subseção');
+// Perito B trava a MESMA Sala 4 em União (subseção 2) -> deve permitir!
+travarSalaPerito($pdo, 'Perito Teste B', 'Sala 4', 2);
+$ocupMcz4 = obterSalasOcupadasHoje($pdo, '', 1);
+$ocupUni4 = obterSalasOcupadasHoje($pdo, '', 2);
+check(isset($ocupMcz4['Sala 4']) && isset($ocupUni4['Sala 4']), 'Sala 4 ocupada simultaneamente em Maceió e União sem conflito');
+liberarSalaPerito($pdo, 'Perito Teste A', 'Sala 4', 1);
+liberarSalaPerito($pdo, 'Perito Teste B', 'Sala 4', 2);
+
+// 6.4 Sanitização e Tolerância a Parâmetros Inválidos de Subseção
+check(obterSubsecao($pdo, 999999) === null, 'obterSubsecao com ID inexistente retorna null com segurança');
+check(obterSubsecao($pdo, -1) === null, 'obterSubsecao com ID negativo retorna null com segurança');
+
+// 6.5 Segurança no Cadastro de Usuários (Senha Curta)
+rejeita(fn() => operarUsuario($pdo, ['action' => 'cadastrar', 'username' => 'fraco', 'role' => 'recepcao', 'nome' => 'Fraco', 'password' => '123']), 'Rejeita usuário com senha curta');
+
+// 7. Restaura estado multi-subseção para retrocompatibilidade
 set_config($pdo, 'multisubsecao_ativa', '0');
 check(multisubsecaoAtiva($pdo) === false, 'Flag multi-subseção restaurada para retrocompatibilidade');
 

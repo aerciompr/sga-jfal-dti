@@ -134,7 +134,22 @@ if ($perito_selecionado) {
     }
     $salaSalvaHoje = $stmtSalaConf->fetchColumn();
 
-    // 2. Se não achou por nome exato em salas_peritos, busca por perito_id no cadastro de usuários
+    // 2. Se não achou por match direto, busca por nome simplificado sem acentos
+    if (!$salaSalvaHoje && function_exists('simplifyName')) {
+        $simpAlvo = simplifyName($perito_selecionado);
+        $stmtAllSalas = ($temSubSalasPeritos && $multiAtiva)
+            ? $pdo->prepare("SELECT perito, sala FROM salas_peritos WHERE subsecao_id = ? AND DATE(atualizado_em) = CURRENT_DATE()")
+            : $pdo->prepare("SELECT perito, sala FROM salas_peritos WHERE DATE(atualizado_em) = CURRENT_DATE()");
+        if ($temSubSalasPeritos && $multiAtiva) $stmtAllSalas->execute([$subsecaoId]); else $stmtAllSalas->execute();
+        while ($r = $stmtAllSalas->fetch(PDO::FETCH_ASSOC)) {
+            if (simplifyName((string)$r['perito']) === $simpAlvo) {
+                $salaSalvaHoje = $r['sala'];
+                break;
+            }
+        }
+    }
+
+    // 3. Se não achou por nome exato em salas_peritos, busca por perito_id no cadastro de usuários
     if (!$salaSalvaHoje) {
         $pId = peritoId($pdo, $perito_selecionado);
         if ($pId) {
@@ -443,7 +458,24 @@ $dados_iniciais_json = [
                     <?php endif; ?>
                 </div>
 
-                <?php if ($sala_confirmada): ?>
+                <?php if ($user_role === 'admin'): ?>
+                    <?php if ($sala_confirmada): ?>
+                        <div class="bg-gray-950 p-4 rounded-xl border border-blue-900/40 mb-2">
+                            <span class="text-xs text-blue-400 block font-semibold flex items-center gap-1">
+                                <span>👁️</span> Espelho da Sala do Perito:
+                            </span>
+                            <div class="text-2xl font-black text-blue-400 mt-1"><?= escapar($sala) ?></div>
+                            <p class="text-[10px] text-gray-400 mt-1">Acompanhando em tempo real a sala confirmada para <strong><?= escapar($perito_selecionado) ?></strong>.</p>
+                        </div>
+                    <?php else: ?>
+                        <div class="bg-gray-950 p-4 rounded-xl border border-amber-900/40">
+                            <span class="text-xs text-amber-400 block font-semibold flex items-center gap-1">
+                                <span>⚠️</span> Sala não confirmada
+                            </span>
+                            <p class="text-xs text-gray-400 mt-1">O médico <strong><?= escapar($perito_selecionado) ?></strong> ainda não travou a sala de atendimento hoje.</p>
+                        </div>
+                    <?php endif; ?>
+                <?php elseif ($sala_confirmada): ?>
                     <div class="bg-gray-950 p-4 rounded-xl border border-emerald-900/40 mb-4">
                         <span class="text-xs text-gray-400 block font-medium">Sua sala de perícia hoje:</span>
                         <div class="text-2xl font-black text-emerald-400 mt-1"><?= escapar($sala) ?></div>
@@ -767,11 +799,12 @@ $dados_iniciais_json = [
     let filtroAtual = 'presente';
     let buscaTexto = '';
     let dadosCache = <?= json_encode($dados_iniciais_json, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
-    let anteriorTotalAguardando = null;
-    let filaIdsConhecidos = new Set();
+    let anteriorTotalAguardando = dadosCache?.totais?.aguardando ?? ((dadosCache?.fila || []).length);
+    let filaIdsConhecidos = new Set((dadosCache?.fila || []).map(f => f.id));
     let salaConfirmada = <?= json_encode($sala_confirmada) ?>;
     let isPrimeiraCarga = true;
     const peritoNome = <?= json_encode($perito_selecionado) ?>;
+    const userRole = <?= json_encode($user_role) ?>;
 
     const elContador = document.getElementById('contador-fila');
     const elCorpoFila = document.getElementById('corpo-fila-espera');
@@ -1159,7 +1192,9 @@ $dados_iniciais_json = [
 
             // Notificação sonora e toast APENAS para novos periciados que chegarem após a página já estar aberta
             const novoTotalAguardando = data.totais?.aguardando || 0;
-            if (isPrimeiraCarga) {
+            if (userRole === 'admin') {
+                // Administrador opera como espelho/observador: não toca alerta sonoro nem exibe toast de chegada
+            } else if (isPrimeiraCarga) {
                 // Primeira execução: sincroniza a base sem disparar alertas para quem já estava aguardando
                 isPrimeiraCarga = false;
             } else if (anteriorTotalAguardando !== null && novoTotalAguardando > anteriorTotalAguardando) {
