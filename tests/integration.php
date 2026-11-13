@@ -137,7 +137,8 @@ $hAmanha = (new DateTimeImmutable('+1 day'))->format('Y-m-d');
 $hDia3 = (new DateTimeImmutable('+2 days'))->format('Y-m-d');
 $hDia4 = (new DateTimeImmutable('+3 days'))->format('Y-m-d');
 $hDia30 = (new DateTimeImmutable('+30 days'))->format('Y-m-d');
-$cmd = "python -c \"import openpyxl; wb = openpyxl.Workbook(); ws = wb.active; ws.append(['Processo', 'Documento', 'Nome Perito', 'Data perícia', 'Nome Parte']); ws.append(['PROC-HOJE', '', 'Perito Teste', '$hHoje', 'Parte Hoje']); ws.append(['PROC-AMANHA', '', 'Perito Teste', '$hAmanha', 'Parte Amanha']); ws.append(['PROC-DIA3', '', 'Perito Teste', '$hDia3', 'Parte Dia 3']); ws.append(['PROC-DIA4', '', 'Perito Teste', '$hDia4', 'Parte Dia 4']); ws.append(['PROC-DIA30', '', 'Perito Teste', '$hDia30', 'Parte Dia 30']); wb.save('" . addslashes($tmpXlsx) . "')\"";
+$python = getenv('PYTHON_BIN') ?: (PHP_OS_FAMILY === 'Windows' ? 'python' : '/opt/venv/bin/python');
+$cmd = escapeshellarg($python) . " -c \"import openpyxl; wb = openpyxl.Workbook(); ws = wb.active; ws.append(['Processo', 'Documento', 'Nome Perito', 'Data perícia', 'Nome Parte']); ws.append(['PROC-HOJE', '', 'Perito Teste', '$hHoje', 'Parte Hoje']); ws.append(['PROC-AMANHA', '', 'Perito Teste', '$hAmanha', 'Parte Amanha']); ws.append(['PROC-DIA3', '', 'Perito Teste', '$hDia3', 'Parte Dia 3']); ws.append(['PROC-DIA4', '', 'Perito Teste', '$hDia4', 'Parte Dia 4']); ws.append(['PROC-DIA30', '', 'Perito Teste', '$hDia30', 'Parte Dia 30']); wb.save('" . addslashes($tmpXlsx) . "')\"";
 exec($cmd);
 $fileTeste = ['name' => 'teste.xlsx', 'tmp_name' => $tmpXlsx, 'size' => filesize($tmpXlsx), 'error' => UPLOAD_ERR_OK];
 

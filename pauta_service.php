@@ -68,7 +68,8 @@ function operarPauta(PDO $pdo, string $acao, array $dados, string $dataFiltro): 
         } elseif ($acao === 'agendar_unico') {
             if (!dataValida($dataFiltro) || $dataFiltro < date('Y-m-d')) throw new DomainException('Agende para hoje ou data futura.');
             [$nome,$processo,$perito,$cpf,$peritoId] = validarAgendamento($pdo, $dados, $dataFiltro);
-            $prioridade = in_array((string)($dados['prioridade'] ?? 'normal'), ['normal', 'prioridade', 'superprioridade'], true) ? (string)$dados['prioridade'] : 'normal';
+            $prioInformada = (string)($dados['prioridade'] ?? 'normal');
+            $prioridade = in_array($prioInformada, ['normal', 'prioridade', 'superprioridade'], true) ? $prioInformada : 'normal';
             $temPrio = colunaExiste($pdo, 'atendimentos', 'prioridade');
             if ($temPrio) {
                 $s = $pdo->prepare("INSERT INTO atendimentos (nome, processo, perito, cpf, perito_id, data_pauta, status, prioridade) VALUES (?, ?, ?, ?, ?, ?, 'agendado', ?)");
@@ -98,7 +99,8 @@ function operarPauta(PDO $pdo, string $acao, array $dados, string $dataFiltro): 
                 if ($acao === 'editar_atendimento') {
                     if (!in_array($estado, ['agendado', 'presente'], true) || ($estado === 'presente' && (int)$item['chamadas_count'] > 0)) throw new DomainException('Só é possível editar agendamentos ainda não chamados.');
                     [$nome,$processo,$perito,$cpf,$peritoId] = validarAgendamento($pdo,$dados,$item['data_pauta'],$id);
-                    $prioridade = in_array((string)($dados['prioridade'] ?? 'normal'), ['normal', 'prioridade', 'superprioridade'], true) ? (string)$dados['prioridade'] : 'normal';
+                    $prioInformada = (string)($dados['prioridade'] ?? 'normal');
+                    $prioridade = in_array($prioInformada, ['normal', 'prioridade', 'superprioridade'], true) ? $prioInformada : 'normal';
                     $temPrio = colunaExiste($pdo, 'atendimentos', 'prioridade');
                     if ($temPrio) {
                         $u = $pdo->prepare("UPDATE atendimentos SET nome=?, processo=?, perito=?, cpf=?, perito_id=?, prioridade=? WHERE id=? AND status IN ('agendado', 'presente')");
