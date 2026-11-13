@@ -458,28 +458,17 @@ $dados_iniciais_json = [
                     <?php endif; ?>
                 </div>
 
-                <?php if ($user_role === 'admin'): ?>
-                    <?php if ($sala_confirmada): ?>
-                        <div class="bg-gray-950 p-4 rounded-xl border border-blue-900/40 mb-2">
-                            <span class="text-xs text-blue-400 block font-semibold flex items-center gap-1">
-                                <span>👁️</span> Espelho da Sala do Perito:
-                            </span>
-                            <div class="text-2xl font-black text-blue-400 mt-1"><?= escapar($sala) ?></div>
-                            <p class="text-[10px] text-gray-400 mt-1">Acompanhando em tempo real a sala confirmada para <strong><?= escapar($perito_selecionado) ?></strong>.</p>
-                        </div>
-                    <?php else: ?>
-                        <div class="bg-gray-950 p-4 rounded-xl border border-amber-900/40">
-                            <span class="text-xs text-amber-400 block font-semibold flex items-center gap-1">
-                                <span>⚠️</span> Sala não confirmada
-                            </span>
-                            <p class="text-xs text-gray-400 mt-1">O médico <strong><?= escapar($perito_selecionado) ?></strong> ainda não travou a sala de atendimento hoje.</p>
-                        </div>
-                    <?php endif; ?>
-                <?php elseif ($sala_confirmada): ?>
-                    <div class="bg-gray-950 p-4 rounded-xl border border-emerald-900/40 mb-4">
-                        <span class="text-xs text-gray-400 block font-medium">Sua sala de perícia hoje:</span>
-                        <div class="text-2xl font-black text-emerald-400 mt-1"><?= escapar($sala) ?></div>
-                        <p class="text-[10px] text-gray-500 mt-1">Sala bloqueada para outros médicos enquanto você estiver atendendo.</p>
+                <?php if ($sala_confirmada): ?>
+                    <div class="bg-gray-950 p-4 rounded-xl border <?= $user_role === 'admin' ? 'border-blue-900/40' : 'border-emerald-900/40' ?> mb-4">
+                        <span class="text-xs text-gray-400 block font-medium">
+                            <?= $user_role === 'admin' ? '👁️ Espelho da Sala do Perito:' : 'Sua sala de perícia hoje:' ?>
+                        </span>
+                        <div class="text-2xl font-black <?= $user_role === 'admin' ? 'text-blue-400' : 'text-emerald-400' ?> mt-1"><?= escapar($sala) ?></div>
+                        <p class="text-[10px] text-gray-500 mt-1">
+                            <?= $user_role === 'admin' 
+                                ? "Acompanhando em tempo real a sala confirmada para <strong>" . escapar($perito_selecionado) . "</strong>." 
+                                : "Sala bloqueada para outros médicos enquanto você estiver atendendo." ?>
+                        </p>
                     </div>
 
                     <form method="POST" onsubmit="return confirm('Deseja liberar a <?= escapar($sala) ?> para trocar de sala? Certifique-se de não haver perícia em andamento.');">
@@ -490,6 +479,12 @@ $dados_iniciais_json = [
                         </button>
                     </form>
                 <?php else: ?>
+                    <?php if ($user_role === 'admin'): ?>
+                        <div class="bg-blue-950/30 border border-blue-900/40 rounded-xl p-3 mb-3 text-xs text-blue-300">
+                            <span>ℹ️ O médico <strong><?= escapar($perito_selecionado) ?></strong> ainda não travou a sala hoje. Selecione uma sala disponível abaixo para vincular:</span>
+                        </div>
+                    <?php endif; ?>
+
                     <form method="POST" class="space-y-3">
                         <?= csrfCampo() ?>
                         <input type="hidden" name="set_sala_trava" value="1">
